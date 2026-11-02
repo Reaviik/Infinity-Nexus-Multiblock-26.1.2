@@ -1,0 +1,20 @@
+{
+  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "ingredients": [
+    "minecraft:raw_iron",
+    "minecraft:coal"
+  ],
+  "fluid_ingredients": [
+    {
+      "ingredient": "minecraft:water",
+      "amount": 500
+    }
+  ],
+  "output": {
+    "type": "item",
+    "id": "minecraft:iron_ingot",
+    "count": 1
+  },
+  "energy": 1000,
+  "time": 100
+}

@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Wiki do desenvolvedor do Infinity Nexus Multiblock: definições, patterns, slots, capabilities, GUI, controllers, receitas e limitações.">
+  <title>Wiki do Desenvolvedor | Infinity Nexus Multiblock</title>
+  <link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+  <header class="topbar">
+    <a class="brand" href="../builder/index.html" aria-label="Voltar ao Infinity Nexus Multiblock Builder">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" role="img">
+          <path d="M24 3 44 14v20L24 45 4 34V14Z" fill="#0d1a12" stroke="#6bd64a" stroke-width="2"></path>
+          <path d="M24 3 44 14 24 25 4 14Z" fill="#6bd64a" opacity="0.92"></path>
+          <path d="M4 14 24 25v20L4 34Z" fill="#2d7a24"></path>
+          <path d="M44 14 24 25v20l20-11Z" fill="#4aa937"></path>
+          <path d="M16 20 24 24l8-4" fill="none" stroke="#0d1a12" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <span class="brand-copy">
+        <strong>Infinity Nexus</strong>
+        <small>Multiblock Wiki</small>
+      </span>
+    </a>
+
+    <nav class="topbar-actions" aria-label="Links da wiki">
+      <a class="source-link" href="README.md">README.md</a>
+      <a class="btn" href="../builder/index.html">Voltar ao builder</a>
+    </nav>
+  </header>
+
+  <div class="wiki-shell">
+    <aside class="wiki-sidebar" aria-label="Índice da wiki">
+      <div class="sidebar-head">
+        <span class="eyebrow">Documentação</span>
+        <strong>Guia completo</strong>
+        <small>Atualizado em 02 de nov. de 2026</small>
+      </div>
+      <label class="toc-filter">
+        <span class="sr-only">Filtrar seções</span>
+        <input id="tocFilter" type="search" placeholder="Filtrar seções..." autocomplete="off">
+      </label>
+      <nav class="toc" aria-label="Seções da wiki">
+        <ul class="toc-list">
+<li class="toc-item toc-level-2"><a href="#índice">Índice</a></li>
+<li class="toc-item toc-level-2"><a href="#1-como-uma-máquina-funciona">1. Como uma máquina funciona</a></li>
+<li class="toc-item toc-level-2"><a href="#2-arquivos-pasta-e-id">2. Arquivos, pasta e ID</a></li>
+<li class="toc-item toc-level-3"><a href="#21-definição-de-multibloco">2.1 Definição de multibloco</a></li>
+<li class="toc-item toc-level-3"><a href="#22-receita">2.2 Receita</a></li>
+<li class="toc-item toc-level-3"><a href="#23-datapack">2.3 Datapack</a></li>
+<li class="toc-item toc-level-2"><a href="#3-estrutura-completa-do-json">3. Estrutura completa do JSON</a></li>
+<li class="toc-item toc-level-3"><a href="#31-campos-de-nível-raiz">3.1 Campos de nível raiz</a></li>
+<li class="toc-item toc-level-3"><a href="#32-campos-de-herança">3.2 Campos de herança</a></li>
+<li class="toc-item toc-level-3"><a href="#33-exemplo-mínimo">3.3 Exemplo mínimo</a></li>
+<li class="toc-item toc-level-2"><a href="#4-pattern">4. Pattern</a></li>
+<li class="toc-item toc-level-3"><a href="#41-regras">4.1 Regras</a></li>
+<li class="toc-item toc-level-3"><a href="#42-ordem-das-linhas-e-colunas">4.2 Ordem das linhas e colunas</a></li>
+<li class="toc-item toc-level-3"><a href="#43-rotação">4.3 Rotação</a></li>
+<li class="toc-item toc-level-3"><a href="#44-exemplo-de-pattern-3x3x3">4.4 Exemplo de pattern 3x3x3</a></li>
+<li class="toc-item toc-level-3"><a href="#45-tamanho">4.5 Tamanho</a></li>
+<li class="toc-item toc-level-2"><a href="#5-matchers">5. Matchers</a></li>
+<li class="toc-item toc-level-3"><a href="#51-string-de-bloco">5.1 String de bloco</a></li>
+<li class="toc-item toc-level-3"><a href="#52-string-de-tag">5.2 String de tag</a></li>
+<li class="toc-item toc-level-3"><a href="#53-objeto-de-matcher">5.3 Objeto de matcher</a></li>
+<li class="toc-item toc-level-3"><a href="#54-como-o-state-funciona">5.4 Como o state funciona</a></li>
+<li class="toc-item toc-level-3"><a href="#55-o-que-não-existe">5.5 O que não existe</a></li>
+<li class="toc-item toc-level-2"><a href="#6-slots-de-item">6. Slots de item</a></li>
+<li class="toc-item toc-level-3"><a href="#61-tamanho-do-inventário">6.1 Tamanho do inventário</a></li>
+<li class="toc-item toc-level-3"><a href="#62-campos-de-item_slots">6.2 Campos de item_slots[]</a></li>
+<li class="toc-item toc-level-3"><a href="#63-faces-padrão-por-role">6.3 Faces padrão por role</a></li>
+<li class="toc-item toc-level-3"><a href="#64-filtro-e-limite">6.4 Filtro e limite</a></li>
+<li class="toc-item toc-level-3"><a href="#65-faces-e-rotação">6.5 Faces e rotação</a></li>
+<li class="toc-item toc-level-3"><a href="#66-slots-e-gui">6.6 Slots e GUI</a></li>
+<li class="toc-item toc-level-3"><a href="#67-exemplo-de-item_slots">6.7 Exemplo de item_slots</a></li>
+<li class="toc-item toc-level-2"><a href="#7-energia-e-fluidos">7. Energia e fluidos</a></li>
+<li class="toc-item toc-level-3"><a href="#71-energia">7.1 Energia</a></li>
+<li class="toc-item toc-level-3"><a href="#72-fluidos">7.2 Fluidos</a></li>
+<li class="toc-item toc-level-3"><a href="#73-portas-de-capability-capability_ports">7.3 Portas de capability (capability_ports)</a></li>
+<li class="toc-item toc-level-3"><a href="#74-onde-as-capabilities-aparecem">7.4 Onde as capabilities aparecem</a></li>
+<li class="toc-item toc-level-3"><a href="#75-energia-em-receitas">7.5 Energia em receitas</a></li>
+<li class="toc-item toc-level-3"><a href="#76-fluidos-em-receitas">7.6 Fluidos em receitas</a></li>
+<li class="toc-item toc-level-3"><a href="#77-reload">7.7 Reload</a></li>
+<li class="toc-item toc-level-2"><a href="#8-gui">8. GUI</a></li>
+<li class="toc-item toc-level-3"><a href="#81-layout-padrão">8.1 Layout padrão</a></li>
+<li class="toc-item toc-level-3"><a href="#82-layout-customizado">8.2 Layout customizado</a></li>
+<li class="toc-item toc-level-3"><a href="#83-campos-de-gui">8.3 Campos de gui</a></li>
+<li class="toc-item toc-level-3"><a href="#84-campos-de-guielements">8.4 Campos de gui.elements[]</a></li>
+<li class="toc-item toc-level-3"><a href="#85-tipos-de-elemento">8.5 Tipos de elemento</a></li>
+<li class="toc-item toc-level-3"><a href="#86-detalhes-por-tipo">8.6 Detalhes por tipo</a></li>
+<li class="toc-item toc-level-3"><a href="#87-exemplo-de-gui-customizada">8.7 Exemplo de GUI customizada</a></li>
+<li class="toc-item toc-level-3"><a href="#88-exemplo-com-slot-antigo-e-progresso">8.8 Exemplo com slot antigo e progresso</a></li>
+<li class="toc-item toc-level-2"><a href="#9-controllers-dinâmicos-e-java">9. Controllers dinâmicos e Java</a></li>
+<li class="toc-item toc-level-3"><a href="#91-criação-dinâmica-a-partir-do-json">9.1 Criação dinâmica a partir do JSON</a></li>
+<li class="toc-item toc-level-3"><a href="#92-assets-gerados-automaticamente">9.2 Assets gerados automaticamente</a></li>
+<li class="toc-item toc-level-3"><a href="#93-json-controller">9.3 JSON controller</a></li>
+<li class="toc-item toc-level-3"><a href="#931-receita-shaped-do-controller">9.3.1 Receita shaped do controller</a></li>
+<li class="toc-item toc-level-3"><a href="#94-regra-de-validação">9.4 Regra de validação</a></li>
+<li class="toc-item toc-level-3"><a href="#95-registro-manual-em-java">9.5 Registro manual em Java</a></li>
+<li class="toc-item toc-level-3"><a href="#96-assets-para-controller-manual">9.6 Assets para controller manual</a></li>
+<li class="toc-item toc-level-3"><a href="#97-comportamento-do-controller">9.7 Comportamento do controller</a></li>
+<li class="toc-item toc-level-2"><a href="#10-receitas">10. Receitas</a></li>
+<li class="toc-item toc-level-3"><a href="#101-arquivo">10.1 Arquivo</a></li>
+<li class="toc-item toc-level-3"><a href="#102-campos-da-receita">10.2 Campos da receita</a></li>
+<li class="toc-item toc-level-3"><a href="#103-ingredients">10.3 ingredients</a></li>
+<li class="toc-item toc-level-3"><a href="#104-fluid_ingredients">10.4 fluid_ingredients</a></li>
+<li class="toc-item toc-level-3"><a href="#105-output">10.5 output</a></li>
+<li class="toc-item toc-level-3"><a href="#106-matching">10.6 Matching</a></li>
+<li class="toc-item toc-level-3"><a href="#107-energia-e-tempo">10.7 Energia e tempo</a></li>
+<li class="toc-item toc-level-3"><a href="#108-quando-o-craft-reinicia">10.8 Quando o craft reinicia</a></li>
+<li class="toc-item toc-level-3"><a href="#109-limitações-de-receita">10.9 Limitações de receita</a></li>
+<li class="toc-item toc-level-3"><a href="#1010-exemplo-completo">10.10 Exemplo completo</a></li>
+<li class="toc-item toc-level-3"><a href="#1011-gerar-json-com-o-comando">10.11 Gerar JSON com o comando</a></li>
+<li class="toc-item toc-level-2"><a href="#11-herança-e-templates">11. Herança e templates</a></li>
+<li class="toc-item toc-level-3"><a href="#111-pai-e-filho">11.1 Pai e filho</a></li>
+<li class="toc-item toc-level-3"><a href="#112-regras-de-merge">11.2 Regras de merge</a></li>
+<li class="toc-item toc-level-3"><a href="#113-templates">11.3 Templates</a></li>
+<li class="toc-item toc-level-2"><a href="#12-priority-tier-e-sobreposição">12. Priority, tier e sobreposição</a></li>
+<li class="toc-item toc-level-3"><a href="#121-priority">12.1 priority</a></li>
+<li class="toc-item toc-level-3"><a href="#122-tier">12.2 tier</a></li>
+<li class="toc-item toc-level-2"><a href="#13-exportar-e-importar">13. Exportar e importar</a></li>
+<li class="toc-item toc-level-3"><a href="#131-exportar">13.1 Exportar</a></li>
+<li class="toc-item toc-level-3"><a href="#132-o-que-o-json-exportado-contém">13.2 O que o JSON exportado contém</a></li>
+<li class="toc-item toc-level-3"><a href="#133-normalização">13.3 Normalização</a></li>
+<li class="toc-item toc-level-3"><a href="#134-transformar-em-definição">13.4 Transformar em definição</a></li>
+<li class="toc-item toc-level-3"><a href="#135-limitações-da-exportação">13.5 Limitações da exportação</a></li>
+<li class="toc-item toc-level-2"><a href="#14-reload-e-ciclo-de-vida">14. Reload e ciclo de vida</a></li>
+<li class="toc-item toc-level-2"><a href="#15-exemplos-completos">15. Exemplos completos</a></li>
+<li class="toc-item toc-level-3"><a href="#151-como-testar">15.1 Como testar</a></li>
+<li class="toc-item toc-level-3"><a href="#152-sobrescrever-um-controller-dinâmico-existente">15.2 Sobrescrever um controller dinâmico existente</a></li>
+<li class="toc-item toc-level-3"><a href="#153-controllers-dinâmicos-embutidos">15.3 Controllers dinâmicos embutidos</a></li>
+<li class="toc-item toc-level-2"><a href="#16-erros-comuns">16. Erros comuns</a></li>
+<li class="toc-item toc-level-2"><a href="#17-checklist-final">17. Checklist final</a></li>
+<li class="toc-item toc-level-2"><a href="#18-limitações-atuais">18. Limitações atuais</a></li>
+<li class="toc-item toc-level-3"><a href="#181-controllers-e-registro">18.1 Controllers e registro</a></li>
+<li class="toc-item toc-level-3"><a href="#182-máquinas-receitas-e-automação">18.2 Máquinas, receitas e automação</a></li>
+<li class="toc-item toc-level-3"><a href="#183-assets-e-reload">18.3 Assets e reload</a></li>
+<li class="toc-item toc-level-3"><a href="#184-exportação">18.4 Exportação</a></li>
+<li class="toc-item toc-level-3"><a href="#185-metas-ainda-não-atendidas">18.5 Metas ainda não atendidas</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="conteudo" class="wiki-content">
+      <div class="doc-meta">
+        <span class="doc-tag">Guia do desenvolvedor</span>
+        <span>Minecraft 26.1.2</span>
+        <span>NeoForge 26.1.2.121</span>
+        <span>schema_version 1</span>
+      </div>
+      <article class="markdown">
+<h1 id="wiki-do-desenvolvedor"><a class="heading-anchor" href="#wiki-do-desenvolvedor" aria-label="Link para Wiki do Desenvolvedor">#</a>Wiki do Desenvolvedor</h1>
+<p>Guia prático para criar máquinas multibloco com o <strong>Infinity Nexus Multiblock</strong>.</p>
+<ul>
+<li>Minecraft: <code>26.1.2</code></li>
+<li>NeoForge: <code>26.1.2.121</code></li>
+<li>Java: <code>25</code></li>
+<li>Idioma dos exemplos: português</li>
+<li>Schema atual: <code>schema_version: 1</code></li>
+</ul>
+<p>Este guia documenta <strong>tudo o que o JSON aceita hoje</strong> e mostra exemplos completos. O objetivo é que você consiga sair de uma ideia e chegar a uma máquina formável, com inventário, energia, fluidos, GUI e receita.</p>
+<p>Para montar e validar a definição visualmente, abra o <a href="../builder/index.html">Builder de multiblocos</a>. Ele exporta o mesmo JSON descrito neste guia.</p>
+<h2 id="índice"><a class="heading-anchor" href="#índice" aria-label="Link para Índice">#</a>Índice</h2>
+<ol>
+<li><a href="#1-como-uma-m%C3%A1quina-funciona">Como uma máquina funciona</a></li>
+<li><a href="#2-arquivos-pasta-e-id">Arquivos, pasta e ID</a></li>
+<li><a href="#3-estrutura-completa-do-json">Estrutura completa do JSON</a></li>
+<li><a href="#4-pattern">Pattern</a></li>
+<li><a href="#5-matchers">Matchers</a></li>
+<li><a href="#6-slots-de-item">Slots de item</a></li>
+<li><a href="#7-energia-e-fluidos">Energia e fluidos</a></li>
+<li><a href="#8-gui">GUI</a></li>
+<li><a href="#9-controllers-din%C3%A2micos-e-java">Controllers dinâmicos e Java</a></li>
+<li><a href="#10-receitas">Receitas</a></li>
+<li><a href="#11-heran%C3%A7a-e-templates">Herança e templates</a></li>
+<li><a href="#12-priority-tier-e-sobreposi%C3%A7%C3%A3o">Priority, tier e sobreposição</a></li>
+<li><a href="#13-exportar-e-importar">Exportar e importar</a></li>
+<li><a href="#14-reload-e-ciclo-de-vida">Reload e ciclo de vida</a></li>
+<li><a href="#15-exemplos-completos">Exemplos completos</a></li>
+<li><a href="#16-erros-comuns">Erros comuns</a></li>
+<li><a href="#17-checklist-final">Checklist final</a></li>
+<li><a href="#18-limita%C3%A7%C3%B5es-atuais">Limitações atuais</a></li>
+</ol>
+<h2 id="1-como-uma-máquina-funciona"><a class="heading-anchor" href="#1-como-uma-máquina-funciona" aria-label="Link para 1. Como uma máquina funciona">#</a>1. Como uma máquina funciona</h2>
+<p>Uma máquina é a combinação de três partes:</p>
+<ol>
+<li><p><strong>Um bloco controller.</strong>
+Para JSONs empacotados no mod, o bloco, o block entity e o item são criados automaticamente a partir da definição. Para outros namespaces ou blocos com comportamento próprio, registre um <code>MultiblockControllerBlock</code> e um <code>MultiblockControllerBlockEntity</code> em Java como API de extensão.</p>
+</li>
+<li><p><strong>Uma definição JSON.</strong>
+Ela diz qual é o pattern, quais blocos formam a estrutura, quais slots existem, qual GUI usar, quais capabilities existem e qual receita processar.</p>
+</li>
+<li><p><strong>Um pattern formado no mundo.</strong>
+O jogador coloca o controller virado para a direção correta e clica nele para montar. Quando todas as células batem, o controller fica <code>formed=true</code>, abre a GUI e passa a processar receitas.</p>
+</li>
+</ol>
+<p>Fluxo resumido:</p>
+<pre><code class="language-text">Startup (mod jar): lê JSONs empacotados e registra blocos + block entities + itens + recipe types
+JSON: pattern + slots + capabilities + GUI + recipe_type
+Mundo: controller é colocado e clicado
+Loader: valida o JSON e cria a definição
+Estrutura: pattern é validado com rotação
+Máquina: inventário, energia, fluidos, GUI e receita funcionam
+</code></pre>
+<p>O <code>controller</code> do JSON é opcional. Em um JSON empacotado no mod, <code>controller.block</code> define o ID do bloco a criar e <code>controller.textures</code> alimenta o modelo gerado; cada textura ausente usa o fallback da mesma face. Sem <code>controller</code>, o bloco usa o próprio <code>id</code> e todas as texturas fallback. O JSON só cria blocos quando está dentro do jar do mod e usa o namespace <code>infinity_nexus_multiblock</code>. Datapacks externos carregam definições, mas não registram blocos; nesse caso <code>controller.block</code> precisa apontar para um bloco Java já registrado.</p>
+<p>No JEI, cada controller dinâmico <code>type=recipe</code> tem sua própria categoria e catalisador. As receitas exibidas são filtradas pelo <code>recipe_type</code> da definição; controllers <code>storage</code> e definições sem controller não geram categoria.</p>
+<p>O layout do JEI usa o mesmo <code>MultiblockMenuLayout</code> da GUI da máquina para as posições de <code>item_slots</code> x/y e dos elementos <code>slot</code>, <code>fluid_bar</code>, <code>energy_bar</code>, <code>arrow</code>, <code>entity</code> e <code>title</code> de <code>gui.elements</code>; o fundo é <code>textures/gui/jei_base.png</code>. Fallbacks só são usados quando a posição não existe.</p>
+<p>Na GUI da máquina, clicar na seta ou na barra de progresso abre a categoria de receitas daquele controller no JEI. A área clicável é registrada pelo plugin JEI a partir do layout sincronizado, então funciona com qualquer posição definida no JSON.</p>
+<p>Na categoria JEI, o botão de transferência (seta) move os ingredientes de item para os slots <code>input</code> compatíveis. Ingredientes fluidos não são transferidos pelo JEI; insira-os manualmente nos tanques.</p>
+<h2 id="2-arquivos-pasta-e-id"><a class="heading-anchor" href="#2-arquivos-pasta-e-id" aria-label="Link para 2. Arquivos, pasta e ID">#</a>2. Arquivos, pasta e ID</h2>
+<h3 id="21-definição-de-multibloco"><a class="heading-anchor" href="#21-definição-de-multibloco" aria-label="Link para 2.1 Definição de multibloco">#</a>2.1 Definição de multibloco</h3>
+<pre><code class="language-text">data/&lt;namespace&gt;/multiblock/&lt;arquivo&gt;.json
+</code></pre>
+<p>O campo <code>id</code> precisa ser exatamente <code>&lt;namespace&gt;:&lt;arquivo&gt;</code>.</p>
+<p>Exemplo:</p>
+<pre><code class="language-text">data/minhamod/multiblock/fornalha.json
+</code></pre>
+<pre><code class="language-json">&quot;id&quot;: &quot;minhamod:fornalha&quot;
+</code></pre>
+<p>Se o <code>id</code> não bater com o caminho, a definição é rejeitada com:</p>
+<pre><code class="language-text">Definition id ... does not match file id ...
+</code></pre>
+<h3 id="22-receita"><a class="heading-anchor" href="#22-receita" aria-label="Link para 2.2 Receita">#</a>2.2 Receita</h3>
+<pre><code class="language-text">data/&lt;namespace&gt;/recipe/&lt;arquivo&gt;.json
+</code></pre>
+<p>O campo <code>type</code> da receita precisa ser um <code>recipe_type</code> registrado pelo mod; veja a seção 10.1.</p>
+<h3 id="23-datapack"><a class="heading-anchor" href="#23-datapack" aria-label="Link para 2.3 Datapack">#</a>2.3 Datapack</h3>
+<pre><code class="language-text">meu_datapack/
+  pack.mcmeta
+  data/
+    minhamod/
+      multiblock/
+        fornalha.json
+      recipe/
+        ferro.json
+</code></pre>
+<p>Exemplo de <code>pack.mcmeta</code> para 26.1.2:</p>
+<pre><code class="language-json">{
+  &quot;pack&quot;: {
+    &quot;description&quot;: &quot;Minhas máquinas&quot;,
+    &quot;min_format&quot;: [101, 1],
+    &quot;max_format&quot;: 101
+  }
+}
+</code></pre>
+<p>Depois de colocar o datapack em <code>world/datapacks</code>, use <code>/reload</code> ou reinicie o servidor.</p>
+<p>Datapacks podem adicionar ou sobrescrever definições e receitas, e resource packs podem adicionar traduções/assets, mas <strong>nenhum dos dois pode criar blocos controller novos</strong>: o registro de blocos acontece antes dos datapacks. Para um controller novo, empacote o JSON no mod no namespace <code>infinity_nexus_multiblock</code> e reinicie, ou registre o bloco em Java e aponte <code>controller.block</code> para ele.</p>
+<h2 id="3-estrutura-completa-do-json"><a class="heading-anchor" href="#3-estrutura-completa-do-json" aria-label="Link para 3. Estrutura completa do JSON">#</a>3. Estrutura completa do JSON</h2>
+<h3 id="31-campos-de-nível-raiz"><a class="heading-anchor" href="#31-campos-de-nível-raiz" aria-label="Link para 3.1 Campos de nível raiz">#</a>3.1 Campos de nível raiz</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>schema_version</code></td>
+<td align="right">sim</td>
+<td>inteiro</td>
+<td>—</td>
+<td>Hoje só aceita <code>1</code>.</td>
+</tr>
+<tr>
+<td><code>id</code></td>
+<td align="right">sim</td>
+<td>identifier</td>
+<td>—</td>
+<td>Precisa ser igual ao caminho do arquivo.</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td><code>recipe</code> ou <code>storage</code>.</td>
+</tr>
+<tr>
+<td><code>recipe_type</code></td>
+<td align="right">depende</td>
+<td>identifier</td>
+<td>—</td>
+<td>Obrigatório em <code>type=recipe</code>; proibido em <code>type=storage</code>. Precisa ser um tipo registrado pelo mod; hoje <code>infinity_nexus_multiblock:nexus_smelting</code>. Datapacks não registram tipos novos.</td>
+</tr>
+<tr>
+<td><code>priority</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>Usado para resolver sobreposição entre estruturas. Pode ser negativo.</td>
+</tr>
+<tr>
+<td><code>tier</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>1</code></td>
+<td>Mínimo <code>1</code>. Hoje é apenas metadado; não altera comportamento.</td>
+</tr>
+<tr>
+<td><code>controller</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>ausente</td>
+<td>Em JSON empacotado, define o bloco e as texturas geradas; em datapack, valida um bloco Java existente. Veja a seção 9.</td>
+</tr>
+<tr>
+<td><code>recipe</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>ausente</td>
+<td>Receita shaped de crafting table do item do controller. Veja a seção 9.3.1.</td>
+</tr>
+<tr>
+<td><code>inventory_rows</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>3</code></td>
+<td>De <code>1</code> a <code>6</code>. Usado só quando <code>item_slots</code> está vazio.</td>
+</tr>
+<tr>
+<td><code>item_slots</code></td>
+<td align="right">não</td>
+<td>lista</td>
+<td><code>[]</code></td>
+<td>Define os slots do inventário. Veja a seção 6.</td>
+</tr>
+<tr>
+<td><code>capabilities</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>vazio</td>
+<td>Energia e fluidos. Veja a seção 7.</td>
+</tr>
+<tr>
+<td><code>capability_ports</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>ausente</td>
+<td>Restringe quais blocos membros expõem item, energia e fluido. Veja a seção 7.3.</td>
+</tr>
+<tr>
+<td><code>gui</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>ausente</td>
+<td>Layout padrão ou customizado. Veja a seção 8.</td>
+</tr>
+<tr>
+<td><code>pattern</code></td>
+<td align="right">sim para máquina</td>
+<td>objeto</td>
+<td>—</td>
+<td>Obrigatório para uma definição registrada. Templates podem omitir.</td>
+</tr>
+</tbody></table></div>
+<h3 id="32-campos-de-herança"><a class="heading-anchor" href="#32-campos-de-herança" aria-label="Link para 3.2 Campos de herança">#</a>3.2 Campos de herança</h3>
+<p>Esses campos são processados <strong>antes</strong> do schema normal:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>extends</code></td>
+<td align="right">não</td>
+<td>identifier</td>
+<td>—</td>
+<td>ID do pai. Não use junto com <code>family</code>.</td>
+</tr>
+<tr>
+<td><code>family</code></td>
+<td align="right">não</td>
+<td>identifier</td>
+<td>—</td>
+<td>Alias de <code>extends</code>. Não use junto com <code>extends</code>.</td>
+</tr>
+<tr>
+<td><code>overrides</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>—</td>
+<td>Aplicado depois dos campos do filho; vence em caso de conflito.</td>
+</tr>
+<tr>
+<td><code>template</code></td>
+<td align="right">não</td>
+<td>booleano</td>
+<td><code>false</code></td>
+<td>Se <code>true</code>, o arquivo não é registrado como máquina.</td>
+</tr>
+</tbody></table></div>
+<p>Regras:</p>
+<ul>
+<li><code>extends</code> e <code>family</code> são a mesma coisa; use apenas um.</li>
+<li>O pai é resolvido recursivamente.</li>
+<li>Objetos são mesclados recursivamente.</li>
+<li>Listas substituem a lista inteira.</li>
+<li><code>overrides</code> não pode definir <code>extends</code>, <code>family</code>, <code>overrides</code> ou <code>template</code>.</li>
+<li>Um template com <code>template: true</code> é sempre ignorado como máquina, mesmo tendo pattern.</li>
+<li>Um arquivo sem <code>pattern</code> é tratado como template quando é referenciado por outro. Se não for referenciado, é erro de definição.</li>
+</ul>
+<h3 id="33-exemplo-mínimo"><a class="heading-anchor" href="#33-exemplo-mínimo" aria-label="Link para 3.3 Exemplo mínimo">#</a>3.3 Exemplo mínimo</h3>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 1,
+  &quot;id&quot;: &quot;minhamod:minha_maquina&quot;,
+  &quot;type&quot;: &quot;storage&quot;,
+  &quot;inventory_rows&quot;: 3,
+  &quot;pattern&quot;: {
+    &quot;anchor&quot;: &quot;C&quot;,
+    &quot;layers&quot;: [
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;III&quot;
+      ],
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;ICI&quot;
+      ],
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;III&quot;
+      ]
+    ],
+    &quot;matchers&quot;: {
+      &quot;I&quot;: &quot;minecraft:iron_block&quot;
+    }
+  }
+}
+</code></pre>
+<p>Esse JSON já carrega como definição. Se estiver empacotado no mod com o namespace <code>infinity_nexus_multiblock</code>, o bloco controller é criado automaticamente com o ID do arquivo e texturas fallback. Se estiver em um datapack ou usar outro namespace, ele não cria bloco: registre um controller Java cujo <code>definitionId</code> seja <code>minhamod:minha_maquina</code> (seção 9) ou use um dos controllers dinâmicos embutidos.</p>
+<h2 id="4-pattern"><a class="heading-anchor" href="#4-pattern" aria-label="Link para 4. Pattern">#</a>4. Pattern</h2>
+<h3 id="41-regras"><a class="heading-anchor" href="#41-regras" aria-label="Link para 4.1 Regras">#</a>4.1 Regras</h3>
+<ul>
+<li><code>layers</code> é uma lista de camadas, da <strong>base para o topo</strong>.</li>
+<li>Cada camada é uma lista de linhas.</li>
+<li>Todas as camadas precisam ter a mesma quantidade de linhas.</li>
+<li>Todas as linhas precisam ter a mesma largura.</li>
+<li>Espaços (<code>&quot; &quot;</code>) são ignorados como células, mas continuam contando para a largura.</li>
+<li>Deve existir <strong>exatamente um</strong> símbolo de âncora.</li>
+<li>Cada símbolo usado, exceto a âncora, precisa ter um matcher.</li>
+<li>A célula da âncora é o controller. Ela não entra na lista de membros e não é testada pelo matcher.</li>
+<li>O matcher da âncora é opcional e, se existir, é ignorado.</li>
+<li>A orientação canônica é com o controller virado para <strong>SOUTH</strong>.</li>
+<li>Ao validar, montar ou pré-visualizar com o controller em outra direção, posições e states direcionais são rotacionados.</li>
+</ul>
+<h3 id="42-ordem-das-linhas-e-colunas"><a class="heading-anchor" href="#42-ordem-das-linhas-e-colunas" aria-label="Link para 4.2 Ordem das linhas e colunas">#</a>4.2 Ordem das linhas e colunas</h3>
+<p>Na orientação canônica (<code>SOUTH</code>):</p>
+<ul>
+<li>a camada <code>0</code> é a mais baixa;</li>
+<li>a linha <code>0</code> fica no norte;</li>
+<li>linhas seguintes avançam para o sul;</li>
+<li>a coluna <code>0</code> fica no oeste;</li>
+<li>colunas seguintes avançam para o leste;</li>
+<li>a âncora <code>C</code> é a posição do controller.</li>
+</ul>
+<p>Exemplo de uma camada 3x3:</p>
+<pre><code class="language-json">[
+  &quot;III&quot;,
+  &quot;I I&quot;,
+  &quot;III&quot;
+]
+</code></pre>
+<p>A linha do meio tem um espaço no centro. O espaço não é uma célula, mas a linha continua com largura 3.</p>
+<h3 id="43-rotação"><a class="heading-anchor" href="#43-rotação" aria-label="Link para 4.3 Rotação">#</a>4.3 Rotação</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>FACING</code> do controller</th>
+<th>Rotação aplicada</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>SOUTH</code></td>
+<td>nenhuma</td>
+</tr>
+<tr>
+<td><code>NORTH</code></td>
+<td>180 graus</td>
+</tr>
+<tr>
+<td><code>EAST</code></td>
+<td>90 graus anti-horário</td>
+</tr>
+<tr>
+<td><code>WEST</code></td>
+<td>90 graus horário</td>
+</tr>
+</tbody></table></div>
+<p>O JSON sempre descreve a máquina olhando para <code>SOUTH</code>. Se você escrever <code>facing: &quot;north&quot;</code> em um matcher, esse valor será rotacionado junto com a estrutura quando o controller estiver em outra direção.</p>
+<h3 id="44-exemplo-de-pattern-3x3x3"><a class="heading-anchor" href="#44-exemplo-de-pattern-3x3x3" aria-label="Link para 4.4 Exemplo de pattern 3x3x3">#</a>4.4 Exemplo de pattern 3x3x3</h3>
+<pre><code class="language-json">&quot;pattern&quot;: {
+  &quot;anchor&quot;: &quot;C&quot;,
+  &quot;layers&quot;: [
+    [
+      &quot;III&quot;,
+      &quot;III&quot;,
+      &quot;III&quot;
+    ],
+    [
+      &quot;III&quot;,
+      &quot;III&quot;,
+      &quot;ICI&quot;
+    ],
+    [
+      &quot;III&quot;,
+      &quot;III&quot;,
+      &quot;III&quot;
+    ]
+  ],
+  &quot;matchers&quot;: {
+    &quot;I&quot;: &quot;minecraft:iron_block&quot;
+  }
+}
+</code></pre>
+<p>O controller fica na face sul da camada do meio. O resto do cubo é <code>minecraft:iron_block</code>.</p>
+<h3 id="45-tamanho"><a class="heading-anchor" href="#45-tamanho" aria-label="Link para 4.5 Tamanho">#</a>4.5 Tamanho</h3>
+<p>O loader não impõe um limite de tamanho para o pattern. O limite configurável em <code>export.pattern_scan_limit</code> (padrão 256 blocos) vale para a <strong>exportação</strong> no criativo, não para a definição.</p>
+<h2 id="5-matchers"><a class="heading-anchor" href="#5-matchers" aria-label="Link para 5. Matchers">#</a>5. Matchers</h2>
+<p><code>pattern.matchers</code> é um objeto cujo <strong>nome da chave é um único caractere</strong> e cujo valor pode ser:</p>
+<ol>
+<li>uma string com ID de bloco;</li>
+<li>uma string com tag de bloco, começando com <code>#</code>;</li>
+<li>um objeto com <code>block</code> ou <code>tag</code> e, opcionalmente, <code>state</code>.</li>
+</ol>
+<h3 id="51-string-de-bloco"><a class="heading-anchor" href="#51-string-de-bloco" aria-label="Link para 5.1 String de bloco">#</a>5.1 String de bloco</h3>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;I&quot;: &quot;minecraft:iron_block&quot;
+}
+</code></pre>
+<p>O bloco precisa existir no registro.</p>
+<h3 id="52-string-de-tag"><a class="heading-anchor" href="#52-string-de-tag" aria-label="Link para 5.2 String de tag">#</a>5.2 String de tag</h3>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;I&quot;: &quot;#c:storage_blocks/iron&quot;
+}
+</code></pre>
+<p>O <code>#</code> é obrigatório nesse formato. A tag é resolvida no registro de blocos.</p>
+<h3 id="53-objeto-de-matcher"><a class="heading-anchor" href="#53-objeto-de-matcher" aria-label="Link para 5.3 Objeto de matcher">#</a>5.3 Objeto de matcher</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>block</code></td>
+<td align="right">um dos dois</td>
+<td>string</td>
+<td>ID de bloco. Não use junto com <code>tag</code>.</td>
+</tr>
+<tr>
+<td><code>tag</code></td>
+<td align="right">um dos dois</td>
+<td>string</td>
+<td>ID de tag. Pode ter <code>#</code> ou não. Não use junto com <code>block</code>.</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>Mapa de propriedade para valor, ambos strings. Só pode ser usado com <code>block</code>.</td>
+</tr>
+</tbody></table></div>
+<p>Exatamente um entre <code>block</code> e <code>tag</code> precisa existir.</p>
+<p>Exemplo com bloco e state:</p>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;S&quot;: {
+    &quot;block&quot;: &quot;minecraft:oak_stairs&quot;,
+    &quot;state&quot;: {
+      &quot;facing&quot;: &quot;north&quot;,
+      &quot;half&quot;: &quot;bottom&quot;,
+      &quot;shape&quot;: &quot;straight&quot;,
+      &quot;waterlogged&quot;: &quot;false&quot;
+    }
+  }
+}
+</code></pre>
+<p>Exemplo com tag:</p>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;S&quot;: {
+    &quot;tag&quot;: &quot;#minecraft:stairs&quot;
+  }
+}
+</code></pre>
+<h3 id="54-como-o-state-funciona"><a class="heading-anchor" href="#54-como-o-state-funciona" aria-label="Link para 5.4 Como o state funciona">#</a>5.4 Como o state funciona</h3>
+<ul>
+<li>Apenas as propriedades listadas em <code>state</code> são verificadas.</li>
+<li>Propriedades omitidas são ignoradas.</li>
+<li>Um objeto sem <code>state</code> aceita qualquer state do bloco.</li>
+<li>Um objeto com <code>state</code> aceita qualquer combinação que bata com as propriedades informadas.</li>
+<li>O nome da propriedade e o valor precisam existir no bloco.</li>
+<li>Valores são strings: <code>&quot;true&quot;</code>, <code>&quot;false&quot;</code>, <code>&quot;north&quot;</code>, <code>&quot;1&quot;</code>, etc.</li>
+<li><code>state</code> com <code>tag</code> é inválido.</li>
+<li>O state é relativo à orientação canônica <code>SOUTH</code> e é rotacionado junto com a estrutura.</li>
+</ul>
+<p>Exemplo de matcher parcial para escada:</p>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;S&quot;: {
+    &quot;block&quot;: &quot;minecraft:oak_stairs&quot;,
+    &quot;state&quot;: {
+      &quot;facing&quot;: &quot;south&quot;,
+      &quot;half&quot;: &quot;bottom&quot;
+    }
+  }
+}
+</code></pre>
+<p>Esse matcher aceita a escada virada para sul e na metade de baixo, independentemente de <code>shape</code> ou <code>waterlogged</code>.</p>
+<h3 id="55-o-que-não-existe"><a class="heading-anchor" href="#55-o-que-não-existe" aria-label="Link para 5.5 O que não existe">#</a>5.5 O que não existe</h3>
+<ul>
+<li>NBT;</li>
+<li>listas de alternativas (<code>any</code>);</li>
+<li>matchers opcionais;</li>
+<li>expressões ou lógica.</li>
+</ul>
+<p>Se precisar de alternativas, use uma tag de bloco.</p>
+<h2 id="6-slots-de-item"><a class="heading-anchor" href="#6-slots-de-item" aria-label="Link para 6. Slots de item">#</a>6. Slots de item</h2>
+<h3 id="61-tamanho-do-inventário"><a class="heading-anchor" href="#61-tamanho-do-inventário" aria-label="Link para 6.1 Tamanho do inventário">#</a>6.1 Tamanho do inventário</h3>
+<ul>
+<li>Se <code>item_slots</code> tem entradas, o inventário tem exatamente a quantidade de entradas.</li>
+<li>Se <code>item_slots</code> está vazio ou ausente, o inventário tem <code>inventory_rows * 9</code> slots.</li>
+<li><code>inventory_rows</code> é validado mesmo quando ignorado, então use de <code>1</code> a <code>6</code>.</li>
+</ul>
+<p>Exemplos:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Configuração</th>
+<th align="right">Tamanho</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>sem <code>item_slots</code>, <code>inventory_rows: 3</code></td>
+<td align="right">27</td>
+</tr>
+<tr>
+<td>sem <code>item_slots</code>, <code>inventory_rows: 6</code></td>
+<td align="right">54</td>
+</tr>
+<tr>
+<td>4 entradas em <code>item_slots</code></td>
+<td align="right">4</td>
+</tr>
+</tbody></table></div>
+<h3 id="62-campos-de-item_slots"><a class="heading-anchor" href="#62-campos-de-item_slots" aria-label="Link para 6.2 Campos de item_slots[]">#</a>6.2 Campos de <code>item_slots[]</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>Único e não vazio.</td>
+</tr>
+<tr>
+<td><code>role</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td><code>input</code>, <code>output</code>, <code>fuel</code>, <code>upgrade</code>, <code>component</code>, <code>storage</code> ou <code>fluid</code>.</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td>sem filtro</td>
+<td>ID de item ou tag com <code>#</code>.</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>64</code></td>
+<td>De <code>1</code> a <code>64</code>. O limite efetivo também considera o tamanho máximo do stack.</td>
+</tr>
+<tr>
+<td><code>faces</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>padrão do role</td>
+<td><code>insert</code> e/ou <code>extract</code>, cada um com uma lista de direções.</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td>ausente</td>
+<td>Posição horizontal na GUI customizada. Precisa de <code>y</code>. Não pode ser negativo.</td>
+</tr>
+<tr>
+<td><code>y</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td>ausente</td>
+<td>Posição vertical na GUI customizada. Precisa de <code>x</code>. Não pode ser negativo.</td>
+</tr>
+</tbody></table></div>
+<p><code>faces</code>:</p>
+<pre><code class="language-json">&quot;faces&quot;: {
+  &quot;insert&quot;: [&quot;north&quot;, &quot;south&quot;],
+  &quot;extract&quot;: []
+}
+</code></pre>
+<ul>
+<li><code>insert</code>: faces que podem inserir no slot.</li>
+<li><code>extract</code>: faces que podem extrair do slot.</li>
+<li>Se um dos campos for omitido, vale o padrão do role.</li>
+<li>Lista vazia desativa a operação.</li>
+<li>Direções: <code>north</code>, <code>south</code>, <code>east</code>, <code>west</code>, <code>up</code>, <code>down</code>.</li>
+</ul>
+<h3 id="63-faces-padrão-por-role"><a class="heading-anchor" href="#63-faces-padrão-por-role" aria-label="Link para 6.3 Faces padrão por role">#</a>6.3 Faces padrão por role</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Insere por</th>
+<th>Extrai por</th>
+<th>Uso atual</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>input</code></td>
+<td>todas</td>
+<td>nenhuma</td>
+<td>Participa do matching de receita.</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td>nenhuma</td>
+<td>todas</td>
+<td>Recebe o resultado da receita.</td>
+</tr>
+<tr>
+<td><code>fuel</code></td>
+<td>todas</td>
+<td>nenhuma</td>
+<td>Sem comportamento de receita embutido.</td>
+</tr>
+<tr>
+<td><code>upgrade</code></td>
+<td>todas</td>
+<td>nenhuma</td>
+<td>Sem comportamento de receita embutido.</td>
+</tr>
+<tr>
+<td><code>component</code></td>
+<td>todas</td>
+<td>nenhuma</td>
+<td>Sem comportamento de receita embutido.</td>
+</tr>
+<tr>
+<td><code>storage</code></td>
+<td>todas</td>
+<td>todas</td>
+<td>Armazenamento/automação.</td>
+</tr>
+<tr>
+<td><code>fluid</code></td>
+<td>todas</td>
+<td>nenhuma</td>
+<td>Slot de item; não é um tanque de fluido.</td>
+</tr>
+</tbody></table></div>
+<p>Apenas <code>input</code> e <code>output</code> têm comportamento automático no processamento de receitas. Os outros roles são úteis para automação, filtros, limites e GUIs; outros mods podem acessá-los pelo inventário.</p>
+<h3 id="64-filtro-e-limite"><a class="heading-anchor" href="#64-filtro-e-limite" aria-label="Link para 6.4 Filtro e limite">#</a>6.4 Filtro e limite</h3>
+<ul>
+<li><code>filter</code> aceita ID de item (<code>minecraft:iron_ingot</code>) ou tag (<code>#c:ingots/iron</code>).</li>
+<li>O filtro vale para o jogador e para automação.</li>
+<li>O limite vale para o slot e também para o resultado.</li>
+<li>O jogador pode retirar de qualquer slot visível, mesmo que a face não permita extração por automação.</li>
+</ul>
+<h3 id="65-faces-e-rotação"><a class="heading-anchor" href="#65-faces-e-rotação" aria-label="Link para 6.5 Faces e rotação">#</a>6.5 Faces e rotação</h3>
+<p>As faces de <code>item_slots</code> são direções <strong>do mundo</strong>. Elas não são rotacionadas junto com o <code>FACING</code> do controller.</p>
+<p>Exemplo: <code>&quot;insert&quot;: [&quot;north&quot;]</code> continua significando norte do mundo, mesmo que a máquina esteja virada para leste. Para evitar confusão, use faces amplas ou documente a orientação da sua máquina.</p>
+<h3 id="66-slots-e-gui"><a class="heading-anchor" href="#66-slots-e-gui" aria-label="Link para 6.6 Slots e GUI">#</a>6.6 Slots e GUI</h3>
+<p>Há dois jeitos de posicionar slots na GUI customizada:</p>
+<p><strong>Formato atual:</strong> <code>item_slots[]</code> com <code>x</code>/<code>y</code>.</p>
+<pre><code class="language-json">&quot;item_slots&quot;: [
+  {
+    &quot;id&quot;: &quot;input_0&quot;,
+    &quot;role&quot;: &quot;input&quot;,
+    &quot;x&quot;: 44,
+    &quot;y&quot;: 17
+  },
+  {
+    &quot;id&quot;: &quot;output_0&quot;,
+    &quot;role&quot;: &quot;output&quot;,
+    &quot;x&quot;: 116,
+    &quot;y&quot;: 26
+  }
+]
+</code></pre>
+<ul>
+<li>Slots com <code>x</code>/<code>y</code> aparecem na GUI.</li>
+<li>Slots sem <code>x</code>/<code>y</code> ficam ocultos, mas continuam existindo para automação e receitas.</li>
+<li>Todos os slots visíveis precisam caber em <code>gui.width</code>/<code>gui.height</code>.</li>
+</ul>
+<p><strong>Formato antigo:</strong> elementos <code>slot</code> dentro de <code>gui.elements</code>.</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;slot&quot;,
+  &quot;slot&quot;: &quot;input_0&quot;,
+  &quot;x&quot;: 44,
+  &quot;y&quot;: 17
+}
+</code></pre>
+<ul>
+<li>O <code>slot</code> precisa existir em <code>item_slots[]</code>.</li>
+<li>Cada slot pode aparecer uma vez.</li>
+<li>Não misture elementos <code>slot</code> com <code>x</code>/<code>y</code> em <code>item_slots[]</code>.</li>
+<li>O tamanho do slot é fixo em <code>18x18</code>; <code>width</code>/<code>height</code> do elemento são ignorados.</li>
+</ul>
+<p>No layout padrão (sem <code>gui.elements</code>), todos os slots são exibidos em uma grade de 9 colunas e <code>x</code>/<code>y</code> são ignorados.</p>
+<h3 id="67-exemplo-de-item_slots"><a class="heading-anchor" href="#67-exemplo-de-item_slots" aria-label="Link para 6.7 Exemplo de item_slots">#</a>6.7 Exemplo de <code>item_slots</code></h3>
+<pre><code class="language-json">&quot;item_slots&quot;: [
+  {
+    &quot;id&quot;: &quot;input_0&quot;,
+    &quot;role&quot;: &quot;input&quot;,
+    &quot;filter&quot;: &quot;minecraft:raw_iron&quot;,
+    &quot;limit&quot;: 16
+  },
+  {
+    &quot;id&quot;: &quot;input_1&quot;,
+    &quot;role&quot;: &quot;input&quot;,
+    &quot;filter&quot;: &quot;minecraft:coal&quot;
+  },
+  {
+    &quot;id&quot;: &quot;output_0&quot;,
+    &quot;role&quot;: &quot;output&quot;,
+    &quot;filter&quot;: &quot;minecraft:iron_ingot&quot;
+  },
+  {
+    &quot;id&quot;: &quot;upgrade_0&quot;,
+    &quot;role&quot;: &quot;upgrade&quot;,
+    &quot;faces&quot;: {
+      &quot;insert&quot;: [&quot;north&quot;, &quot;south&quot;],
+      &quot;extract&quot;: []
+    }
+  }
+]
+</code></pre>
+<h2 id="7-energia-e-fluidos"><a class="heading-anchor" href="#7-energia-e-fluidos" aria-label="Link para 7. Energia e fluidos">#</a>7. Energia e fluidos</h2>
+<p><code>capabilities</code> é opcional e fica no nível raiz. <code>item_slots</code> <strong>não</strong> fica dentro de <code>capabilities</code>.</p>
+<h3 id="71-energia"><a class="heading-anchor" href="#71-energia" aria-label="Link para 7.1 Energia">#</a>7.1 Energia</h3>
+<pre><code class="language-json">&quot;capabilities&quot;: {
+  &quot;energy&quot;: {
+    &quot;id&quot;: &quot;energy&quot;,
+    &quot;capacity&quot;: 100000,
+    &quot;max_receive&quot;: 1000,
+    &quot;max_extract&quot;: 0
+  }
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>Não vazio. Usado pela GUI e para identificar a capability.</td>
+</tr>
+<tr>
+<td><code>capacity</code></td>
+<td align="right">sim</td>
+<td>inteiro</td>
+<td>—</td>
+<td>Mínimo <code>1</code>, em FE.</td>
+</tr>
+<tr>
+<td><code>max_receive</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>FE aceitos por operação de inserção. <code>0</code> desativa a inserção.</td>
+</tr>
+<tr>
+<td><code>max_extract</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>FE liberados por operação de extração. <code>0</code> desativa a extração.</td>
+</tr>
+</tbody></table></div>
+<h3 id="72-fluidos"><a class="heading-anchor" href="#72-fluidos" aria-label="Link para 7.2 Fluidos">#</a>7.2 Fluidos</h3>
+<pre><code class="language-json">&quot;capabilities&quot;: {
+  &quot;fluids&quot;: [
+    {
+      &quot;id&quot;: &quot;water_tank&quot;,
+      &quot;capacity&quot;: 10000,
+      &quot;max_receive&quot;: 1000,
+      &quot;max_extract&quot;: 0,
+      &quot;filter&quot;: &quot;minecraft:water&quot;
+    }
+  ]
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>id</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>Único entre os tanques e diferente do <code>energy.id</code>.</td>
+</tr>
+<tr>
+<td><code>capacity</code></td>
+<td align="right">sim</td>
+<td>inteiro</td>
+<td>—</td>
+<td>Mínimo <code>1</code>, em mB.</td>
+</tr>
+<tr>
+<td><code>max_receive</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>mB aceitos por inserção. <code>0</code> desativa.</td>
+</tr>
+<tr>
+<td><code>max_extract</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>mB liberados por extração. <code>0</code> desativa.</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td>sem filtro</td>
+<td>ID de fluido ou tag com <code>#</code>.</td>
+</tr>
+</tbody></table></div>
+<h3 id="73-portas-de-capability-capability_ports"><a class="heading-anchor" href="#73-portas-de-capability-capability_ports" aria-label="Link para 7.3 Portas de capability (capability_ports)">#</a>7.3 Portas de capability (<code>capability_ports</code>)</h3>
+<p><code>capability_ports</code> é opcional e fica no nível raiz, irmão de <code>capabilities</code>.</p>
+<pre><code class="language-json">&quot;capability_ports&quot;: {
+  &quot;item&quot;: [&quot;I&quot;],
+  &quot;energy&quot;: [&quot;C&quot;],
+  &quot;fluid&quot;: [&quot;F&quot;, &quot;#minecraft:glass&quot;]
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Obrigatório</th>
+<th align="right">Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>item</code></td>
+<td>não</td>
+<td align="right">lista</td>
+<td>todos</td>
+<td>Blocos que expõem a capability de item.</td>
+</tr>
+<tr>
+<td><code>energy</code></td>
+<td>não</td>
+<td align="right">lista</td>
+<td>todos</td>
+<td>Blocos que expõem a capability de energia.</td>
+</tr>
+<tr>
+<td><code>fluid</code></td>
+<td>não</td>
+<td align="right">lista</td>
+<td>todos</td>
+<td>Blocos que expõem as capabilities de fluido.</td>
+</tr>
+</tbody></table></div>
+<p>Cada item da lista aceita:</p>
+<ul>
+<li>um símbolo de 1 caractere do <code>pattern</code> (<code>C</code>, <code>I</code>, <code>F</code>...);</li>
+<li>um ID de bloco (<code>namespace:path</code>);</li>
+<li>uma tag de bloco (<code>#namespace:path</code>).</li>
+</ul>
+<p>Regras:</p>
+<ul>
+<li>As três chaves são independentes. Omitir uma chave expõe aquela capability em <strong>todos</strong> os blocos formados; lista vazia (<code>[]</code>) não expõe em nenhum.</li>
+<li>O controller só expõe uma capability se ele próprio for selecionado (pelo símbolo <code>C</code> ou pelo ID do bloco controller).</li>
+<li>Um símbolo que não existe no <code>pattern</code> falha o carregamento da definição.</li>
+<li>A whitelist controla apenas as capabilities do multiblock; capabilities nativas de um bloco membro continuam disponíveis.</li>
+<li>Não há configuração por face: um bloco selecionado expõe a capability em todas as suas faces.</li>
+<li><code>item</code> não é uma chave de <code>capabilities</code>: todo multiblock tem inventário (<code>item_slots</code> ou <code>inventory_rows</code>) e expõe item por padrão. Use <code>capability_ports.item</code> para limitar as portas ou <code>[]</code> para não expor item.</li>
+<li><code>energy</code> e <code>fluid</code> só têm efeito quando a máquina define <code>capabilities.energy</code> ou pelo menos um tanque em <code>capabilities.fluids</code>. Um tanque somente de fluido é possível com <code>capabilities.fluids</code> e, se quiser esconder o inventário, <code>&quot;capability_ports&quot;: {&quot;item&quot;: []}</code>. A GUI customizada pode ter só <code>fluid_bar</code> e <code>player_inventory</code>, sem <code>item_slots</code>.</li>
+</ul>
+<p>As portas são recalculadas quando a estrutura é validada. <code>/reload</code> atualiza a definição; se a máquina já estiver formada e você precisar forçar o recálculo, quebre e monte novamente.</p>
+<p>No builder, os campos de <code>capability_ports</code> ficam na etapa <strong>Capabilities</strong>. Campo vazio omite a chave e libera a capability em qualquer bloco; <code>[]</code> não expõe nenhum bloco; símbolos, IDs e tags podem ser separados por vírgula ou espaço. As portas <code>energy</code>/<code>fluid</code> ficam desabilitadas enquanto a capability correspondente não existir.</p>
+<h3 id="74-onde-as-capabilities-aparecem"><a class="heading-anchor" href="#74-onde-as-capabilities-aparecem" aria-label="Link para 7.4 Onde as capabilities aparecem">#</a>7.4 Onde as capabilities aparecem</h3>
+<ul>
+<li><strong>Padrão:</strong> todos os blocos membros formados e o controller expõem as capabilities configuradas.</li>
+<li><strong>Com <code>capability_ports</code>:</strong> apenas os blocos selecionados para cada capability.</li>
+<li><strong>Itens:</strong> um hopper encostado em qualquer porta de item acessa o mesmo inventário.</li>
+<li><strong>Energia e fluidos:</strong> normalmente expostos só no controller, incluindo <code>C</code> na lista correspondente.</li>
+<li>O <code>energy.id</code> e os <code>fluids[].id</code> são usados pela GUI para localizar as barras. Eles não mudam as portas.</li>
+</ul>
+<h3 id="75-energia-em-receitas"><a class="heading-anchor" href="#75-energia-em-receitas" aria-label="Link para 7.5 Energia em receitas">#</a>7.5 Energia em receitas</h3>
+<p>Se a receita tem <code>energy &gt; 0</code>, a máquina precisa ter <code>capabilities.energy</code>. Sem armazenamento de energia, o progresso não avança.</p>
+<p>O custo é distribuído ao longo dos ticks. Uma receita com <code>energy: 1000</code> e <code>time: 100</code> consome aproximadamente 10 FE por tick. Se a energia acabar, o progresso pausa.</p>
+<h3 id="76-fluidos-em-receitas"><a class="heading-anchor" href="#76-fluidos-em-receitas" aria-label="Link para 7.6 Fluidos em receitas">#</a>7.6 Fluidos em receitas</h3>
+<p>Se a receita tem <code>fluid_ingredients</code>, a máquina precisa ter tanques suficientes. Cada ingrediente de fluido procura um tanque que aceite o fluido e tenha a quantidade necessária. Cada tanque satisfaz no máximo um ingrediente por craft.</p>
+<h3 id="77-reload"><a class="heading-anchor" href="#77-reload" aria-label="Link para 7.7 Reload">#</a>7.7 Reload</h3>
+<p><code>/reload</code> atualiza a definição, mas <strong>não recria nem reconfigura</strong> capabilities de energia/fluidos já existentes. Se você mudar <code>capacity</code>, <code>max_receive</code>, <code>max_extract</code> ou <code>filter</code>, quebre e coloque o controller de novo, ou reinicie o mundo, para criar as capabilities com os novos valores.</p>
+<h2 id="8-gui"><a class="heading-anchor" href="#8-gui" aria-label="Link para 8. GUI">#</a>8. GUI</h2>
+<h3 id="81-layout-padrão"><a class="heading-anchor" href="#81-layout-padrão" aria-label="Link para 8.1 Layout padrão">#</a>8.1 Layout padrão</h3>
+<p>Sem <code>gui</code>, ou com <code>gui.elements</code> vazio, o layout é automático:</p>
+<ul>
+<li>slots do inventário em uma grade de 9 colunas;</li>
+<li>título no topo;</li>
+<li>uma barra de energia, se existir;</li>
+<li>uma barra para cada tanque de fluido, se existirem;</li>
+<li>uma barra de progresso à direita, se <code>type=recipe</code> e <code>recipe_type</code> existirem;</li>
+<li>inventário do jogador abaixo dos slots;</li>
+<li>largura e altura calculadas para caber tudo.</li>
+</ul>
+<p>Se você definir <code>gui</code> sem <code>elements</code>, ainda pode definir <code>texture</code>, <code>width</code>, <code>height</code>, <code>texture_width</code> e <code>texture_height</code>; o layout continua automático, mas usa esses valores.</p>
+<h3 id="82-layout-customizado"><a class="heading-anchor" href="#82-layout-customizado" aria-label="Link para 8.2 Layout customizado">#</a>8.2 Layout customizado</h3>
+<p>Com <code>gui.elements</code> não vazio:</p>
+<ul>
+<li><code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x</code>/<code>y</code>; uma GUI somente de fluidos pode omitir slots de item;</li>
+<li>os slots visíveis são os que têm <code>x</code>/<code>y</code> em <code>item_slots[]</code>, ou os elementos <code>slot</code> no formato antigo;</li>
+<li>slots sem posição ficam ocultos, mas funcionam para automação/receita;</li>
+<li>não misture <code>x</code>/<code>y</code> em <code>item_slots[]</code> com elementos <code>slot</code>;</li>
+<li>exatamente um <code>player_inventory</code> é obrigatório;</li>
+<li><code>energy_bar.capability</code> precisa ser igual a <code>energy.id</code>;</li>
+<li><code>fluid_bar.capability</code> precisa ser igual a um <code>fluids[].id</code>;</li>
+<li><code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só são aceitos em <code>type=recipe</code>;</li>
+<li>slots, player inventory, barras e <code>entity</code> precisam caber em <code>width</code>/<code>height</code>;</li>
+<li><code>title</code> e <code>text</code> não têm validação de limites; cuidado para não desenhar fora da tela.</li>
+<li>Em <code>title</code>/<code>text</code>, <code>x/y</code> representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.</li>
+<li>No builder, novos elementos começam com o layout do <code>spawner</code>: <code>title</code> em <code>8,4</code>, <code>text</code> em <code>8,75</code>, <code>player_inventory</code> em <code>8,84</code>, <code>energy_bar</code>/<code>fluid_bar</code>/<code>progress_bar</code> em <code>158/148/138,10</code> com <code>8x64</code>, e <code>entity</code> em <code>96,18</code> com <code>32x32</code>.</li>
+<li>Slots novos começam em <code>8,16</code> e avançam <code>18</code> px por coluna, com 9 colunas por linha antes de descer para a próxima linha.</li>
+</ul>
+<h3 id="83-campos-de-gui"><a class="heading-anchor" href="#83-campos-de-gui" aria-label="Link para 8.3 Campos de gui">#</a>8.3 Campos de <code>gui</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>texture</code></td>
+<td align="right">não</td>
+<td>identifier</td>
+<td>sem textura</td>
+<td>Caminho completo do PNG, por exemplo <code>minhamod:textures/gui/minha_maquina.png</code>. Sem textura, a tela desenha um painel cinza.</td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>176</code></td>
+<td>De <code>1</code> a <code>4096</code>. Área visível da GUI.</td>
+</tr>
+<tr>
+<td><code>height</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>166</code></td>
+<td>De <code>1</code> a <code>4096</code>. Área visível da GUI.</td>
+</tr>
+<tr>
+<td><code>texture_width</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>256</code></td>
+<td>De <code>1</code> a <code>4096</code>. Largura da textura.</td>
+</tr>
+<tr>
+<td><code>texture_height</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>256</code></td>
+<td>De <code>1</code> a <code>4096</code>. Altura da textura.</td>
+</tr>
+<tr>
+<td><code>elements</code></td>
+<td align="right">não</td>
+<td>lista</td>
+<td><code>[]</code></td>
+<td>Se vazio, usa o layout padrão.</td>
+</tr>
+</tbody></table></div>
+<h3 id="84-campos-de-guielements"><a class="heading-anchor" href="#84-campos-de-guielements" aria-label="Link para 8.4 Campos de gui.elements[]">#</a>8.4 Campos de <code>gui.elements[]</code></h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>type</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>Veja a tabela de tipos abaixo.</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>Posição horizontal.</td>
+</tr>
+<tr>
+<td><code>y</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>Posição vertical.</td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>16</code></td>
+<td>De <code>0</code> a <code>4096</code>. Barras e <code>entity</code> precisam de valor positivo.</td>
+</tr>
+<tr>
+<td><code>height</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>16</code></td>
+<td>De <code>0</code> a <code>4096</code>. Barras e <code>entity</code> precisam de valor positivo.</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>Chave de tradução ou texto literal.</td>
+</tr>
+<tr>
+<td><code>slot</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>Só para o tipo <code>slot</code>; ID de <code>item_slots[]</code>.</td>
+</tr>
+<tr>
+<td><code>capability</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td><code>&quot;&quot;</code></td>
+<td>ID de energia ou tanque para barras.</td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td align="right">não</td>
+<td>inteiro ou string</td>
+<td><code>0xFF404040</code></td>
+<td>ARGB em inteiro decimal ou hexadecimal. Alpha <code>0</code> vira <code>0xFF</code>.</td>
+</tr>
+<tr>
+<td><code>shadow</code></td>
+<td align="right">não</td>
+<td>booleano</td>
+<td><code>true</code></td>
+<td>Sombra do texto.</td>
+</tr>
+<tr>
+<td><code>direction</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td><code>up</code></td>
+<td><code>up</code>, <code>down</code>, <code>left</code> ou <code>right</code>.</td>
+</tr>
+<tr>
+<td><code>u</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>-1</code></td>
+<td>Origem horizontal do sprite. Se <code>-1</code>, usa <code>x</code>.</td>
+</tr>
+<tr>
+<td><code>v</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>-1</code></td>
+<td>Origem vertical do sprite. Se <code>-1</code>, usa <code>y</code>.</td>
+</tr>
+</tbody></table></div>
+<p>O campo <code>color</code> é ARGB e aceita inteiro decimal ou string hexadecimal. Exemplos equivalentes: <code>4285257290</code>, <code>&quot;0xFF6BD64A&quot;</code>, <code>&quot;#6BD64A&quot;</code> ou <code>&quot;#FF6BD64A&quot;</code>.</p>
+<h3 id="85-tipos-de-elemento"><a class="heading-anchor" href="#85-tipos-de-elemento" aria-label="Link para 8.5 Tipos de elemento">#</a>8.5 Tipos de elemento</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>O que faz</th>
+<th>Campos importantes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>title</code></td>
+<td>Desenha o título. Se <code>text</code> estiver vazio, usa o nome do bloco.</td>
+<td><code>x</code>, <code>y</code>, <code>text</code>, <code>color</code>, <code>shadow</code></td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td>Desenha um texto. Se <code>text</code> estiver vazio, não desenha.</td>
+<td><code>x</code>, <code>y</code>, <code>text</code>, <code>color</code>, <code>shadow</code></td>
+</tr>
+<tr>
+<td><code>player_inventory</code></td>
+<td>Desenha o rótulo do inventário do jogador e posiciona os slots do jogador. Exatamente um.</td>
+<td><code>x</code>, <code>y</code>, <code>text</code>, <code>color</code>, <code>shadow</code></td>
+</tr>
+<tr>
+<td><code>slot</code></td>
+<td>Formato antigo para posicionar um slot. Tamanho fixo <code>18x18</code>.</td>
+<td><code>slot</code>, <code>x</code>, <code>y</code></td>
+</tr>
+<tr>
+<td><code>energy_bar</code></td>
+<td>Barra de energia.</td>
+<td><code>capability</code>, <code>x</code>, <code>y</code>, <code>width</code>, <code>height</code>, <code>direction</code>, <code>color</code></td>
+</tr>
+<tr>
+<td><code>fluid_bar</code></td>
+<td>Barra de fluido.</td>
+<td><code>capability</code>, <code>x</code>, <code>y</code>, <code>width</code>, <code>height</code></td>
+</tr>
+<tr>
+<td><code>progress_bar</code></td>
+<td>Barra de progresso da receita.</td>
+<td><code>x</code>, <code>y</code>, <code>width</code>, <code>height</code>, <code>direction</code>, <code>color</code>, <code>u</code>, <code>v</code></td>
+</tr>
+<tr>
+<td><code>arrow</code></td>
+<td>Seta de progresso, como a da fornalha.</td>
+<td><code>x</code>, <code>y</code>, <code>width</code>, <code>height</code>, <code>direction</code>, <code>u</code>, <code>v</code></td>
+</tr>
+<tr>
+<td><code>entity</code></td>
+<td>Área que renderiza a entidade do <code>output</code> da receita.</td>
+<td><code>x</code>, <code>y</code>, <code>width</code>, <code>height</code></td>
+</tr>
+</tbody></table></div>
+<h3 id="86-detalhes-por-tipo"><a class="heading-anchor" href="#86-detalhes-por-tipo" aria-label="Link para 8.6 Detalhes por tipo">#</a>8.6 Detalhes por tipo</h3>
+<p><strong><code>title</code> e <code>text</code></strong></p>
+<ul>
+<li><code>text</code> é uma chave de tradução ou um texto literal.</li>
+<li><code>title</code> vazio usa o nome do bloco.</li>
+<li>Se não houver nenhum <code>title</code>, a tela desenha o título padrão em <code>8,6</code>.</li>
+<li>Não há validação de limites para <code>title</code>/<code>text</code>.</li>
+</ul>
+<p><strong><code>player_inventory</code></strong></p>
+<ul>
+<li>Ocupa <code>162x76</code> (3 linhas + hotbar).</li>
+<li>O rótulo é desenhado 11 pixels acima de <code>y</code>.</li>
+<li><code>text</code> vazio usa <code>container.inventory</code>.</li>
+<li>Precisa caber em <code>width</code>/<code>height</code>.</li>
+</ul>
+<p><strong><code>slot</code></strong></p>
+<ul>
+<li><code>slot</code> precisa ser o ID de um <code>item_slots[]</code>.</li>
+<li>O slot é desenhado em <code>x,y</code> com <code>18x18</code>.</li>
+<li><code>width</code>/<code>height</code>, <code>text</code> e <code>capability</code> são ignorados.</li>
+<li>Cada slot pode aparecer uma vez.</li>
+</ul>
+<p><strong><code>energy_bar</code></strong></p>
+<ul>
+<li><code>capability</code> precisa ser igual ao <code>energy.id</code>.</li>
+<li><code>width</code>/<code>height</code> precisam ser positivos.</li>
+<li><code>direction</code> define o sentido do preenchimento: <code>up</code>, <code>down</code>, <code>left</code> ou <code>right</code>.</li>
+<li><code>color</code> define a cor do preenchimento.</li>
+<li>Tooltip mostra energia/capacidade em FE.</li>
+<li>Sem textura, desenha um fundo escuro. Com textura, a textura precisa incluir o fundo.</li>
+</ul>
+<p><strong><code>fluid_bar</code></strong></p>
+<ul>
+<li><code>capability</code> precisa ser igual a um <code>fluids[].id</code>.</li>
+<li><code>width</code>/<code>height</code> precisam ser positivos.</li>
+<li>Sempre preenche de baixo para cima; <code>direction</code> e <code>color</code> são ignorados.</li>
+<li>Tooltip mostra o fluido e a quantidade.</li>
+<li>Sem textura, desenha um fundo escuro.</li>
+</ul>
+<p><strong><code>progress_bar</code></strong></p>
+<ul>
+<li>Só em <code>type=recipe</code>.</li>
+<li><code>width</code>/<code>height</code> precisam ser positivos.</li>
+<li><code>direction</code> define o sentido do preenchimento.</li>
+<li><code>color</code> define a cor do preenchimento.</li>
+<li>Com textura, desenha o sprite em <code>u</code>/<code>v</code> como fundo e depois o preenchimento.</li>
+<li>Sem textura, desenha o fundo escuro.</li>
+<li>Tooltip mostra a porcentagem do craft atual.</li>
+</ul>
+<p><strong><code>arrow</code></strong></p>
+<ul>
+<li>Só em <code>type=recipe</code>.</li>
+<li><code>width</code>/<code>height</code> precisam ser positivos.</li>
+<li><code>direction</code> define o sentido do recorte.</li>
+<li>Usa <code>u</code>/<code>v</code> como origem do sprite.</li>
+<li><strong>Precisa de textura</strong>; sem textura, a seta não é desenhada.</li>
+<li>Não desenha fundo.</li>
+<li>Tooltip mostra a porcentagem do craft atual.</li>
+</ul>
+<p><strong><code>entity</code></strong></p>
+<ul>
+<li>Só em <code>type=recipe</code>.</li>
+<li><code>width</code>/<code>height</code> precisam ser positivos e caber na GUI.</li>
+<li>A entidade vem de <code>output.id</code> da receita exibida; o elemento não tem campo de ID.</li>
+<li>O fundo é preto e a borda é cinza, no mesmo estilo das barras.</li>
+<li>Renderiza no JEI e no controller; no controller, a entidade é a do <code>activeRecipe</code> sincronizado.</li>
+<li>Entidades vivas usam o renderer de inventário; entidades não-vivas usam o render state genérico.</li>
+</ul>
+<h3 id="87-exemplo-de-gui-customizada"><a class="heading-anchor" href="#87-exemplo-de-gui-customizada" aria-label="Link para 8.7 Exemplo de GUI customizada">#</a>8.7 Exemplo de GUI customizada</h3>
+<p>O arquivo <a href="exemplos/exemplo_storage.json"><code>exemplos/exemplo_storage.json</code></a> usa <code>item_slots[]</code> com <code>x</code>/<code>y</code>, barras e <code>player_inventory</code>.</p>
+<p>Trecho:</p>
+<pre><code class="language-json">&quot;gui&quot;: {
+  &quot;width&quot;: 176,
+  &quot;height&quot;: 166,
+  &quot;texture_width&quot;: 256,
+  &quot;texture_height&quot;: 256,
+  &quot;elements&quot;: [
+    {
+      &quot;type&quot;: &quot;title&quot;,
+      &quot;text&quot;: &quot;gui.minhamod.minha_maquina.title&quot;,
+      &quot;x&quot;: 8,
+      &quot;y&quot;: 6
+    },
+    {
+      &quot;type&quot;: &quot;energy_bar&quot;,
+      &quot;capability&quot;: &quot;energy&quot;,
+      &quot;x&quot;: 8,
+      &quot;y&quot;: 17,
+      &quot;width&quot;: 12,
+      &quot;height&quot;: 52,
+      &quot;direction&quot;: &quot;up&quot;
+    },
+    {
+      &quot;type&quot;: &quot;fluid_bar&quot;,
+      &quot;capability&quot;: &quot;water_tank&quot;,
+      &quot;x&quot;: 26,
+      &quot;y&quot;: 17,
+      &quot;width&quot;: 12,
+      &quot;height&quot;: 52
+    },
+    {
+      &quot;type&quot;: &quot;player_inventory&quot;,
+      &quot;x&quot;: 8,
+      &quot;y&quot;: 84,
+      &quot;text&quot;: &quot;container.inventory&quot;
+    }
+  ]
+}
+</code></pre>
+<h3 id="88-exemplo-com-slot-antigo-e-progresso"><a class="heading-anchor" href="#88-exemplo-com-slot-antigo-e-progresso" aria-label="Link para 8.8 Exemplo com slot antigo e progresso">#</a>8.8 Exemplo com <code>slot</code> antigo e progresso</h3>
+<pre><code class="language-json">&quot;gui&quot;: {
+  &quot;width&quot;: 176,
+  &quot;height&quot;: 166,
+  &quot;elements&quot;: [
+    { &quot;type&quot;: &quot;title&quot;, &quot;x&quot;: 8, &quot;y&quot;: 6 },
+    { &quot;type&quot;: &quot;energy_bar&quot;, &quot;capability&quot;: &quot;energy&quot;, &quot;x&quot;: 8, &quot;y&quot;: 17, &quot;width&quot;: 12, &quot;height&quot;: 52 },
+    { &quot;type&quot;: &quot;slot&quot;, &quot;slot&quot;: &quot;input_0&quot;, &quot;x&quot;: 44, &quot;y&quot;: 17 },
+    { &quot;type&quot;: &quot;slot&quot;, &quot;slot&quot;: &quot;input_1&quot;, &quot;x&quot;: 44, &quot;y&quot;: 35 },
+    { &quot;type&quot;: &quot;slot&quot;, &quot;slot&quot;: &quot;output_0&quot;, &quot;x&quot;: 116, &quot;y&quot;: 26 },
+    { &quot;type&quot;: &quot;progress_bar&quot;, &quot;x&quot;: 80, &quot;y&quot;: 35, &quot;width&quot;: 12, &quot;height&quot;: 20, &quot;direction&quot;: &quot;right&quot; },
+    { &quot;type&quot;: &quot;player_inventory&quot;, &quot;x&quot;: 8, &quot;y&quot;: 84 }
+  ]
+}
+</code></pre>
+<p>Nesse formato, os <code>item_slots[]</code> não podem ter <code>x</code>/<code>y</code>.</p>
+<h2 id="9-controllers-dinâmicos-e-java"><a class="heading-anchor" href="#9-controllers-dinâmicos-e-java" aria-label="Link para 9. Controllers dinâmicos e Java">#</a>9. Controllers dinâmicos e Java</h2>
+<h3 id="91-criação-dinâmica-a-partir-do-json"><a class="heading-anchor" href="#91-criação-dinâmica-a-partir-do-json" aria-label="Link para 9.1 Criação dinâmica a partir do JSON">#</a>9.1 Criação dinâmica a partir do JSON</h3>
+<p>O mod lê os JSONs empacotados no próprio jar no startup, antes do congelamento dos registries:</p>
+<pre><code class="language-text">data/infinity_nexus_multiblock/multiblock/&lt;arquivo&gt;.json
+</code></pre>
+<p>Para cada definição válida nesse namespace, o scanner registra:</p>
+<ul>
+<li>um <code>MultiblockControllerBlock</code>;</li>
+<li>um <code>BlockItem</code>;</li>
+<li>o block entity compartilhado <code>dynamic_controller</code>.</li>
+</ul>
+<p>Regras:</p>
+<ul>
+<li>só JSONs dentro do jar do mod e no namespace <code>infinity_nexus_multiblock</code> criam blocos;</li>
+<li>o arquivo precisa ter <code>pattern</code>, <code>schema_version: 1</code>, <code>id</code> igual ao caminho e <code>type</code> válido;</li>
+<li><code>template: true</code> é ignorado;</li>
+<li>com <code>controller</code>, o bloco é criado em <code>controller.block</code> e usa <code>definitionId = id</code>;</li>
+<li>sem <code>controller</code>, o bloco é criado no próprio <code>id</code> e usa as texturas fallback da pasta <code>fallback</code>;</li>
+<li>o fallback da mesma face usa <code>_off</code> quando parado e <code>_on</code> quando <code>processing=true</code>;</li>
+<li>com <code>controller</code>, cada textura declarada que não existir usa o fallback da mesma face;</li>
+<li>IDs de bloco duplicados são ignorados com aviso no log.</li>
+</ul>
+<p>Os exemplos embutidos mostram os dois casos:</p>
+<ul>
+<li><code>assembler</code>: tem <code>controller</code>, usa texturas próprias;</li>
+<li><code>a</code>: não tem <code>controller</code>, usa o próprio ID e texturas fallback.</li>
+</ul>
+<p>Adicionar ou remover um controller dinâmico exige recompilar o mod (quando o JSON está no jar) e reiniciar o jogo/servidor. <code>/reload</code> recarrega definições, mas não registra nem remove blocos.</p>
+<h3 id="92-assets-gerados-automaticamente"><a class="heading-anchor" href="#92-assets-gerados-automaticamente" aria-label="Link para 9.2 Assets gerados automaticamente">#</a>9.2 Assets gerados automaticamente</h3>
+<p>Para cada controller dinâmico, o cliente recebe um resource pack interno, hidden, no topo da pilha:</p>
+<ul>
+<li>blockstate com 8 variantes <code>facing</code> × <code>formed</code>;</li>
+<li>modelo de bloco <code>minecraft:block/cube</code> com as seis texturas;</li>
+<li>modelo de item;</li>
+<li>item definition <code>minecraft:model</code>;</li>
+<li>lang <code>en_us</code> com as chaves <code>block.&lt;namespace&gt;.&lt;path&gt;</code> e <code>gui.&lt;namespace&gt;.&lt;path&gt;</code> para o bloco e para a definição, mesclada com a lang base do mod.</li>
+</ul>
+<p>O pack é montado em memória; nenhum arquivo é gravado em disco. O pack gerado tem prioridade sobre assets estáticos do mesmo ID.</p>
+<p>Não são gerados:</p>
+<ul>
+<li>texturas: não são geradas; as declaradas precisam existir em <code>assets/&lt;namespace&gt;/textures/block/...</code>, e cada face ausente usa <code>fallback</code>;</li>
+<li>loot table: <code>getDrops</code> retorna o próprio item;</li>
+<li>textura de GUI;</li>
+<li>traduções além de <code>en_us</code>.</li>
+</ul>
+<p>Para controllers manuais (seção 9.5), o pack não gera nada; todos os assets precisam existir.</p>
+<h3 id="93-json-controller"><a class="heading-anchor" href="#93-json-controller" aria-label="Link para 9.3 JSON controller">#</a>9.3 JSON <code>controller</code></h3>
+<pre><code class="language-json">&quot;controller&quot;: {
+  &quot;block&quot;: &quot;minhamod:minha_maquina&quot;,
+  &quot;textures&quot;: {
+    &quot;front&quot;: &quot;minhamod:block/minha_maquina/front&quot;,
+    &quot;back&quot;: &quot;minhamod:block/minha_maquina/back&quot;,
+    &quot;left&quot;: &quot;minhamod:block/minha_maquina/left&quot;,
+    &quot;right&quot;: &quot;minhamod:block/minha_maquina/right&quot;,
+    &quot;top&quot;: &quot;minhamod:block/minha_maquina/top&quot;,
+    &quot;bottom&quot;: &quot;minhamod:block/minha_maquina/bottom&quot;
+  }
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>block</code></td>
+<td align="right">sim</td>
+<td>identifier</td>
+<td>Bloco registrado que seja <code>MultiblockControllerBlock</code> e cujo <code>definitionId</code> seja igual ao <code>id</code> do JSON.</td>
+</tr>
+<tr>
+<td><code>textures</code></td>
+<td align="right">sim</td>
+<td>objeto</td>
+<td>Seis identificadores: <code>front</code>, <code>back</code>, <code>left</code>, <code>right</code>, <code>top</code>, <code>bottom</code>.</td>
+</tr>
+<tr>
+<td><code>particle</code></td>
+<td align="right">não</td>
+<td>identifier</td>
+<td>Identificador de partícula.</td>
+</tr>
+</tbody></table></div>
+<p><code>controller</code> é opcional. Se existir, <code>textures</code> é obrigatório.</p>
+<p>Em um JSON empacotado no namespace do mod, o scanner cria o bloco em <code>controller.block</code> com <code>definitionId</code> igual ao <code>id</code>. O path do bloco pode ser diferente do <code>id</code> (por exemplo, <code>id=foo</code> e <code>controller.block=bar</code>), mas o <code>definitionId</code> continua <code>foo</code>; o loader valida essa relação. Para ser criado dinamicamente, <code>controller.block</code> precisa estar no namespace <code>infinity_nexus_multiblock</code>.</p>
+<p>Em um datapack externo, <code>controller.block</code> não cria bloco: ele precisa apontar para um <code>MultiblockControllerBlock</code> já registrado em Java, com <code>definitionId</code> igual ao <code>id</code>.</p>
+<p>As texturas e a partícula:</p>
+<ul>
+<li>em controller dinâmico, geram o blockstate/modelo do bloco; <code>particle</code> usa <code>front</code> quando omitido;</li>
+<li>o fallback de cada face usa o sufixo <code>_off</code> fora de processamento e <code>_on</code> durante o processamento;</li>
+<li>em controller Java manual, continuam validadas, mas a aparência vem do blockstate/modelo próprio do bloco.</li>
+</ul>
+<p>Sem <code>controller</code>:</p>
+<ul>
+<li>JSON empacotado: bloco criado no <code>id</code> com texturas fallback da pasta <code>fallback</code>;</li>
+<li>datapack: nenhum bloco é criado; é preciso um controller Java existente para o <code>id</code>.</li>
+</ul>
+<h3 id="931-receita-shaped-do-controller"><a class="heading-anchor" href="#931-receita-shaped-do-controller" aria-label="Link para 9.3.1 Receita shaped do controller">#</a>9.3.1 Receita shaped do controller</h3>
+<p>O campo opcional <code>recipe</code> no nível raiz define uma receita shaped de crafting table cujo resultado é o próprio item do controller:</p>
+<pre><code class="language-json">&quot;recipe&quot;: {
+  &quot;pattern&quot;: [
+    &quot;III&quot;,
+    &quot;ICI&quot;,
+    &quot;III&quot;
+  ],
+  &quot;key&quot;: {
+    &quot;I&quot;: &quot;minecraft:iron_ingot&quot;,
+    &quot;C&quot;: &quot;#c:ingots/copper&quot;
+  }
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>pattern</code></td>
+<td align="right">sim</td>
+<td>lista de strings</td>
+<td>De 1 a 3 linhas, todas com a mesma largura de 1 a 3; espaço é slot vazio.</td>
+</tr>
+<tr>
+<td><code>key</code></td>
+<td align="right">sim</td>
+<td>objeto</td>
+<td>Cada chave tem um caractere; cada valor é um item ou tag. Todos os símbolos do pattern precisam existir na key, e a key não pode ter símbolos sem uso.</td>
+</tr>
+</tbody></table></div>
+<p>O mod gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com <code>type: minecraft:crafting_shaped</code> e <code>result.id</code> igual ao bloco controller. A receita é gerada no startup a partir dos JSONs empacotados no mod; ela não é criada para definições carregadas apenas por datapack. O builder monta o pattern em uma grade 3x3 e cria automaticamente uma linha de key para cada símbolo usado.</p>
+<h3 id="94-regra-de-validação"><a class="heading-anchor" href="#94-regra-de-validação" aria-label="Link para 9.4 Regra de validação">#</a>9.4 Regra de validação</h3>
+<p>O bloco em <code>controller.block</code>:</p>
+<ul>
+<li>precisa existir;</li>
+<li>precisa ser um <code>MultiblockControllerBlock</code>;</li>
+<li>precisa ter <code>definitionId</code> igual ao <code>id</code> da definição.</li>
+</ul>
+<p>Exemplo: se o JSON tem <code>&quot;id&quot;: &quot;minhamod:fornalha&quot;</code>, o bloco controller precisa ter sido criado com <code>Identifier.fromNamespaceAndPath(&quot;minhamod&quot;, &quot;fornalha&quot;)</code>. O nome de registro do bloco pode ser outro, mas o <code>definitionId</code> precisa bater. Em um controller dinâmico, o scanner já cria o bloco com <code>definitionId = id</code>, mesmo que <code>controller.block</code> use outro path.</p>
+<h3 id="95-registro-manual-em-java"><a class="heading-anchor" href="#95-registro-manual-em-java" aria-label="Link para 9.5 Registro manual em Java">#</a>9.5 Registro manual em Java</h3>
+<p>Use o registro manual apenas como API de extensão, quando o bloco estiver em outro namespace ou precisar de um block entity/capabilities próprios. O mod não registra controllers manualmente; para JSONs empacotados no namespace do mod, use sempre a criação dinâmica.</p>
+<pre><code class="language-java">package minhamod;
+
+import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
+import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.material.MapColor;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.registries.DeferredBlock;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
+import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
+
+public final class MinhaMaquina {
+    public static final String MOD_ID = &quot;minhamod&quot;;
+    public static final Identifier DEFINITION_ID =
+            Identifier.fromNamespaceAndPath(MOD_ID, &quot;minha_maquina&quot;);
+
+    public static final DeferredRegister.Blocks BLOCKS =
+            DeferredRegister.createBlocks(MOD_ID);
+    public static final DeferredRegister.Items ITEMS =
+            DeferredRegister.createItems(MOD_ID);
+    public static final DeferredRegister&lt;BlockEntityType&lt;?&gt;&gt; BLOCK_ENTITIES =
+            DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
+
+    public static final DeferredBlock&lt;MultiblockControllerBlock&gt; CONTROLLER =
+            BLOCKS.registerBlock(
+                    &quot;minha_maquina&quot;,
+                    properties -&gt; new MultiblockControllerBlock(
+                            DEFINITION_ID,
+                            () -&gt; BLOCK_ENTITY.get(),
+                            properties),
+                    properties -&gt; properties
+                            .mapColor(MapColor.METAL)
+                            .strength(4.0F)
+                            .requiresCorrectToolForDrops());
+
+    public static final DeferredItem&lt;BlockItem&gt; CONTROLLER_ITEM =
+            ITEMS.registerSimpleBlockItem(&quot;minha_maquina&quot;, CONTROLLER);
+
+    public static final DeferredHolder&lt;BlockEntityType&lt;?&gt;, BlockEntityType&lt;MultiblockControllerBlockEntity&gt;&gt; BLOCK_ENTITY =
+            BLOCK_ENTITIES.register(&quot;minha_maquina&quot;, () -&gt; new BlockEntityType&lt;&gt;(
+                    (pos, state) -&gt; new MultiblockControllerBlockEntity(BLOCK_ENTITY.get(), pos, state),
+                    CONTROLLER.get()));
+
+    public static void register(IEventBus modBus) {
+        BLOCKS.register(modBus);
+        ITEMS.register(modBus);
+        BLOCK_ENTITIES.register(modBus);
+        modBus.addListener(MinhaMaquina::registerCapabilities);
+    }
+
+    private static void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.Item.BLOCK,
+                BLOCK_ENTITY.get(),
+                (blockEntity, side) -&gt; side == null
+                        ? VanillaContainerWrapper.of(blockEntity.getInternalItemHandler())
+                        : new WorldlyContainerWrapper(blockEntity.getInternalItemHandler(), side));
+
+        event.registerBlockEntity(
+                Capabilities.Energy.BLOCK,
+                BLOCK_ENTITY.get(),
+                (blockEntity, side) -&gt; blockEntity.getEnergyHandler(side));
+
+        event.registerBlockEntity(
+                Capabilities.Fluid.BLOCK,
+                BLOCK_ENTITY.get(),
+                (blockEntity, side) -&gt; blockEntity.getFluidHandler(side));
+    }
+}
+</code></pre>
+<p>Chame <code>MinhaMaquina.register(modEventBus)</code> no construtor do seu mod.</p>
+<p>A capability de item nos blocos membros já é registrada globalmente pelo Infinity Nexus Multiblock e respeita <code>capability_ports</code>. Ainda assim, registre a capability de item no <strong>block entity do controller</strong> para que o próprio controller exponha o inventário quando a porta de item permitir.</p>
+<h3 id="96-assets-para-controller-manual"><a class="heading-anchor" href="#96-assets-para-controller-manual" aria-label="Link para 9.6 Assets para controller manual">#</a>9.6 Assets para controller manual</h3>
+<p>Para um controller manual de addon, o JSON não gera modelos, blockstates, loot tables ou traduções. Você precisa criar:</p>
+<pre><code class="language-text">assets/minhamod/blockstates/minha_maquina.json
+assets/minhamod/models/block/minha_maquina.json
+assets/minhamod/models/item/minha_maquina.json
+assets/minhamod/textures/block/minha_maquina.png
+assets/minhamod/lang/pt_br.json
+data/minhamod/loot_table/blocks/minha_maquina.json
+</code></pre>
+<p>Para controllers dinâmicos empacotados, blockstate, modelo, modelo de item, item definition e lang <code>en_us</code> são gerados automaticamente (seção 9.2); ainda é necessário fornecer as texturas.</p>
+<p>O controller tem duas propriedades de blockstate:</p>
+<ul>
+<li><code>facing</code>: <code>north</code>, <code>south</code>, <code>east</code> ou <code>west</code>;</li>
+<li><code>formed</code>: <code>true</code> ou <code>false</code>.</li>
+</ul>
+<p>O blockstate precisa cobrir as 8 combinações:</p>
+<pre><code class="language-json">{
+  &quot;variants&quot;: {
+    &quot;facing=north,formed=false&quot;: { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=north,formed=true&quot;:  { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=south,formed=false&quot;: { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=south,formed=true&quot;:  { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=east,formed=false&quot;:  { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=east,formed=true&quot;:   { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=west,formed=false&quot;:  { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; },
+    &quot;facing=west,formed=true&quot;:   { &quot;model&quot;: &quot;minhamod:block/minha_maquina&quot; }
+  }
+}
+</code></pre>
+<p>Modelo simples:</p>
+<pre><code class="language-json">{
+  &quot;parent&quot;: &quot;minecraft:block/cube_all&quot;,
+  &quot;textures&quot;: {
+    &quot;all&quot;: &quot;minhamod:block/minha_maquina&quot;
+  }
+}
+</code></pre>
+<p>Modelo de item:</p>
+<pre><code class="language-json">{
+  &quot;parent&quot;: &quot;minhamod:block/minha_maquina&quot;
+}
+</code></pre>
+<p>Loot table:</p>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;minecraft:block&quot;,
+  &quot;pools&quot;: [
+    {
+      &quot;rolls&quot;: 1,
+      &quot;entries&quot;: [
+        {
+          &quot;type&quot;: &quot;minecraft:item&quot;,
+          &quot;name&quot;: &quot;minhamod:minha_maquina&quot;
+        }
+      ],
+      &quot;conditions&quot;: [
+        {
+          &quot;condition&quot;: &quot;minecraft:survives_explosion&quot;
+        }
+      ]
+    }
+  ]
+}
+</code></pre>
+<p>Tradução:</p>
+<pre><code class="language-json">{
+  &quot;block.minhamod.minha_maquina&quot;: &quot;Minha Máquina&quot;,
+  &quot;gui.minhamod.minha_maquina.title&quot;: &quot;Minha Máquina&quot;
+}
+</code></pre>
+<p>A loot table acima é opcional: <code>MultiblockControllerBlock.getDrops</code> retorna o próprio item, então controllers manuais e dinâmicos dropam a si mesmos sem uma loot table customizada.</p>
+<h3 id="97-comportamento-do-controller"><a class="heading-anchor" href="#97-comportamento-do-controller" aria-label="Link para 9.7 Comportamento do controller">#</a>9.7 Comportamento do controller</h3>
+<ul>
+<li><code>FACING</code> é horizontal e é definido pela direção oposta à do jogador ao colocar.</li>
+<li><code>FORMED</code> é atualizado pelo block entity.</li>
+<li>Clicar com a mão vazia em um controller não formado tenta montar a estrutura.</li>
+<li>Clicar em um controller formado abre a GUI.</li>
+<li><code>shift+clique</code> com a mão vazia no criativo exporta a estrutura para o clipboard.</li>
+<li>Agachar evita a montagem automática.</li>
+<li>Clicar em qualquer membro formado também abre a GUI.</li>
+<li>Quebrar um membro invalida a estrutura.</li>
+</ul>
+<h2 id="10-receitas"><a class="heading-anchor" href="#10-receitas" aria-label="Link para 10. Receitas">#</a>10. Receitas</h2>
+<h3 id="101-arquivo"><a class="heading-anchor" href="#101-arquivo" aria-label="Link para 10.1 Arquivo">#</a>10.1 Arquivo</h3>
+<pre><code class="language-text">data/&lt;namespace&gt;/recipe/&lt;arquivo&gt;.json
+</code></pre>
+<p>A definição da máquina precisa ter:</p>
+<pre><code class="language-json">&quot;type&quot;: &quot;recipe&quot;,
+&quot;recipe_type&quot;: &quot;infinity_nexus_multiblock:nexus_smelting&quot;
+</code></pre>
+<p>A receita precisa ter exatamente o mesmo ID:</p>
+<pre><code class="language-json">&quot;type&quot;: &quot;infinity_nexus_multiblock:nexus_smelting&quot;
+</code></pre>
+<p>O mod registra no startup um <code>RecipeType</code> e um <code>RecipeSerializer</code> para cada <code>recipe_type</code> único usado por controllers empacotados no namespace <code>infinity_nexus_multiblock</code>. O ID do tipo e o ID do serializer são iguais, então <code>type</code> da receita e <code>recipe_type</code> da definição usam o mesmo valor. Atualmente existe apenas <code>infinity_nexus_multiblock:nexus_smelting</code>; para criar outro tipo, adicione um controller empacotado que declare o novo <code>recipe_type</code> e reinicie o jogo/servidor (sem alterar Java). Datapacks podem reutilizar um tipo registrado, mas não podem criar tipos novos.</p>
+<h3 id="102-campos-da-receita"><a class="heading-anchor" href="#102-campos-da-receita" aria-label="Link para 10.2 Campos da receita">#</a>10.2 Campos da receita</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>type</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>ID de um <code>recipe_type</code> registrado pelo mod; atualmente <code>infinity_nexus_multiblock:nexus_smelting</code>.</td>
+</tr>
+<tr>
+<td><code>ingredients</code></td>
+<td align="right">não</td>
+<td>lista</td>
+<td><code>[]</code></td>
+<td>Lista de <code>Ingredient</code>.</td>
+</tr>
+<tr>
+<td><code>fluid_ingredients</code></td>
+<td align="right">não</td>
+<td>lista</td>
+<td><code>[]</code></td>
+<td>Lista de <code>SizedFluidIngredient</code>.</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td align="right">sim</td>
+<td>objeto</td>
+<td>—</td>
+<td>Saída tipada <code>item</code>, <code>fluid</code> ou <code>entity</code>; <code>result</code> legado ainda é aceito para item.</td>
+</tr>
+<tr>
+<td><code>energy</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>0</code></td>
+<td>FE totais do craft, mínimo <code>0</code>.</td>
+</tr>
+<tr>
+<td><code>time</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>100</code></td>
+<td>Duração em ticks, mínimo <code>1</code>.</td>
+</tr>
+</tbody></table></div>
+<p>A receita precisa ter pelo menos um ingrediente de item ou de fluido. Uma receita sem ingredientes nunca combina.</p>
+<h3 id="103-ingredients"><a class="heading-anchor" href="#103-ingredients" aria-label="Link para 10.3 ingredients">#</a>10.3 <code>ingredients</code></h3>
+<p>Formatos comuns:</p>
+<pre><code class="language-json">&quot;ingredients&quot;: [
+  &quot;minecraft:raw_iron&quot;
+]
+</code></pre>
+<pre><code class="language-json">&quot;ingredients&quot;: [
+  &quot;#c:raw_materials/iron&quot;
+]
+</code></pre>
+<pre><code class="language-json">&quot;ingredients&quot;: [
+  [&quot;minecraft:raw_iron&quot;, &quot;minecraft:raw_copper&quot;]
+]
+</code></pre>
+<p>A lista interna é uma alternativa: o ingrediente aceita qualquer item dela. Para exigir dois itens diferentes, use duas entradas separadas:</p>
+<pre><code class="language-json">&quot;ingredients&quot;: [
+  &quot;minecraft:raw_iron&quot;,
+  &quot;minecraft:coal&quot;
+]
+</code></pre>
+<p>Cada ingrediente consome <strong>1 item</strong> de um slot de input. Não existe campo de quantidade no ingrediente. Para exigir 2 itens iguais, repita o ingrediente e tenha slots de input suficientes.</p>
+<p>O codec também aceita ingredientes customizados do NeoForge com <code>neoforge:ingredient_type</code>; para a maioria das máquinas, IDs, tags e listas resolvem. Para itens com data components, use <code>/inm hand</code> para gerar a entrada exata (veja <a href="#1011-gerar-json-com-o-comando">10.11</a>).</p>
+<h3 id="104-fluid_ingredients"><a class="heading-anchor" href="#104-fluid_ingredients" aria-label="Link para 10.4 fluid_ingredients">#</a>10.4 <code>fluid_ingredients</code></h3>
+<pre><code class="language-json">&quot;fluid_ingredients&quot;: [
+  {
+    &quot;ingredient&quot;: &quot;minecraft:water&quot;,
+    &quot;amount&quot;: 500
+  }
+]
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ingredient</code></td>
+<td align="right">sim</td>
+<td>string/objeto</td>
+<td>—</td>
+<td>ID de fluido, tag com <code>#</code> ou ingrediente de fluido do NeoForge.</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>1000</code></td>
+<td>Positivo, em mB.</td>
+</tr>
+</tbody></table></div>
+<p>Cada ingrediente de fluido procura um tanque que aceite o fluido e tenha a quantidade. Cada tanque satisfaz no máximo um ingrediente por craft.</p>
+<h3 id="105-output"><a class="heading-anchor" href="#105-output" aria-label="Link para 10.5 output">#</a>10.5 <code>output</code></h3>
+<p>Saída de item:</p>
+<pre><code class="language-json">&quot;output&quot;: {
+  &quot;type&quot;: &quot;item&quot;,
+  &quot;id&quot;: &quot;minecraft:iron_ingot&quot;,
+  &quot;count&quot;: 2
+}
+</code></pre>
+<p>Saída de fluido:</p>
+<pre><code class="language-json">&quot;output&quot;: {
+  &quot;type&quot;: &quot;fluid&quot;,
+  &quot;id&quot;: &quot;minecraft:water&quot;,
+  &quot;amount&quot;: 1000
+}
+</code></pre>
+<p>Saída de entidade:</p>
+<pre><code class="language-json">&quot;output&quot;: {
+  &quot;type&quot;: &quot;entity&quot;,
+  &quot;id&quot;: &quot;minecraft:pig&quot;,
+  &quot;spawn&quot;: &quot;C&quot;
+}
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Campo</th>
+<th align="right">Obrigatório</th>
+<th>Tipo</th>
+<th>Padrão</th>
+<th>Regras</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>type</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td><code>item</code>, <code>fluid</code> ou <code>entity</code>.</td>
+</tr>
+<tr>
+<td><code>id</code></td>
+<td align="right">sim</td>
+<td>identifier</td>
+<td>—</td>
+<td>Item, fluido ou tipo de entidade de saída.</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td align="right">não</td>
+<td>inteiro</td>
+<td><code>1</code></td>
+<td>Apenas <code>item</code>; de <code>1</code> a <code>99</code>.</td>
+</tr>
+<tr>
+<td><code>components</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>vazio</td>
+<td>Apenas <code>item</code>; patch de data components.</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td align="right">sim</td>
+<td>inteiro</td>
+<td>—</td>
+<td>Apenas <code>fluid</code>; positivo, em mB.</td>
+</tr>
+<tr>
+<td><code>spawn</code></td>
+<td align="right">sim</td>
+<td>string</td>
+<td>—</td>
+<td>Apenas <code>entity</code>; símbolo do pattern, ID de bloco ou <code>#tag</code>.</td>
+</tr>
+</tbody></table></div>
+<p>A saída de item usa o primeiro slot <code>output</code> que aceite o item e tenha espaço. A saída de fluido usa o primeiro tanque que aceite o fluido e tenha capacidade. A entidade spawna acima do bloco indicado por <code>spawn</code>. O campo legado <code>result</code> continua aceito como saída de item. Para gerar o objeto <code>output</code> a partir do item na mão, use <code>/inm hand</code> (veja <a href="#1011-gerar-json-com-o-comando">10.11</a>).</p>
+<h3 id="106-matching"><a class="heading-anchor" href="#106-matching" aria-label="Link para 10.6 Matching">#</a>10.6 Matching</h3>
+<p>O matching de itens é <strong>shapeless</strong>:</p>
+<ul>
+<li>cada ingrediente procura qualquer slot com role <code>input</code>;</li>
+<li>a ordem de <code>item_slots</code> não importa;</li>
+<li>cada slot de input satisfaz no máximo um ingrediente por craft;</li>
+<li>filtros de slot continuam valendo;</li>
+<li>a saída de item é inserida no primeiro <code>output</code> compatível com espaço;</li>
+<li>a saída de fluido usa o primeiro tanque compatível com capacidade;</li>
+<li>a saída de entidade spawna acima do bloco indicado por <code>spawn</code>.</li>
+</ul>
+<p>Consequências:</p>
+<ul>
+<li>uma receita com 3 ingredientes precisa de 3 slots de input com os itens certos;</li>
+<li>dois ingredientes iguais precisam de dois slots de input;</li>
+<li>um slot de input com 64 itens ainda fornece apenas 1 item por craft.</li>
+</ul>
+<h3 id="107-energia-e-tempo"><a class="heading-anchor" href="#107-energia-e-tempo" aria-label="Link para 10.7 Energia e tempo">#</a>10.7 Energia e tempo</h3>
+<p>O custo total de energia é dividido ao longo dos ticks. A cada tick, a máquina consome a diferença inteira da fração acumulada. Se não houver energia suficiente, o progresso pausa.</p>
+<p>Exemplo:</p>
+<pre><code class="language-json">&quot;energy&quot;: 1000,
+&quot;time&quot;: 100
+</code></pre>
+<p>Isso consome cerca de 10 FE por tick. O craft termina após 100 ticks (5 segundos).</p>
+<h3 id="108-quando-o-craft-reinicia"><a class="heading-anchor" href="#108-quando-o-craft-reinicia" aria-label="Link para 10.8 Quando o craft reinicia">#</a>10.8 Quando o craft reinicia</h3>
+<p>O progresso é resetado quando:</p>
+<ul>
+<li>a estrutura deixa de estar formada;</li>
+<li>um ingrediente necessário some;</li>
+<li>a saída deixa de caber (slot cheio, tanque sem capacidade ou <code>spawn</code> inválido);</li>
+<li>a receita ativa deixa de existir;</li>
+<li>a definição muda de forma incompatível.</li>
+</ul>
+<p>O progresso é persistido no NBT do controller e continua após recarregar o chunk/servidor.</p>
+<h3 id="109-limitações-de-receita"><a class="heading-anchor" href="#109-limitações-de-receita" aria-label="Link para 10.9 Limitações de receita">#</a>10.9 Limitações de receita</h3>
+<ul>
+<li>existe apenas uma saída por receita: item, fluido ou entidade;</li>
+<li>não há subprodutos, chance, energia como saída ou múltiplas saídas simultâneas;</li>
+<li>não há prioridade de receita; o recipe manager escolhe a primeira receita compatível;</li>
+<li>receitas vanilla ainda não são suportadas.</li>
+</ul>
+<h3 id="1010-exemplo-completo"><a class="heading-anchor" href="#1010-exemplo-completo" aria-label="Link para 10.10 Exemplo completo">#</a>10.10 Exemplo completo</h3>
+<p>Definição: <a href="exemplos/exemplo_recipe.json"><code>exemplos/exemplo_recipe.json</code></a></p>
+<p>Receita: <a href="exemplos/exemplo_recipe_iron.json"><code>exemplos/exemplo_recipe_iron.json</code></a></p>
+<p>A máquina tem dois slots de input (<code>raw_iron</code> e <code>coal</code>), um output (<code>iron_ingot</code>), energia e um tanque de água. A receita consome 1 raw iron, 1 coal, 500 mB de água, 1000 FE e leva 100 ticks.</p>
+<h3 id="1011-gerar-json-com-o-comando"><a class="heading-anchor" href="#1011-gerar-json-com-o-comando" aria-label="Link para 10.11 Gerar JSON com o comando">#</a>10.11 Gerar JSON com o comando</h3>
+<p>O mod registra <code>/inm</code> (alias <code>/infinity_nexus_multiblock</code>) com dois subcomandos que geram o JSON no formato aceito pelas receitas. As linhas enviadas no chat são clicáveis e copiam o texto. Os comandos são exclusivos para jogadores.</p>
+<p><strong><code>/inm hand</code></strong> lê o item na mão principal e envia:</p>
+<ul>
+<li><strong>Input</strong>: uma entrada pronta para <code>ingredients</code>;</li>
+<li><strong>Output</strong>: um objeto pronto para <code>output</code>.</li>
+</ul>
+<p>Item sem data components:</p>
+<pre><code class="language-json">&quot;minecraft:iron_ingot&quot;
+</code></pre>
+<pre><code class="language-json">{&quot;type&quot;:&quot;item&quot;,&quot;id&quot;:&quot;minecraft:iron_ingot&quot;,&quot;count&quot;:1}
+</code></pre>
+<p>Item com data components:</p>
+<pre><code class="language-json">{
+  &quot;neoforge:ingredient_type&quot;: &quot;neoforge:components&quot;,
+  &quot;items&quot;: &quot;minecraft:diamond_sword&quot;,
+  &quot;components&quot;: {
+    &quot;minecraft:damage&quot;: 10
+  }
+}
+</code></pre>
+<pre><code class="language-json">{
+  &quot;type&quot;: &quot;item&quot;,
+  &quot;id&quot;: &quot;minecraft:diamond_sword&quot;,
+  &quot;count&quot;: 1,
+  &quot;components&quot;: {
+    &quot;minecraft:damage&quot;: 10
+  }
+}
+</code></pre>
+<p>O input não inclui <code>count</code>: cada ingrediente consome 1 item. O output usa o <code>count</code> atual da stack. O ingrediente de componentes é não estrito (<code>strict: false</code>); ele exige os componentes listados, mas aceita componentes extras. Para exigir a stack exata, adicione <code>&quot;strict&quot;: true</code>.</p>
+<p>O <strong>Input</strong> serve apenas para <code>ingredients</code>; o <strong>Output</strong> serve apenas para <code>output</code>. No builder, os campos de saída são separados: preencha <code>id</code>, <code>count</code> e <code>components</code> em vez de colar o objeto inteiro em um único campo. O objeto de output também pode ser colado diretamente no JSON da receita.</p>
+<p><strong><code>/inm look</code></strong> faz um raycast de até 20 blocos e envia três linhas quando o bloco tem propriedades:</p>
+<ol>
+<li>o ID puro do bloco, para o campo <code>block</code> do builder;</li>
+<li>o matcher completo, para o JSON;</li>
+<li>o objeto <code>state</code> separado.</li>
+</ol>
+<p>ID puro:</p>
+<pre><code class="language-text">minecraft:oak_stairs
+</code></pre>
+<p>Matcher completo:</p>
+<pre><code class="language-json">{&quot;block&quot;:&quot;minecraft:oak_stairs&quot;,&quot;state&quot;:{&quot;facing&quot;:&quot;east&quot;,&quot;half&quot;:&quot;bottom&quot;,&quot;shape&quot;:&quot;straight&quot;,&quot;waterlogged&quot;:&quot;false&quot;}}
+</code></pre>
+<p>State:</p>
+<pre><code class="language-json">{&quot;facing&quot;:&quot;east&quot;,&quot;half&quot;:&quot;bottom&quot;,&quot;shape&quot;:&quot;straight&quot;,&quot;waterlogged&quot;:&quot;false&quot;}
+</code></pre>
+<p>Se o bloco não tiver propriedades, a linha de <code>state</code> não é enviada. Os valores refletem o state atual do bloco. No builder, o campo <code>Bloco</code> aceita tanto o ID puro quanto o matcher completo; ao colar o matcher, o campo e as propriedades de <code>state</code> são preenchidos automaticamente. Em uma definição, o state é relativo à orientação canônica <code>SOUTH</code>; se necessário, ajuste <code>facing</code>/<code>axis</code> para a orientação em que a máquina será construída.</p>
+<h2 id="11-herança-e-templates"><a class="heading-anchor" href="#11-herança-e-templates" aria-label="Link para 11. Herança e templates">#</a>11. Herança e templates</h2>
+<h3 id="111-pai-e-filho"><a class="heading-anchor" href="#111-pai-e-filho" aria-label="Link para 11.1 Pai e filho">#</a>11.1 Pai e filho</h3>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 1,
+  &quot;id&quot;: &quot;minhamod:fornalha_base&quot;,
+  &quot;template&quot;: true,
+  &quot;type&quot;: &quot;recipe&quot;,
+  &quot;recipe_type&quot;: &quot;infinity_nexus_multiblock:nexus_smelting&quot;,
+  &quot;capabilities&quot;: {
+    &quot;energy&quot;: {
+      &quot;id&quot;: &quot;energy&quot;,
+      &quot;capacity&quot;: 100000,
+      &quot;max_receive&quot;: 1000,
+      &quot;max_extract&quot;: 0
+    }
+  }
+}
+</code></pre>
+<pre><code class="language-json">{
+  &quot;id&quot;: &quot;minhamod:fornalha_avancada&quot;,
+  &quot;extends&quot;: &quot;minhamod:fornalha_base&quot;,
+  &quot;tier&quot;: 2,
+  &quot;item_slots&quot;: [
+    { &quot;id&quot;: &quot;input_0&quot;, &quot;role&quot;: &quot;input&quot; },
+    { &quot;id&quot;: &quot;output_0&quot;, &quot;role&quot;: &quot;output&quot; }
+  ],
+  &quot;pattern&quot;: {
+    &quot;anchor&quot;: &quot;C&quot;,
+    &quot;layers&quot;: [
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;III&quot;
+      ],
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;ICI&quot;
+      ],
+      [
+        &quot;III&quot;,
+        &quot;III&quot;,
+        &quot;III&quot;
+      ]
+    ],
+    &quot;matchers&quot;: {
+      &quot;I&quot;: &quot;minecraft:iron_block&quot;
+    }
+  },
+  &quot;overrides&quot;: {
+    &quot;capabilities&quot;: {
+      &quot;energy&quot;: {
+        &quot;capacity&quot;: 250000,
+        &quot;max_receive&quot;: 2500
+      }
+    }
+  }
+}
+</code></pre>
+<p>O filho herda <code>type</code>, <code>recipe_type</code> e <code>capabilities.energy</code>, mas troca <code>capacity</code> e <code>max_receive</code> via <code>overrides</code>.</p>
+<h3 id="112-regras-de-merge"><a class="heading-anchor" href="#112-regras-de-merge" aria-label="Link para 11.2 Regras de merge">#</a>11.2 Regras de merge</h3>
+<ul>
+<li>Objetos são mesclados recursivamente.</li>
+<li>Listas substituem a lista inteira.</li>
+<li>Campos do filho são aplicados antes de <code>overrides</code>.</li>
+<li>Se o mesmo campo aparecer no filho e em <code>overrides</code>, <code>overrides</code> vence.</li>
+<li><code>extends</code>, <code>family</code>, <code>overrides</code> e <code>template</code> não são herdados.</li>
+<li>O filho precisa do próprio <code>id</code>.</li>
+<li>O <code>controller.block</code> final é validado contra o <code>id</code> do filho.</li>
+<li>Ciclos, pai inexistente, <code>extends</code> + <code>family</code> juntos e <code>overrides</code> que não seja objeto geram erro.</li>
+</ul>
+<h3 id="113-templates"><a class="heading-anchor" href="#113-templates" aria-label="Link para 11.3 Templates">#</a>11.3 Templates</h3>
+<ul>
+<li><code>template: true</code> nunca registra a máquina.</li>
+<li>Um arquivo sem <code>pattern</code> é tratado como template quando referenciado.</li>
+<li>Se um arquivo sem <code>pattern</code> não for referenciado, ele falha ao carregar.</li>
+</ul>
+<h2 id="12-priority-tier-e-sobreposição"><a class="heading-anchor" href="#12-priority-tier-e-sobreposição" aria-label="Link para 12. Priority, tier e sobreposição">#</a>12. Priority, tier e sobreposição</h2>
+<h3 id="121-priority"><a class="heading-anchor" href="#121-priority" aria-label="Link para 12.1 priority">#</a>12.1 <code>priority</code></h3>
+<p>Quando duas estruturas formadas disputam o mesmo bloco:</p>
+<ul>
+<li>a maior <code>priority</code> vence;</li>
+<li>a estrutura perdedora é desfeita;</li>
+<li>em empate, vence o controller com o menor <code>BlockPos.asLong()</code>;</li>
+<li>o controller perdedor não forma a estrutura.</li>
+</ul>
+<p>Para evitar surpresas, use prioridades diferentes em máquinas que podem se sobrepor.</p>
+<h3 id="122-tier"><a class="heading-anchor" href="#122-tier" aria-label="Link para 12.2 tier">#</a>12.2 <code>tier</code></h3>
+<p><code>tier</code> é apenas metadado. Ele não altera velocidade, consumo, slots ou receitas. Use para exibir ou para outros mods que leiam a definição.</p>
+<h2 id="13-exportar-e-importar"><a class="heading-anchor" href="#13-exportar-e-importar" aria-label="Link para 13. Exportar e importar">#</a>13. Exportar e importar</h2>
+<h3 id="131-exportar"><a class="heading-anchor" href="#131-exportar" aria-label="Link para 13.1 Exportar">#</a>13.1 Exportar</h3>
+<p>No modo criativo:</p>
+<ol>
+<li>Segure <code>shift</code>.</li>
+<li>Clique com o botão direito em um controller.</li>
+<li>O JSON da estrutura conectada vai para o clipboard.</li>
+<li>A actionbar confirma e toca um som.</li>
+</ol>
+<p>O scan:</p>
+<ul>
+<li>começa no controller;</li>
+<li>anda em seis direções;</li>
+<li>ignora ar;</li>
+<li>inclui o controller;</li>
+<li>para no limite configurado em <code>export.pattern_scan_limit</code> (padrão 256; máximo 4096);</li>
+<li>se houver mais, exporta até o limite e avisa na actionbar.</li>
+</ul>
+<h3 id="132-o-que-o-json-exportado-contém"><a class="heading-anchor" href="#132-o-que-o-json-exportado-contém" aria-label="Link para 13.2 O que o JSON exportado contém">#</a>13.2 O que o JSON exportado contém</h3>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 1,
+  &quot;id&quot;: &quot;infinity_nexus_multiblock:exported_0_64_0&quot;,
+  &quot;type&quot;: &quot;storage&quot;,
+  &quot;pattern&quot;: {
+    &quot;layers&quot;: [],
+    &quot;anchor&quot;: &quot;C&quot;,
+    &quot;matchers&quot;: {}
+  }
+}
+</code></pre>
+<p>Ele contém apenas:</p>
+<ul>
+<li><code>schema_version</code>;</li>
+<li><code>id</code> baseado nas coordenadas do controller;</li>
+<li><code>type: &quot;storage&quot;</code>;</li>
+<li><code>pattern</code> com <code>layers</code>, <code>anchor</code> e <code>matchers</code> de bloco + state.</li>
+</ul>
+<p>Ele <strong>não</strong> contém <code>item_slots</code>, <code>capabilities</code>, <code>gui</code>, <code>controller</code>, receita ou prioridade. Use como ponto de partida para o pattern.</p>
+<h3 id="133-normalização"><a class="heading-anchor" href="#133-normalização" aria-label="Link para 13.3 Normalização">#</a>13.3 Normalização</h3>
+<p>A exportação normaliza posições e states para a orientação canônica <code>SOUTH</code>. Se você exportou uma máquina virada para norte, o JSON ainda descreve a máquina olhando para sul. Isso permite reutilizar o pattern com qualquer <code>FACING</code>.</p>
+<h3 id="134-transformar-em-definição"><a class="heading-anchor" href="#134-transformar-em-definição" aria-label="Link para 13.4 Transformar em definição">#</a>13.4 Transformar em definição</h3>
+<ol>
+<li>Salve o JSON em <code>data/&lt;namespace&gt;/multiblock/&lt;arquivo&gt;.json</code>.</li>
+<li>Troque o <code>id</code> para <code>&lt;namespace&gt;:&lt;arquivo&gt;</code>.</li>
+<li>Troque <code>type</code> para <code>recipe</code> se a máquina processar receitas.</li>
+<li>Adicione <code>recipe_type</code> se for <code>recipe</code>.</li>
+<li>Adicione <code>item_slots</code>, <code>capabilities</code>, <code>gui</code> e <code>controller</code> conforme necessário.</li>
+<li>Rode <code>/reload</code> para recarregar a definição. Se o JSON for criar um controller dinâmico novo, ele precisa estar empacotado no mod e o jogo/servidor precisa ser reiniciado; <code>/reload</code> sozinho não registra o bloco.</li>
+</ol>
+<p>Exemplo de export limpo no projeto: <a href="../../src/main/resources/data/infinity_nexus_multiblock/multiblock/a.json"><code>a.json</code></a>. O <code>id</code> foi ajustado para <code>infinity_nexus_multiblock:a</code> para bater com o nome do arquivo.</p>
+<h3 id="135-limitações-da-exportação"><a class="heading-anchor" href="#135-limitações-da-exportação" aria-label="Link para 13.5 Limitações da exportação">#</a>13.5 Limitações da exportação</h3>
+<ul>
+<li>limite configurável em <code>export.pattern_scan_limit</code> (padrão 256; máximo 4096);</li>
+<li>flood-fill pode incluir blocos vizinhos que não fazem parte da máquina;</li>
+<li>não exporta capabilities, slots, GUI ou receita;</li>
+<li>o <code>id</code> precisa ser ajustado;</li>
+<li>o <code>type</code> exportado é sempre <code>storage</code>.</li>
+</ul>
+<h2 id="14-reload-e-ciclo-de-vida"><a class="heading-anchor" href="#14-reload-e-ciclo-de-vida" aria-label="Link para 14. Reload e ciclo de vida">#</a>14. Reload e ciclo de vida</h2>
+<p>Use <code>/reload</code> no servidor.</p>
+<p>O que acontece:</p>
+<ul>
+<li>as definições são recarregadas;</li>
+<li>blocos controller dinâmicos e o pack de assets gerado são criados apenas no startup; <code>/reload</code> não registra, remove nem regenera blocos/modelos;</li>
+<li>controllers formados são revalidados;</li>
+<li>se a definição não existir mais, a estrutura é invalidada;</li>
+<li>inventário e layout da GUI são reconfigurados quando a definição muda;</li>
+<li>stacks que não cabem no novo inventário são descartados;</li>
+<li>capabilities de energia/fluidos já existentes <strong>não</strong> são recriadas nem reconfiguradas;</li>
+<li>capabilities ausentes podem ser criadas quando a definição fica disponível;</li>
+<li>as definições resolvidas são enviadas aos clientes para a preview;</li>
+<li>o layout da GUI é persistido no block entity para sobreviver ao carregamento.</li>
+</ul>
+<p>Se você mudou <code>capacity</code>, <code>max_receive</code>, <code>max_extract</code> ou <code>filter</code> de uma capability existente, quebre e coloque o controller de novo, ou reinicie o mundo.</p>
+<p>Para adicionar ou remover um controller dinâmico, recompile o mod quando o JSON estiver no jar e reinicie o jogo/servidor. Um datapack externo não cria blocos; ele só pode adicionar/sobrescrever definições de blocos que já existem.</p>
+<h2 id="15-exemplos-completos"><a class="heading-anchor" href="#15-exemplos-completos" aria-label="Link para 15. Exemplos completos">#</a>15. Exemplos completos</h2>
+<p>Os arquivos ficam em <a href="exemplos/"><code>exemplos/</code></a>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Arquivo</th>
+<th>O que mostra</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="exemplos/exemplo_storage.json"><code>exemplo_storage.json</code></a></td>
+<td><code>type=storage</code>, item slots com filtros/limites/faces, energia, fluido e GUI customizada com slots via <code>x</code>/<code>y</code>.</td>
+</tr>
+<tr>
+<td><a href="exemplos/exemplo_recipe.json"><code>exemplo_recipe.json</code></a></td>
+<td><code>type=recipe</code>, dois inputs, um output, energia, fluido e GUI padrão com barra de progresso.</td>
+</tr>
+<tr>
+<td><a href="exemplos/exemplo_recipe_iron.json"><code>exemplo_recipe_iron.json</code></a></td>
+<td>Receita <code>nexus_smelting</code> com dois ingredientes de item, um de fluido, energia e tempo.</td>
+</tr>
+</tbody></table></div>
+<h3 id="151-como-testar"><a class="heading-anchor" href="#151-como-testar" aria-label="Link para 15.1 Como testar">#</a>15.1 Como testar</h3>
+<ol>
+<li>Copie os arquivos para um datapack:</li>
+</ol>
+<pre><code class="language-text">data/infinity_nexus_multiblock/multiblock/exemplo_storage.json
+data/infinity_nexus_multiblock/multiblock/exemplo_recipe.json
+data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
+</code></pre>
+<ol start="2">
+<li>Os <code>id</code> já batem com os nomes dos arquivos.</li>
+<li>Coloque o datapack em <code>world/datapacks</code>.</li>
+<li>Rode <code>/reload</code>.</li>
+</ol>
+<p>Os exemplos não têm <code>controller</code> no JSON. Em um datapack, isso significa que eles <strong>não criam blocos</strong>: para jogar, use um controller já registrado com o <code>definitionId</code> correspondente ou registre um controller Java (seção 9.5). Para testar sem Java, copie o pattern para a definição de um controller dinâmico existente, como <code>assembler.json</code> ou <code>a.json</code>, mantendo o <code>id</code> e o caminho do arquivo.</p>
+<p>Se você adicionar os exemplos ao jar do mod em <code>data/infinity_nexus_multiblock/multiblock</code>, eles passam a criar controllers dinâmicos no startup; nesse caso, recompile e reinicie.</p>
+<h3 id="152-sobrescrever-um-controller-dinâmico-existente"><a class="heading-anchor" href="#152-sobrescrever-um-controller-dinâmico-existente" aria-label="Link para 15.2 Sobrescrever um controller dinâmico existente">#</a>15.2 Sobrescrever um controller dinâmico existente</h3>
+<p>Não há controller estático embutido. Para testar outro pattern com um bloco já existente, sobrescreva a definição de <code>assembler</code> ou <code>a</code> em um datapack:</p>
+<pre><code class="language-text">data/infinity_nexus_multiblock/multiblock/assembler.json
+</code></pre>
+<p>Como o bloco já existe, basta <code>/reload</code>; não é preciso reiniciar. Para um controller novo, use a criação dinâmica (seção 9.1) ou registre em Java como API de extensão (seção 9.5).</p>
+<h3 id="153-controllers-dinâmicos-embutidos"><a class="heading-anchor" href="#153-controllers-dinâmicos-embutidos" aria-label="Link para 15.3 Controllers dinâmicos embutidos">#</a>15.3 Controllers dinâmicos embutidos</h3>
+<p>Os controllers <code>assembler</code> e <code>a</code> são empacotados no mod e funcionam sem registro Java:</p>
+<ul>
+<li><code>assembler</code> tem <code>controller</code> com texturas próprias;</li>
+<li><code>a</code> não tem <code>controller</code> e usa o próprio ID com texturas fallback da pasta <code>fallback</code>.</li>
+</ul>
+<p>Para adicionar outro controller dinâmico, coloque o JSON em <code>src/main/resources/data/infinity_nexus_multiblock/multiblock/</code>, recompile e reinicie. Um datapack sozinho não cria o bloco.</p>
+<h2 id="16-erros-comuns"><a class="heading-anchor" href="#16-erros-comuns" aria-label="Link para 16. Erros comuns">#</a>16. Erros comuns</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Mensagem / sintoma</th>
+<th>Causa</th>
+<th>Correção</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Definition id ... does not match file id</code></td>
+<td><code>id</code> diferente do caminho.</td>
+<td>Use <code>&lt;namespace&gt;:&lt;arquivo&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>Unsupported schema_version</code></td>
+<td>Versão diferente de <code>1</code>.</td>
+<td>Use <code>&quot;schema_version&quot;: 1</code>.</td>
+</tr>
+<tr>
+<td><code>Unknown multiblock type</code></td>
+<td><code>type</code> inválido.</td>
+<td>Use <code>recipe</code> ou <code>storage</code>.</td>
+</tr>
+<tr>
+<td><code>Recipe multiblocks need a recipe_type</code></td>
+<td><code>type=recipe</code> sem <code>recipe_type</code>.</td>
+<td>Adicione <code>recipe_type</code>.</td>
+</tr>
+<tr>
+<td><code>Storage multiblocks cannot define a recipe_type</code></td>
+<td><code>type=storage</code> com <code>recipe_type</code>.</td>
+<td>Remova <code>recipe_type</code>.</td>
+</tr>
+<tr>
+<td><code>Unknown parent multiblock</code></td>
+<td><code>extends</code>/<code>family</code> aponta para ID inexistente.</td>
+<td>Confira o ID e o caminho do pai.</td>
+</tr>
+<tr>
+<td><code>Circular extends involving</code></td>
+<td>Herança em ciclo.</td>
+<td>Remova o ciclo.</td>
+</tr>
+<tr>
+<td><code>Use either extends or family, not both</code></td>
+<td>Os dois campos juntos.</td>
+<td>Use só um.</td>
+</tr>
+<tr>
+<td><code>overrides must be an object</code></td>
+<td><code>overrides</code> não é objeto.</td>
+<td>Use <code>{ ... }</code>.</td>
+</tr>
+<tr>
+<td><code>template must be a boolean</code></td>
+<td><code>template</code> não é booleano.</td>
+<td>Use <code>true</code> ou <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>Unknown block</code></td>
+<td>ID de bloco inexistente.</td>
+<td>Confira o registro.</td>
+</tr>
+<tr>
+<td><code>Unknown block state property</code></td>
+<td>Propriedade não existe no bloco.</td>
+<td>Confira o blockstate do bloco.</td>
+</tr>
+<tr>
+<td><code>Invalid value ... for block state property</code></td>
+<td>Valor inválido para a propriedade.</td>
+<td>Use um valor válido.</td>
+</tr>
+<tr>
+<td><code>Block state properties are only supported for block matchers</code></td>
+<td><code>state</code> junto com <code>tag</code>.</td>
+<td>Remova <code>state</code> ou use <code>block</code>.</td>
+</tr>
+<tr>
+<td><code>No matcher registered for pattern symbol</code></td>
+<td>Símbolo sem matcher.</td>
+<td>Adicione o matcher.</td>
+</tr>
+<tr>
+<td><code>needs exactly one anchor</code></td>
+<td>Nenhuma ou mais de uma âncora.</td>
+<td>Deixe exatamente um <code>C</code>.</td>
+</tr>
+<tr>
+<td><code>same number of rows</code></td>
+<td>Camadas com quantidades diferentes de linhas.</td>
+<td>Alinhe as camadas.</td>
+</tr>
+<tr>
+<td><code>same width</code></td>
+<td>Linhas com larguras diferentes.</td>
+<td>Alinhe as larguras.</td>
+</tr>
+<tr>
+<td><code>Duplicate item slot id</code></td>
+<td>IDs de slot repetidos.</td>
+<td>Use IDs únicos.</td>
+</tr>
+<tr>
+<td><code>Item slot id cannot be blank</code></td>
+<td><code>id</code> vazio.</td>
+<td>Use um ID não vazio.</td>
+</tr>
+<tr>
+<td><code>Item slot ... must define both x and y</code></td>
+<td>Só um dos dois.</td>
+<td>Informe os dois ou nenhum.</td>
+</tr>
+<tr>
+<td><code>Slot position cannot be negative</code></td>
+<td><code>x</code>/<code>y</code> negativo.</td>
+<td>Use valores <code>&gt;= 0</code>.</td>
+</tr>
+<tr>
+<td><code>Unknown item</code></td>
+<td>ID de item no filtro inexistente.</td>
+<td>Confira o registro.</td>
+</tr>
+<tr>
+<td><code>Duplicate fluid tank id</code></td>
+<td>Tanques com mesmo ID.</td>
+<td>Use IDs únicos.</td>
+</tr>
+<tr>
+<td><code>Energy capability id conflicts with a fluid tank id</code></td>
+<td><code>energy.id</code> igual a um tanque.</td>
+<td>Troque um dos IDs.</td>
+</tr>
+<tr>
+<td><code>Unknown fluid</code></td>
+<td>ID de fluido no filtro inexistente.</td>
+<td>Confira o registro.</td>
+</tr>
+<tr>
+<td><code>Custom gui elements with slot entries require item_slots</code></td>
+<td><code>gui.elements</code> sem <code>item_slots</code>.</td>
+<td>Adicione <code>item_slots</code>.</td>
+</tr>
+<tr>
+<td><code>Define slot positions in item_slots x/y or gui slot elements, not both</code></td>
+<td>Misturou os dois formatos.</td>
+<td>Escolha um.</td>
+</tr>
+<tr>
+<td><code>Unknown item slot id in gui</code></td>
+<td>Elemento <code>slot</code> aponta para ID inexistente.</td>
+<td>Confira o ID.</td>
+</tr>
+<tr>
+<td><code>Duplicate slot element for item slot</code></td>
+<td>Slot repetido em elementos.</td>
+<td>Use uma vez.</td>
+</tr>
+<tr>
+<td><code>Custom gui elements require a player_inventory element</code></td>
+<td>Falta <code>player_inventory</code>.</td>
+<td>Adicione exatamente um.</td>
+</tr>
+<tr>
+<td><code>gui has an energy_bar but the multiblock has no energy capability</code></td>
+<td>Barra sem energia.</td>
+<td>Adicione <code>capabilities.energy</code> ou remova a barra.</td>
+</tr>
+<tr>
+<td><code>Unknown energy capability in gui</code></td>
+<td><code>capability</code> diferente de <code>energy.id</code>.</td>
+<td>Corrija o ID.</td>
+</tr>
+<tr>
+<td><code>Unknown fluid tank id in gui</code></td>
+<td><code>capability</code> de tanque inexistente.</td>
+<td>Corrija o ID.</td>
+</tr>
+<tr>
+<td><code>gui has a progress_bar/arrow but the multiblock is not a recipe multiblock</code></td>
+<td>Barra/seta em <code>storage</code>.</td>
+<td>Use <code>type=recipe</code>.</td>
+</tr>
+<tr>
+<td><code>gui has an entity element but the multiblock is not a recipe multiblock</code></td>
+<td><code>entity</code> em <code>storage</code>.</td>
+<td>Use <code>type=recipe</code>.</td>
+</tr>
+<tr>
+<td><code>exceeds gui bounds</code></td>
+<td>Elemento fora da GUI.</td>
+<td>Aumente <code>width</code>/<code>height</code> ou mova.</td>
+</tr>
+<tr>
+<td><code>Unknown controller block</code></td>
+<td><code>controller.block</code> aponta para um bloco que não existe; um datapack não pode criar o bloco.</td>
+<td>Use um controller dinâmico já empacotado, empacote o JSON no mod ou registre o bloco em Java.</td>
+</tr>
+<tr>
+<td><code>Discovered 0 dynamic multiblock controllers</code></td>
+<td>Nenhum JSON válido foi encontrado no jar do mod.</td>
+<td>Confira o namespace, o caminho <code>data/infinity_nexus_multiblock/multiblock</code> e o log do startup.</td>
+</tr>
+<tr>
+<td><code>Skipping controller block ... because it is not in this namespace</code></td>
+<td><code>controller.block</code> usa namespace diferente de <code>infinity_nexus_multiblock</code>.</td>
+<td>Use o namespace do mod ou registre o bloco em Java.</td>
+</tr>
+<tr>
+<td><code>Duplicate dynamic controller block</code></td>
+<td>Duas definições usam o mesmo <code>controller.block</code>.</td>
+<td>Dê um ID de bloco diferente para cada definição.</td>
+</tr>
+<tr>
+<td><code>Dynamic controller definition ... has no pattern</code></td>
+<td>JSON empacotado sem <code>pattern</code> e sem ser template referenciado.</td>
+<td>Adicione <code>pattern</code> ou marque como <code>template</code>.</td>
+</tr>
+<tr>
+<td><code>Dynamic controller definition ... declares id ...</code></td>
+<td><code>id</code> não corresponde ao caminho do arquivo.</td>
+<td>Alinhe o <code>id</code> ao caminho.</td>
+</tr>
+<tr>
+<td>Receita não carrega</td>
+<td>Caminho, <code>type</code> ou IDs errados.</td>
+<td>Confira <code>data/&lt;namespace&gt;/recipe</code>, <code>type</code> e ingredientes.</td>
+</tr>
+<tr>
+<td>Definição não carrega</td>
+<td>Caminho/ID/schema errados.</td>
+<td>Confira o log do servidor.</td>
+</tr>
+</tbody></table></div>
+<p>O log fica em <code>logs/latest.log</code>.</p>
+<p>Se a definição está em um datapack e o log mostra <code>Unknown controller block</code>, o datapack não pode criar esse bloco. Use um controller dinâmico que já veio no mod, empacote o JSON no jar do mod ou registre o bloco em Java.</p>
+<h2 id="17-checklist-final"><a class="heading-anchor" href="#17-checklist-final" aria-label="Link para 17. Checklist final">#</a>17. Checklist final</h2>
+<p>Antes de testar, confirme:</p>
+<ul>
+<li><input disabled="" type="checkbox"> O JSON está em <code>data/&lt;namespace&gt;/multiblock/&lt;arquivo&gt;.json</code>.</li>
+<li><input disabled="" type="checkbox"> <code>id</code> é <code>&lt;namespace&gt;:&lt;arquivo&gt;</code>.</li>
+<li><input disabled="" type="checkbox"> <code>schema_version</code> é <code>1</code>.</li>
+<li><input disabled="" type="checkbox"> <code>type</code> é <code>recipe</code> ou <code>storage</code>.</li>
+<li><input disabled="" type="checkbox"> <code>recipe_type</code> existe só em <code>recipe</code>.</li>
+<li><input disabled="" type="checkbox"> O pattern tem exatamente uma âncora.</li>
+<li><input disabled="" type="checkbox"> Todas as camadas têm o mesmo número de linhas.</li>
+<li><input disabled="" type="checkbox"> Todas as linhas têm a mesma largura.</li>
+<li><input disabled="" type="checkbox"> Todo símbolo não-âncora tem matcher.</li>
+<li><input disabled="" type="checkbox"> Para controller dinâmico: o JSON está empacotado no jar, no namespace <code>infinity_nexus_multiblock</code>.</li>
+<li><input disabled="" type="checkbox"> Para controller Java: o bloco tem <code>definitionId</code> igual ao <code>id</code>.</li>
+<li><input disabled="" type="checkbox"> As texturas do controller existem em <code>assets/&lt;namespace&gt;/textures/block/...</code>.</li>
+<li><input disabled="" type="checkbox"> Para controller manual: o blockstate cobre <code>facing</code> e <code>formed</code>, e modelo/loot/lang existem.</li>
+<li><input disabled="" type="checkbox"> Para controller dinâmico: blockstate, modelo, item e lang <code>en_us</code> são gerados; não é preciso criá-los.</li>
+<li><input disabled="" type="checkbox"> Se adicionou/removeu um controller dinâmico, reiniciou o jogo/servidor; <code>/reload</code> não registra blocos.</li>
+<li><input disabled="" type="checkbox"> <code>item_slots</code> tem IDs únicos e filtros válidos.</li>
+<li><input disabled="" type="checkbox"> <code>x</code>/<code>y</code> aparecem juntos.</li>
+<li><input disabled="" type="checkbox"> <code>capabilities</code> tem IDs únicos e <code>energy.id</code> diferente dos tanques.</li>
+<li><input disabled="" type="checkbox"> Se usar <code>capability_ports</code>, os símbolos existem no pattern e cada capability lista as portas desejadas.</li>
+<li><input disabled="" type="checkbox"> A GUI tem exatamente um <code>player_inventory</code>.</li>
+<li><input disabled="" type="checkbox"> Barras de energia/fluido apontam para IDs existentes.</li>
+<li><input disabled="" type="checkbox"> <code>progress_bar</code>/<code>arrow</code>/<code>entity</code> só existem em <code>recipe</code>.</li>
+<li><input disabled="" type="checkbox"> A receita está em <code>data/&lt;namespace&gt;/recipe/&lt;arquivo&gt;.json</code>.</li>
+<li><input disabled="" type="checkbox"> A receita tem pelo menos um ingrediente.</li>
+<li><input disabled="" type="checkbox"> A máquina tem slot <code>output</code> para saída de item, tanque para saída de fluido e um <code>spawn</code> válido para entidade.</li>
+<li><input disabled="" type="checkbox"> Se a receita usa energia/fluido, a máquina tem as capabilities.</li>
+<li><input disabled="" type="checkbox"> Você rodou <code>/reload</code> e conferiu <code>logs/latest.log</code>.</li>
+</ul>
+<h2 id="18-limitações-atuais"><a class="heading-anchor" href="#18-limitações-atuais" aria-label="Link para 18. Limitações atuais">#</a>18. Limitações atuais</h2>
+<h3 id="181-controllers-e-registro"><a class="heading-anchor" href="#181-controllers-e-registro" aria-label="Link para 18.1 Controllers e registro">#</a>18.1 Controllers e registro</h3>
+<ul>
+<li>A criação dinâmica de controllers só ocorre no startup e apenas para JSONs dentro do jar do mod, no namespace <code>infinity_nexus_multiblock</code>; datapacks externos não criam blocos.</li>
+<li>O mod não registra blocos controller manualmente; todos os controllers embutidos são criados a partir de JSONs empacotados.</li>
+<li>O antigo bloco estático <code>nexus_core</code> foi removido. Mundos criados com versões anteriores podem perder esses blocos e gerar avisos de registry ao carregar; faça backup antes de atualizar.</li>
+<li>Adicionar ou remover um controller dinâmico exige recompilar o mod (quando o JSON está no jar) e reiniciar o jogo/servidor; <code>/reload</code> não registra nem remove blocos.</li>
+<li>Controllers dinâmicos usam o block entity compartilhado <code>dynamic_controller</code>; comportamento ou capabilities Java específicos exigem um controller manual.</li>
+</ul>
+<h3 id="182-máquinas-receitas-e-automação"><a class="heading-anchor" href="#182-máquinas-receitas-e-automação" aria-label="Link para 18.2 Máquinas, receitas e automação">#</a>18.2 Máquinas, receitas e automação</h3>
+<ul>
+<li><code>type=recipe</code> processa receitas cujo <code>recipe_type</code> seja um tipo registrado pelo mod. O registro é feito no startup a partir dos controllers empacotados; hoje só <code>infinity_nexus_multiblock:nexus_smelting</code> existe. Tipos não registrados são ignorados, e datapacks não podem criar tipos novos.</li>
+<li><code>type=storage</code> já funciona como inventário/capabilities/GUI, mas não tem comportamento especializado de armazenamento dedicado. <code>tier</code> é apenas metadado (exibido no JEI, sem efeito de processamento).</li>
+<li>Receitas produzem uma única saída <code>item</code>, <code>fluid</code> ou <code>entity</code>; não há energia como saída, subproduto, múltiplas saídas simultâneas ou chance.</li>
+<li>Não há prioridade entre receitas; a primeira receita compatível encontrada é usada.</li>
+<li>Energia e fluidos não têm configuração por lado; as capabilities do controller e dos membros selecionados aceitam todas as faces. <code>capability_ports</code> escolhe blocos, não faces.</li>
+<li>As faces de <code>item_slots</code> são direções do mundo e não giram com o controller/estrutura.</li>
+<li>Matchers aceitam bloco, tag e <code>state</code>; não aceitam NBT, listas de alternativas ou matchers opcionais.</li>
+</ul>
+<h3 id="183-assets-e-reload"><a class="heading-anchor" href="#183-assets-e-reload" aria-label="Link para 18.3 Assets e reload">#</a>18.3 Assets e reload</h3>
+<ul>
+<li>Em controllers dinâmicos empacotados, blockstates, modelos de bloco, modelos de item, item definitions e lang <code>en_us</code> são gerados em memória. Texturas, loot tables (o drop usa <code>getDrops</code>), texturas de GUI e traduções além de <code>en_us</code> não são geradas.</li>
+<li>Em controllers Java manuais, <code>controller.textures</code> e <code>controller.particle</code> são validados pelo schema, mas não geram modelo; a aparência vem do blockstate/modelo próprio do bloco.</li>
+<li><code>/reload</code> recarrega definições, mas não registra/remove blocos dinâmicos nem regenera o pack de assets; para isso, reinicie o jogo/servidor (e recompile o mod quando o JSON estiver no jar).</li>
+</ul>
+<h3 id="184-exportação"><a class="heading-anchor" href="#184-exportação" aria-label="Link para 18.4 Exportação">#</a>18.4 Exportação</h3>
+<ul>
+<li>A exportação é limitada por <code>export.pattern_scan_limit</code> na config comum do mod (<code>config/infinity_nexus_multiblock-common.toml</code>): padrão <code>256</code>, máximo <code>4096</code>.</li>
+<li>O JSON exportado contém apenas <code>schema_version</code>, <code>id</code>, <code>type</code> e <code>pattern</code> (blocos e states); não inclui <code>item_slots</code>, <code>capabilities</code>, <code>gui</code>, <code>controller</code>, receita ou prioridade, e o <code>type</code> exportado é sempre <code>storage</code>.</li>
+</ul>
+<h3 id="185-metas-ainda-não-atendidas"><a class="heading-anchor" href="#185-metas-ainda-não-atendidas" aria-label="Link para 18.5 Metas ainda não atendidas">#</a>18.5 Metas ainda não atendidas</h3>
+<ul>
+<li>Comportamento especializado de <code>type=storage</code> além do básico já implementado (inventário, capabilities e GUI): regras dedicadas de armazenamento de item, fluido e energia.</li>
+<li>Entidades como entrada de receitas dentro da área do multibloco; itens, fluidos e energia já são aceitos.</li>
+<li>Saída de energia em receitas; fluidos e entidades já são suportados.</li>
+<li>Tipos de receita independentes por máquina e adaptadores para receitas vanilla.</li>
+</ul>
+
+      </article>
+    </main>
+  </div>
+
+  <footer class="page-footer">
+    <span>Infinity Nexus Multiblock</span>
+    <a href="../builder/index.html">Voltar ao builder</a>
+  </footer>
+
+  <script>
+    (function () {
+      var filter = document.getElementById("tocFilter");
+      var items = Array.prototype.slice.call(document.querySelectorAll(".toc-item"));
+
+      if (filter) {
+        filter.addEventListener("input", function () {
+          var query = filter.value.trim().toLocaleLowerCase("pt-BR");
+          items.forEach(function (item) {
+            item.hidden = query.length > 0 && !item.textContent.toLocaleLowerCase("pt-BR").includes(query);
+          });
+        });
+      }
+
+      if ("IntersectionObserver" in window) {
+        var links = new Map();
+        document.querySelectorAll(".toc a").forEach(function (link) {
+          links.set(decodeURIComponent(link.getAttribute("href").slice(1)), link);
+        });
+
+        var active = null;
+        var observer = new IntersectionObserver(function (entries) {
+          var visible = entries
+            .filter(function (entry) { return entry.isIntersecting; })
+            .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+
+          if (!visible.length) {
+            return;
+          }
+
+          var next = links.get(visible[0].target.id);
+          if (!next || next === active) {
+            return;
+          }
+
+          if (active) {
+            active.classList.remove("is-active");
+          }
+          active = next;
+          active.classList.add("is-active");
+        }, { rootMargin: "-12% 0px -72% 0px", threshold: 0 });
+
+        document.querySelectorAll(".markdown h2, .markdown h3").forEach(function (heading) {
+          observer.observe(heading);
+        });
+      }
+    }());
+  </script>
+</body>
+</html>

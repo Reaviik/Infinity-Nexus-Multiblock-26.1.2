@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "id": "infinity_nexus_multiblock:exemplo_recipe",
+  "type": "recipe",
+  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "priority": 0,
+  "tier": 1,
+  "item_slots": [
+    {
+      "id": "input_0",
+      "role": "input",
+      "filter": "minecraft:raw_iron"
+    },
+    {
+      "id": "input_1",
+      "role": "input",
+      "filter": "minecraft:coal"
+    },
+    {
+      "id": "output_0",
+      "role": "output",
+      "filter": "minecraft:iron_ingot"
+    }
+  ],
+  "capabilities": {
+    "energy": {
+      "id": "energy",
+      "capacity": 100000,
+      "max_receive": 1000,
+      "max_extract": 0
+    },
+    "fluids": [
+      {
+        "id": "water_tank",
+        "capacity": 8000,
+        "max_receive": 1000,
+        "max_extract": 0,
+        "filter": "minecraft:water"
+      }
+    ]
+  },
+  "pattern": {
+    "anchor": "C",
+    "layers": [
+      [
+        "III",
+        "III",
+        "III"
+      ],
+      [
+        "III",
+        "III",
+        "ICI"
+      ],
+      [
+        "III",
+        "III",
+        "III"
+      ]
+    ],
+    "matchers": {
+      "I": "minecraft:iron_block"
+    }
+  }
+}

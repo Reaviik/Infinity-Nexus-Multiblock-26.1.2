@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "id": "infinity_nexus_multiblock:exemplo_storage",
+  "type": "storage",
+  "priority": 0,
+  "tier": 1,
+  "inventory_rows": 3,
+  "item_slots": [
+    {
+      "id": "input_0",
+      "role": "input",
+      "filter": "minecraft:iron_ingot",
+      "limit": 16,
+      "x": 44,
+      "y": 17
+    },
+    {
+      "id": "storage_0",
+      "role": "storage",
+      "filter": "minecraft:iron_block",
+      "limit": 64,
+      "x": 44,
+      "y": 35
+    },
+    {
+      "id": "output_0",
+      "role": "output",
+      "filter": "minecraft:iron_ingot",
+      "x": 116,
+      "y": 26
+    },
+    {
+      "id": "upgrade_0",
+      "role": "upgrade",
+      "faces": {
+        "insert": [
+          "north",
+          "south"
+        ],
+        "extract": []
+      }
+    }
+  ],
+  "capabilities": {
+    "energy": {
+      "id": "energy",
+      "capacity": 100000,
+      "max_receive": 1000,
+      "max_extract": 0
+    },
+    "fluids": [
+      {
+        "id": "water_tank",
+        "capacity": 10000,
+        "max_receive": 1000,
+        "max_extract": 0,
+        "filter": "minecraft:water"
+      }
+    ]
+  },
+  "gui": {
+    "width": 176,
+    "height": 166,
+    "texture_width": 256,
+    "texture_height": 256,
+    "elements": [
+      {
+        "type": "title",
+        "text": "gui.infinity_nexus_multiblock.exemplo_storage.title",
+        "x": 8,
+        "y": 6
+      },
+      {
+        "type": "energy_bar",
+        "capability": "energy",
+        "x": 8,
+        "y": 17,
+        "width": 12,
+        "height": 52,
+        "direction": "up"
+      },
+      {
+        "type": "fluid_bar",
+        "capability": "water_tank",
+        "x": 26,
+        "y": 17,
+        "width": 12,
+        "height": 52
+      },
+      {
+        "type": "player_inventory",
+        "x": 8,
+        "y": 84,
+        "text": "container.inventory"
+      }
+    ]
+  },
+  "pattern": {
+    "anchor": "C",
+    "layers": [
+      [
+        "III",
+        "III",
+        "III"
+      ],
+      [
+        "III",
+        "III",
+        "ICI"
+      ],
+      [
+        "III",
+        "III",
+        "III"
+      ]
+    ],
+    "matchers": {
+      "I": "minecraft:iron_block"
+    }
+  }
+}

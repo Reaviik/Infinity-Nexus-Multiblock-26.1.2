@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Builder visual de multiblocos data-driven do Infinity Nexus Multiblock, schema_version 1.">
+  <title>Infinity Nexus · Multiblock Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-backdrop" aria-hidden="true"></div>
+
+  <header class="app-header">
+    <a class="brand" href="#" aria-label="Infinity Nexus Multiblock Builder">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" role="img">
+          <path d="M24 3 44 14v20L24 45 4 34V14Z" fill="#0d1a12" stroke="#6bd64a" stroke-width="2"></path>
+          <path d="M24 3 44 14 24 25 4 14Z" fill="#6bd64a" opacity="0.92"></path>
+          <path d="M4 14 24 25v20L4 34Z" fill="#2d7a24"></path>
+          <path d="M44 14 24 25v20l20-11Z" fill="#4aa937"></path>
+          <path d="M16 20 24 24l8-4" fill="none" stroke="#0d1a12" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <span class="brand-copy">
+        <strong>Infinity Nexus</strong>
+        <small>Multiblock Builder</small>
+      </span>
+    </a>
+
+    <div class="header-meta">
+      <span class="pill pill-muted">schema_version 1</span>
+      <span class="pill pill-status" id="statusPill" data-tone="ok">Pronto</span>
+    </div>
+
+    <div class="header-actions">
+      <a class="btn btn-ghost" href="../wiki/index.html" title="Wiki do desenvolvedor">Wiki</a>
+      <button type="button" class="btn btn-ghost" id="loadExampleBtn">Carregar exemplo</button>
+      <button type="button" class="btn btn-ghost" id="importBtn">Importar JSON</button>
+      <button type="button" class="btn btn-ghost btn-danger" id="resetBtn">Novo</button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <nav class="step-nav" id="stepNav" aria-label="Etapas do builder"></nav>
+
+    <main class="workspace" id="workspace">
+      <div class="workspace-main">
+        <div class="banner banner-import" id="importBanner" role="status" hidden></div>
+
+      <section class="view" data-view="identity" aria-labelledby="identityTitle">
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 01 · obrigatório</p>
+            <h1 id="identityTitle">Identidade da definição</h1>
+            <p class="view-subtitle">O loader usa estes campos para localizar o arquivo, escolher o comportamento e validar a definição. Comece pelo esqueleto obrigatório.</p>
+          </div>
+          <span class="badge badge-neutral" id="identityBadge">Pendente</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Identificação</h2>
+              <p class="panel-subtitle">O <code>id</code> precisa ser exatamente <code>&lt;namespace&gt;:&lt;path&gt;</code> do arquivo.</p>
+            </div>
+            <span class="status-chip" data-for="identity">Verificando</span>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="schemaVersion">schema_version <span class="required">*</span></label>
+              <input id="schemaVersion" type="text" value="1" readonly aria-readonly="true">
+              <p class="field-hint">Somente <code>1</code> é aceito.</p>
+            </div>
+
+            <div class="field">
+              <label for="namespace">namespace <span class="required">*</span></label>
+              <input id="namespace" data-bind="namespace" type="text" spellcheck="false" autocomplete="off" placeholder="mymod">
+              <p class="field-hint">Minúsculas, números e <code>_ . -</code>.</p>
+              <p class="field-error" data-error-for="namespace"></p>
+            </div>
+
+            <div class="field">
+              <label for="path">path <span class="required">*</span></label>
+              <input id="path" data-bind="path" type="text" spellcheck="false" autocomplete="off" placeholder="minha_maquina">
+              <p class="field-hint">Minúsculas, números e <code>_ . / -</code>.</p>
+              <p class="field-error" data-error-for="path"></p>
+            </div>
+
+            <div class="field field-wide">
+              <span class="field-label">ID gerado</span>
+              <output class="code-preview" id="idPreview">infinity_nexus_multiblock:minha_maquina</output>
+              <p class="field-error" data-error-for="id"></p>
+            </div>
+
+            <div class="field field-wide">
+              <span class="field-label">Arquivo do datapack</span>
+              <div class="path-row">
+                <code id="filePathPreview">data/infinity_nexus_multiblock/multiblock/minha_maquina.json</code>
+                <button type="button" class="btn btn-tiny" id="copyPathInlineBtn">Copiar caminho</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Tipo de máquina</h2>
+              <p class="panel-subtitle">Define se o controller processa receitas ou apenas expõe inventorário e capabilities.</p>
+            </div>
+          </div>
+
+          <div class="type-options" role="radiogroup" aria-label="Tipo da máquina">
+            <label class="type-card">
+              <input type="radio" name="multiblockType" value="storage" data-bind="type">
+              <span class="type-card-body">
+                <span class="type-icon" aria-hidden="true">▦</span>
+                <span>
+                  <strong>Storage</strong>
+                  <small>Inventário, energia, fluidos e GUI. Não processa receitas.</small>
+                </span>
+              </span>
+            </label>
+            <label class="type-card">
+              <input type="radio" name="multiblockType" value="recipe" data-bind="type">
+              <span class="type-card-body">
+                <span class="type-icon" aria-hidden="true">⟳</span>
+                <span>
+                  <strong>Recipe</strong>
+                  <small>Processa um <code>recipe_type</code> registrado e exibe progresso.</small>
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div class="field field-recipe" id="recipeTypeField" hidden>
+            <label for="recipeType">recipe_type <span class="required">*</span></label>
+            <input id="recipeType" data-bind="recipeType" type="text" list="recipeTypeOptions" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:nexus_smelting">
+            <datalist id="recipeTypeOptions">
+              <option value="infinity_nexus_multiblock:nexus_smelting"></option>
+            </datalist>
+            <p class="field-hint">Obrigatório em <code>recipe</code>; precisa ser um tipo já registrado pelo mod. Datapacks não registram tipos novos.</p>
+            <p class="field-error" data-error-for="recipeType"></p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Metadados opcionais</h2>
+              <p class="panel-subtitle">Valores no padrão são omitidos do JSON final.</p>
+            </div>
+          </div>
+          <div class="form-grid form-grid-three">
+            <div class="field">
+              <label for="tier">tier</label>
+              <input id="tier" data-bind="tier" type="number" min="1" step="1" value="1">
+              <p class="field-hint">Metadado; mínimo <code>1</code>.</p>
+              <p class="field-error" data-error-for="tier"></p>
+            </div>
+            <div class="field">
+              <label for="priority">priority</label>
+              <input id="priority" data-bind="priority" type="number" step="1" value="0">
+              <p class="field-hint">Maior prioridade vence em sobreposição.</p>
+              <p class="field-error" data-error-for="priority"></p>
+            </div>
+            <div class="field">
+              <label for="inventoryRows">inventory_rows</label>
+              <input id="inventoryRows" data-bind="inventoryRows" type="number" min="1" max="6" step="1" value="3">
+              <p class="field-hint">Só vale sem <code>item_slots</code>; não reposiciona slots com <code>x/y</code>.</p>
+              <p class="field-error" data-error-for="inventoryRows"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="extrasPanel" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Campos preservados</h2>
+              <p class="panel-subtitle">Estes campos vieram do JSON importado. Eles serão mantidos no download, mas ainda não são editados nem validados nesta fase.</p>
+            </div>
+          </div>
+          <div class="chips" id="extrasChips"></div>
+        </div>
+
+        <div class="callout callout-info" id="namespaceCallout"></div>
+      </section>
+
+      <section class="view" data-view="pattern" aria-labelledby="patternTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 02 · obrigatório</p>
+            <h1 id="patternTitle">Pattern da estrutura</h1>
+            <p class="view-subtitle">Pinte as camadas de baixo para cima. A orientação canônica olha para <strong>south</strong>; o jogo rotaciona tudo conforme o <code>FACING</code> do controller.</p>
+          </div>
+          <span class="badge badge-neutral" id="patternBadge">Pendente</span>
+        </div>
+
+        <div class="pattern-layout">
+          <div class="panel pattern-main">
+            <div class="panel-head panel-head-wrap">
+              <div>
+                <h2>Editor de camadas</h2>
+                <p class="panel-subtitle" id="patternMeta">3 × 1 × 3</p>
+              </div>
+              <div class="toolbar" aria-label="Dimensões do pattern">
+                <label class="mini-field">X<input id="sizeX" type="number" min="1" max="64" step="1" value="3"></label>
+                <label class="mini-field">Z<input id="sizeZ" type="number" min="1" max="64" step="1" value="3"></label>
+                <label class="mini-field">Y<input id="sizeY" type="number" min="1" max="32" step="1" value="1"></label>
+                <label class="mini-field mini-field-anchor">Âncora<input id="anchorSymbol" type="text" maxlength="1" value="C" spellcheck="false"></label>
+              </div>
+            </div>
+
+            <div class="layer-strip">
+              <div class="layer-tabs" id="layerTabs" role="tablist" aria-label="Camadas"></div>
+              <div class="layer-tools">
+                <button type="button" class="btn btn-tiny" id="addLayerBtn">+ camada</button>
+                <button type="button" class="btn btn-tiny" id="duplicateLayerBtn">duplicar</button>
+                <button type="button" class="btn btn-tiny btn-danger" id="removeLayerBtn">remover</button>
+              </div>
+            </div>
+
+            <div class="grid-scroller" id="gridScroller">
+              <div class="layer-grid" id="layerGrid" tabindex="0" role="grid" aria-label="Grade da camada ativa"></div>
+            </div>
+
+            <p class="field-error pattern-error" data-error-for="pattern"></p>
+            <p class="field-error pattern-error" data-error-for="anchor"></p>
+
+            <div class="pattern-foot">
+              <div class="legend" id="legend" aria-label="Legenda de símbolos"></div>
+              <p class="grid-help">Clique ou arraste para pintar. Botão direito apaga. Com foco na grade, use as setas, Enter e Backspace.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="matchers" aria-labelledby="matchersTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 03 · obrigatório</p>
+            <h1 id="matchersTitle">Matchers dos símbolos</h1>
+            <p class="view-subtitle">Cada símbolo não-âncora precisa apontar para um bloco, uma tag ou um bloco com blockstate específico.</p>
+          </div>
+          <span class="badge badge-neutral" id="matchersBadge">Pendente</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Símbolos usados</h2>
+              <p class="panel-subtitle">A ordem dos matchers não importa para o loader.</p>
+            </div>
+          </div>
+          <div id="missingMatchers"></div>
+          <div class="matcher-list" id="matcherList"></div>
+        </div>
+
+        <div class="callout callout-warning">
+          <strong>Validação offline:</strong> o builder confere o formato dos IDs, mas não tem o registro de blocos do jogo. IDs inexistentes e propriedades de blockstate só são rejeitados pelo servidor no <code>/reload</code>.
+        </div>
+      </section>
+
+      <section class="view" data-view="slots" aria-labelledby="slotsTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 04 · opcional</p>
+            <h1 id="slotsTitle">Slots de itens</h1>
+            <p class="view-subtitle">Define o inventário por <code>item_slots</code>. Com <code>x/y</code>, o layout padrão respeita a posição; sem posição, usa a grade automática.</p>
+          </div>
+          <span class="badge badge-neutral" id="slotsBadge">Pendente</span>
+        </div>
+
+        <div class="panel" id="slotsPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>item_slots</h2>
+              <p class="panel-subtitle" id="slotsSummary">Sem item_slots; o inventário usa inventory_rows.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="addSlotBtn">+ slot</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="useInventoryRowsBtn">usar inventory_rows</button>
+            </div>
+          </div>
+          <div class="missing-empty" id="slotsEmpty"></div>
+          <div class="slot-list" id="slotList"></div>
+        </div>
+
+        <div class="callout callout-info">
+          No layout padrão, slots com <code>x/y</code> válidos mantêm a posição e os demais entram na grade automática de 18 px. Em GUI customizada, slots sem posição ficam apenas para automação.
+          O <code>filter</code> aceita item ou tag; sem filtro, o slot aceita qualquer item. Slots <code>output</code> não usam filtro.
+        </div>
+      </section>
+
+      <section class="view" data-view="capabilities" aria-labelledby="capabilitiesTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 05 · opcional</p>
+            <h1 id="capabilitiesTitle">Energia e fluidos</h1>
+            <p class="view-subtitle">Define <code>capabilities.energy</code>, <code>capabilities.fluids</code> e os filtros de bloco em <code>capability_ports</code>. Itens usam o inventário da máquina; energia e tanques são opcionais.</p>
+          </div>
+          <span class="badge badge-neutral" id="capabilitiesBadge">Pendente</span>
+        </div>
+
+        <div class="panel" id="capabilitiesPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>capabilities</h2>
+              <p class="panel-subtitle" id="capabilitiesSummary">Sem capabilities; a máquina não expõe energia/fluidos.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="addEnergyBtn">+ energia</button>
+              <button type="button" class="btn btn-tiny" id="addFluidBtn">+ tanque</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="removeCapabilitiesBtn">remover capabilities</button>
+            </div>
+          </div>
+          <div class="missing-empty" id="capabilitiesEmpty"></div>
+          <div class="capability-list" id="capabilityList"></div>
+        </div>
+
+        <div class="panel" id="capabilityPortsPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>capability_ports</h2>
+              <p class="panel-subtitle" id="capabilityPortsSummary">Sem filtro; todas as capabilities usam qualquer bloco formado.</p>
+            </div>
+          </div>
+          <div class="controller-form">
+            <div class="field">
+              <label for="capabilityPortItem">item</label>
+              <input id="capabilityPortItem" type="text" data-capability-port="item"
+                spellcheck="false" autocomplete="off" placeholder="I, C ou #minecraft:glass">
+              <p class="field-hint">Sempre disponível via inventário. Use <code>[]</code> para não expor item.</p>
+            </div>
+            <div class="field">
+              <label for="capabilityPortEnergy">energy</label>
+              <input id="capabilityPortEnergy" type="text" data-capability-port="energy"
+                spellcheck="false" autocomplete="off" placeholder="C">
+            </div>
+            <div class="field">
+              <label for="capabilityPortFluid">fluid</label>
+              <input id="capabilityPortFluid" type="text" data-capability-port="fluid"
+                spellcheck="false" autocomplete="off" placeholder="F ou #minecraft:glass">
+            </div>
+          </div>
+          <p class="field-hint" id="capabilityPortAvailability" hidden></p>
+          <p class="field-hint" id="capabilityPortSymbols">Símbolos disponíveis no pattern: C, I.</p>
+          <p class="field-hint">Vazio libera a capability em qualquer bloco formado. Use <code>[]</code> para não expor nenhum bloco. Separe vários seletores por vírgula ou espaço.</p>
+        </div>
+
+        <div class="callout callout-info">
+          <code>energy.id</code> é o identificador usado por uma <code>energy_bar</code>; <code>fluids[].id</code> identifica cada tanque e não é o tipo do fluido.
+          <code>filter</code> aceita um fluido ou tag, como <code>minecraft:water</code> ou <code>#c:water</code>.
+        </div>
+      </section>
+
+      <section class="view" data-view="controller" aria-labelledby="controllerTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 06 · opcional</p>
+            <h1 id="controllerTitle">Controller e texturas</h1>
+            <p class="view-subtitle">Define o bloco controller e as seis texturas semânticas. Sem controller, o loader usa o próprio id e as texturas fallback.</p>
+          </div>
+          <span class="badge badge-neutral" id="controllerBadge">Pendente</span>
+        </div>
+
+        <div class="panel" id="controllerPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>controller</h2>
+              <p class="panel-subtitle" id="controllerSummary">Sem controller; o loader usa o id e texturas fallback.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="addControllerBtn">+ controller</button>
+              <button type="button" class="btn btn-tiny" id="controllerFallbackBtn">usar fallback</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="removeControllerBtn">remover controller</button>
+            </div>
+          </div>
+          <div class="missing-empty" id="controllerEmpty"></div>
+          <div id="controllerForm" hidden>
+            <div class="controller-form">
+              <div class="field field-wide">
+                <label for="controllerBlock">block</label>
+                <input id="controllerBlock" type="text" data-controller-field="block" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:minha_maquina">
+                <p class="field-hint" id="controllerBlockHint"></p>
+              </div>
+            </div>
+
+            <h3 class="controller-section-title">Texturas por face <span class="required">*</span></h3>
+            <div class="controller-texture-grid">
+              <div class="field">
+                <label for="controllerTextureFront">front</label>
+                <input id="controllerTextureFront" type="text" data-controller-field="texture:front" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../front">
+              </div>
+              <div class="field">
+                <label for="controllerTextureBack">back</label>
+                <input id="controllerTextureBack" type="text" data-controller-field="texture:back" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../back">
+              </div>
+              <div class="field">
+                <label for="controllerTextureLeft">left</label>
+                <input id="controllerTextureLeft" type="text" data-controller-field="texture:left" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../left">
+              </div>
+              <div class="field">
+                <label for="controllerTextureRight">right</label>
+                <input id="controllerTextureRight" type="text" data-controller-field="texture:right" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../right">
+              </div>
+              <div class="field">
+                <label for="controllerTextureTop">top</label>
+                <input id="controllerTextureTop" type="text" data-controller-field="texture:top" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../top">
+              </div>
+              <div class="field">
+                <label for="controllerTextureBottom">bottom</label>
+                <input id="controllerTextureBottom" type="text" data-controller-field="texture:bottom" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../bottom">
+              </div>
+            </div>
+
+            <h3 class="controller-section-title">Texturas quando formado <span class="controller-optional">opcional</span></h3>
+            <div class="controller-texture-grid">
+              <div class="field">
+                <label for="controllerFormedFront">front</label>
+                <input id="controllerFormedFront" type="text" data-controller-field="formed:front" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+              <div class="field">
+                <label for="controllerFormedBack">back</label>
+                <input id="controllerFormedBack" type="text" data-controller-field="formed:back" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+              <div class="field">
+                <label for="controllerFormedLeft">left</label>
+                <input id="controllerFormedLeft" type="text" data-controller-field="formed:left" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+              <div class="field">
+                <label for="controllerFormedRight">right</label>
+                <input id="controllerFormedRight" type="text" data-controller-field="formed:right" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+              <div class="field">
+                <label for="controllerFormedTop">top</label>
+                <input id="controllerFormedTop" type="text" data-controller-field="formed:top" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+              <div class="field">
+                <label for="controllerFormedBottom">bottom</label>
+                <input id="controllerFormedBottom" type="text" data-controller-field="formed:bottom" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
+              </div>
+            </div>
+
+            <div class="controller-extra">
+              <div class="field">
+                <label for="controllerParticle">particle</label>
+                <input id="controllerParticle" type="text" data-controller-field="particle" spellcheck="false" autocomplete="off" placeholder="minecraft:smoke">
+              </div>
+              <div class="field">
+                <label for="controllerLightLevel">light_level</label>
+                <input id="controllerLightLevel" type="number" min="0" max="15" step="1" data-controller-field="lightLevel" placeholder="0">
+              </div>
+            </div>
+
+            <code class="matcher-json slot-json controller-json" id="controllerJson"></code>
+            <p class="matcher-feedback controller-feedback" id="controllerFeedback" hidden></p>
+          </div>
+        </div>
+
+        <div class="panel" id="controllerRecipePanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>recipe</h2>
+              <p class="panel-subtitle" id="controllerRecipeSummary">Sem receita shaped para o controller.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="addControllerRecipeBtn">+ receita do controller</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="removeControllerRecipeBtn">remover receita</button>
+            </div>
+          </div>
+          <div class="missing-empty" id="controllerRecipeEmpty">
+            Sem receita. O mod não gera crafting para este controller.
+          </div>
+          <div id="controllerRecipeForm" hidden>
+            <h3 class="controller-section-title">Pattern 3x3 <span class="controller-optional">clique na letra e depois no slot</span></h3>
+            <div class="controller-recipe-tools">
+              <div class="controller-recipe-palette" id="controllerRecipePalette" aria-label="Símbolos da receita"></div>
+              <div class="controller-recipe-grid" id="controllerRecipeGrid" aria-label="Slots da receita"></div>
+            </div>
+            <p class="field-hint">Use o botão direito em um slot para apagar. A key abaixo acompanha automaticamente os símbolos usados.</p>
+
+            <h3 class="controller-section-title">Key automática <span class="controller-optional">informe apenas o item</span></h3>
+            <div class="controller-recipe-keys" id="controllerRecipeKeyList"></div>
+            <p class="field-hint">Aceita item ou tag, como <code>minecraft:iron_ingot</code> ou <code>#c:ingots/copper</code>.</p>
+
+            <code class="matcher-json slot-json controller-json" id="controllerRecipeJson"></code>
+            <p class="matcher-feedback controller-feedback" id="controllerRecipeFeedback" hidden></p>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <code>block</code> e as seis texturas são obrigatórios quando há controller. Em <code>infinity_nexus_multiblock</code>, o bloco é sincronizado com o id; namespace externo exige um controller já registrado em Java.
+          <code>formed_textures</code>, <code>particle</code> e <code>light_level</code> são opcionais.
+          <code>recipe</code> é opcional e gera uma receita shaped de crafting table cujo resultado é o próprio item do controller.
+        </div>
+      </section>
+
+      <section class="view" data-view="gui" aria-labelledby="guiTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 07 · opcional</p>
+            <h1 id="guiTitle">GUI e elementos</h1>
+            <p class="view-subtitle">Personaliza o layout da GUI. Sem uma GUI customizada, o loader usa 176x166 e o inventário do jogador.</p>
+          </div>
+          <span class="badge badge-neutral" id="guiBadge">Pendente</span>
+        </div>
+
+        <div class="panel" id="guiPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>gui</h2>
+              <p class="panel-subtitle" id="guiSummary">Sem GUI customizada; o loader usa o layout fallback 176x166.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="addGuiBtn">+ gui</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="removeGuiBtn">remover gui</button>
+            </div>
+          </div>
+          <div class="missing-empty" id="guiEmpty"></div>
+          <div id="guiForm" hidden>
+            <div class="controller-form">
+              <div class="field field-wide">
+                <label for="guiTexture">texture</label>
+                <input id="guiTexture" type="text" data-gui-field="texture" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:textures/gui/minha_maquina.png">
+              </div>
+              <div class="field">
+                <label for="guiWidth">width</label>
+                <input id="guiWidth" type="number" min="1" max="4096" step="1" data-gui-field="width" placeholder="176">
+              </div>
+              <div class="field">
+                <label for="guiHeight">height</label>
+                <input id="guiHeight" type="number" min="1" max="4096" step="1" data-gui-field="height" placeholder="166">
+              </div>
+              <div class="field">
+                <label for="guiTextureWidth">texture_width</label>
+                <input id="guiTextureWidth" type="number" min="1" max="4096" step="1" data-gui-field="textureWidth" placeholder="256">
+              </div>
+              <div class="field">
+                <label for="guiTextureHeight">texture_height</label>
+                <input id="guiTextureHeight" type="number" min="1" max="4096" step="1" data-gui-field="textureHeight" placeholder="256">
+              </div>
+            </div>
+
+            <h3 class="controller-section-title">Layout visual <span class="controller-optional">arraste para posicionar</span></h3>
+            <div class="gui-canvas-wrap" id="guiCanvasWrap" hidden>
+              <div class="gui-canvas" id="guiCanvas" aria-label="Prévia interativa da GUI"></div>
+            </div>
+            <p class="field-hint">Arraste energia, fluidos, progresso, entidade e demais elementos para ajustar <code>x/y</code>. Os campos numéricos continuam valendo para largura, altura e demais propriedades.</p>
+            <p class="field-hint">Novos elementos começam com o layout do <code>spawner</code>: título em <code>8,4</code>, texto em <code>8,75</code>, inventário em <code>8,84</code>, barras em <code>158/148/138,10</code> com <code>8x64</code> e entidade em <code>96,18</code> com <code>32x32</code>. Slots começam em <code>8,16</code> e avançam <code>18</code> px, com 9 por linha.</p>
+
+            <h3 class="controller-section-title">Elementos <span class="controller-optional">opcional</span></h3>
+            <div class="gui-add-row">
+              <select id="guiElementType" aria-label="Tipo do novo elemento">
+                <option value="title">title</option>
+                <option value="text">text</option>
+                <option value="player_inventory">player_inventory</option>
+                <option value="slot">slot</option>
+                <option value="energy_bar">energy_bar</option>
+                <option value="fluid_bar">fluid_bar</option>
+                <option value="progress_bar">progress_bar</option>
+                <option value="arrow">arrow</option>
+                <option value="entity">entity</option>
+              </select>
+              <button type="button" class="btn btn-tiny" id="addGuiElementBtn">+ elemento</button>
+            </div>
+            <p class="grid-help" id="guiElementHint" hidden></p>
+            <div class="gui-element-list" id="guiElementList"></div>
+
+            <code class="matcher-json slot-json gui-json" id="guiJson"></code>
+            <p class="matcher-feedback gui-feedback" id="guiFeedback" hidden></p>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          Uma GUI customizada exige exatamente um <code>player_inventory</code>. <code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x/y</code>; sem slots de item, a GUI pode ter só barras. Barras precisam apontar para a energia ou o tanque existente; <code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só valem em máquinas <code>type=recipe</code>. <code>entity</code> mostra a entidade do <code>output</code> da receita e usa apenas <code>x/y/width/height</code>. Elementos <code>slot</code> usam a referência de <code>item_slots</code>; slots com <code>x/y</code> não podem ser misturados com eles.
+        </div>
+      </section>
+
+      <section class="view" data-view="recipes" aria-labelledby="recipesTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 08 · opcional</p>
+            <h1 id="recipesTitle">Receitas data-driven</h1>
+            <p class="view-subtitle">Crie os arquivos de receita em <code>data/&lt;namespace&gt;/recipe/</code>. O JEI gera a categoria a partir do controller; o builder só valida e exporta os JSONs.</p>
+          </div>
+          <span class="badge badge-neutral" id="recipesBadge">Opcional</span>
+        </div>
+
+        <div class="callout callout-warn" id="recipeTypeNote" hidden>
+          Esta definição é <code>storage</code>; receitas não serão processadas por ela. Use uma máquina <code>type=recipe</code>.
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Receitas</h2>
+              <p class="panel-subtitle" id="recipeSummary">Nenhuma receita adicionada.</p>
+            </div>
+            <button type="button" class="btn btn-tiny" id="addRecipeBtn">+ receita</button>
+          </div>
+
+          <div class="empty-state" id="recipeEmpty">
+            Nenhuma receita. Cada receita vira um arquivo separado. Saídas de item exigem um slot <code>output</code>; saídas de fluido exigem tanque; entidades usam um seletor de spawn do pattern.
+          </div>
+          <div class="recipe-list" id="recipeList"></div>
+        </div>
+
+        <div class="callout callout-info">
+          <code>ingredients</code>: um id ou tag por linha; também aceita JSON de ingrediente em uma linha. <code>fluid_ingredients</code>: use <code>fluido quantidade</code> por linha e só aparece quando a máquina tem tanque. <code>output.type</code> aceita <code>item</code>, <code>fluid</code> ou <code>entity</code>; o builder oculta energia, fluidos e saídas que a máquina não suporta. O <code>type</code> precisa ser o mesmo <code>recipe_type</code> registrado pela máquina. O JEI mostra as receitas automaticamente quando o controller tem <code>type=recipe</code>.
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Gerar JSON no jogo.</strong> Use <code>/inm hand</code> para gerar o <code>input</code> de <code>ingredients</code> e o objeto de <code>output</code>. O input não serve como output e vice-versa; nos campos de saída do builder, use <code>id</code>, <code>count</code> e <code>components</code> separadamente. <code>/inm look</code> envia o ID puro, o matcher completo e o <code>state</code> separado. No campo <code>Bloco</code> dos matchers, cole o ID puro ou o matcher completo: o builder separa bloco e propriedades automaticamente. As linhas no chat são clicáveis e copiam o texto. O alias <code>/infinity_nexus_multiblock</code> faz o mesmo.
+        </div>
+      </section>
+
+      <section class="view" data-view="inheritance" aria-labelledby="inheritanceTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 09 · opcional</p>
+            <h1 id="inheritanceTitle">Herança e templates</h1>
+            <p class="view-subtitle">Compartilhe pattern, slots, capabilities e GUI com um pai usando <code>extends</code> ou <code>family</code>. O filho declara apenas o que muda.</p>
+          </div>
+          <span class="badge badge-neutral" id="inheritanceBadge">Opcional</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Herança</h2>
+              <p class="panel-subtitle" id="inheritanceSummary">Sem herança; a definição é autocontida.</p>
+            </div>
+          </div>
+
+          <div class="inheritance-grid">
+            <div class="field">
+              <label for="inheritanceMode">modo</label>
+              <select id="inheritanceMode">
+                <option value="none">sem herança</option>
+                <option value="extends">extends</option>
+                <option value="family">family</option>
+              </select>
+              <p class="field-hint">Use apenas um dos dois; eles são equivalentes no loader.</p>
+            </div>
+            <div class="field field-wide">
+              <label for="inheritanceParent">pai</label>
+              <input id="inheritanceParent" type="text" spellcheck="false" autocomplete="off" placeholder="mymod:template_base">
+              <p class="field-hint">ID completo de outra definição, de preferência um template. O pai é resolvido recursivamente.</p>
+              <p class="field-error" data-error-for="inheritanceParent"></p>
+            </div>
+          </div>
+
+          <label class="inheritance-check" for="inheritanceTemplate">
+            <input id="inheritanceTemplate" type="checkbox">
+            <span><strong>template</strong><small>Não registra esta definição como máquina; use como base compartilhada.</small></span>
+          </label>
+
+          <div class="field inheritance-overrides">
+            <label for="inheritanceOverrides">overrides (JSON)</label>
+            <textarea id="inheritanceOverrides" spellcheck="false" autocomplete="off" placeholder='{ "tier": 2, "capabilities": { "energy": { "capacity": 200000 } } }'></textarea>
+            <p class="field-hint">Objeto aplicado depois dos campos do filho; vence qualquer campo igual. Arrays substituem o valor inteiro.</p>
+            <p class="matcher-feedback" id="inheritanceOverridesFeedback" hidden></p>
+          </div>
+
+          <code class="matcher-json slot-json inheritance-json" id="inheritanceJson"></code>
+          <p class="matcher-feedback inheritance-feedback" id="inheritanceFeedback" hidden></p>
+        </div>
+
+        <div class="callout callout-info">
+          Objetos são mesclados recursivamente; arrays são substituídos por inteiro. <code>extends</code>, <code>family</code>, <code>overrides</code> e <code>template</code> não são herdados. Ciclos, pai inexistente, os dois campos juntos ou <code>overrides</code> inválido são rejeitados pelo servidor.
+        </div>
+      </section>
+
+      <section class="view" data-view="review" aria-labelledby="reviewTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 10 · revisão</p>
+            <h1 id="reviewTitle">JSON e checklist</h1>
+            <p class="view-subtitle">Revise o resultado, copie o JSON e salve no caminho indicado. O jogo continua sendo a autoridade final.</p>
+          </div>
+          <span class="badge badge-neutral" id="reviewBadge">Pronto</span>
+        </div>
+
+        <div class="summary-grid" id="summaryGrid"></div>
+
+        <div class="panel" id="reviewRecipesPanel" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Receitas</h2>
+              <p class="panel-subtitle">Arquivos separados em <code>data/&lt;namespace&gt;/recipe/</code>.</p>
+            </div>
+          </div>
+          <div class="review-recipe-list" id="reviewRecipeList"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Assets e registro</h2>
+              <p class="panel-subtitle">O builder não cria PNGs, modelos ou classes Java. Confira os caminhos manuais.</p>
+            </div>
+          </div>
+          <div class="asset-list" id="assetList"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>JSON gerado</h2>
+              <p class="panel-subtitle">Somente a definição da máquina; receitas são exportadas separadamente.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="copyJsonInlineBtn">Copiar</button>
+              <button type="button" class="btn btn-tiny" id="downloadInlineBtn">Baixar</button>
+            </div>
+          </div>
+          <pre class="json-preview" aria-label="Prévia do JSON"><code id="jsonPreview"></code></pre>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Checklist do loader</h2>
+              <p class="panel-subtitle">As mesmas checagens que bloqueiam a exportação.</p>
+            </div>
+          </div>
+          <ul class="checklist checklist-large" id="reviewChecklist"></ul>
+        </div>
+
+        <div class="callout callout-info">
+          Para testar, salve em <code id="reviewFilePath">data/.../multiblock/....json</code> exatamente com esse nome e rode <code>/reload</code>. O id é o caminho do arquivo: não renomeie depois de baixar. Um controller dinâmico novo só é registrado no startup; datapack externo não cria bloco.
+        </div>
+      </section>
+      </div>
+
+      <aside class="preview-rail" aria-label="Prévia da GUI e do pattern">
+        <div class="panel" id="palettePanel" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Paleta</h2>
+              <p class="panel-subtitle">Símbolos do pattern.</p>
+            </div>
+            <button type="button" class="btn btn-tiny" id="focusNewSymbolBtn">+ símbolo</button>
+          </div>
+          <div class="palette" id="palette"></div>
+          <form class="inline-form" id="addSymbolForm">
+            <input id="newSymbolInput" type="text" maxlength="1" placeholder="S" spellcheck="false" aria-label="Novo símbolo">
+            <button type="submit" class="btn btn-tiny">Adicionar</button>
+          </form>
+          <p class="field-hint">A âncora <code>C</code> é única. Símbolos usados sem matcher ficam marcados em vermelho.</p>
+        </div>
+
+        <div class="preview-dock">
+          <div class="panel preview-card">
+            <div class="panel-head">
+              <div>
+                <h2>Prévia da GUI</h2>
+                <p class="panel-subtitle">Atualiza com slots, capabilities e GUI customizada.</p>
+              </div>
+            </div>
+            <div class="gui-preview-frame" id="slotGuiPreview" aria-label="Prévia esquemática da GUI">
+              <div class="gui-preview-content" id="slotGuiPreviewContent"></div>
+            </div>
+            <div class="gui-preview-legend" id="slotPreviewLegend"></div>
+            <p class="grid-help" id="slotPreviewHidden"></p>
+          </div>
+
+          <div class="panel preview-card">
+            <div class="panel-head">
+              <div>
+                <h2>Prévia 3D</h2>
+                <p class="panel-subtitle">Camada ativa destacada.</p>
+              </div>
+            </div>
+            <canvas id="preview3d" aria-label="Prévia isométrica do pattern"></canvas>
+            <p class="grid-help">X → leste · Z → sul · Y ↑ topo</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <aside class="inspector" aria-labelledby="inspectorTitle">
+      <div class="inspector-head">
+        <h2 id="inspectorTitle">Validação</h2>
+        <span class="badge badge-neutral" id="issueCount">0</span>
+      </div>
+
+      <div class="status-card" id="statusCard" data-tone="ok">
+        <strong id="statusTitle">Pronto para exportar</strong>
+        <p id="statusMessage">Nenhum erro encontrado no esqueleto.</p>
+      </div>
+
+      <div class="issue-list" id="issueList"></div>
+
+      <div class="checklist-card">
+        <h3>Regras obrigatórias</h3>
+        <ul class="checklist" id="checkList"></ul>
+      </div>
+
+      <div class="notes-card">
+        <h3>Escopo do builder</h3>
+        <p>Identidade, pattern, matchers, slots, capabilities, controller, GUI, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
+        <p>Assets de bloco, controller e modelos são gerados no código Java. Em namespace externo, registre o controller e os modelos manualmente; o builder apenas valida e mostra os caminhos.</p>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="actionbar">
+    <div class="file-target">
+      <span>Arquivo</span>
+      <code id="filePath">data/infinity_nexus_multiblock/multiblock/minha_maquina.json</code>
+      <button type="button" class="btn btn-tiny" id="copyPathBtn">copiar</button>
+    </div>
+    <div class="actionbar-actions">
+      <span class="export-hint" id="exportHint"></span>
+      <button type="button" class="btn btn-primary" id="copyJsonBtn">Copiar JSON</button>
+      <button type="button" class="btn" id="downloadBtn">Baixar .json</button>
+    </div>
+  </footer>
+
+  <input type="file" id="importInput" accept=".json,application/json" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="validation.js"></script>
+  <script src="preview3d.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
