@@ -3567,7 +3567,7 @@
       noticesHtml +
       "<div class='recipe-grid'>" +
       "<label class='field'><span>arquivo</span><input data-recipe-field='file' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.file) + "' placeholder='gold_ingot_from_ore'></label>" +
-      "<label class='field'><span>type</span><input data-recipe-field='type' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.type) + "' placeholder='infinity_nexus_multiblock:nexus_smelting'></label>" +
+      "<label class='field'><span>type</span><input data-recipe-field='type' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.type) + "' placeholder='infinity_nexus_multiblock:exemplo_smelting'></label>" +
       "<label class='field'><span>output.type</span><select data-recipe-field='outputType'>" + outputTypeOptions + "</select></label>" +
       outputFields +
       energyField +

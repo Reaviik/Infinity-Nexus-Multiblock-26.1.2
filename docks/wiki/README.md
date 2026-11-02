@@ -59,9 +59,9 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 
 O `controller` do JSON é opcional. Em um JSON empacotado no mod, `controller.block` define o ID do bloco a criar e `controller.textures` alimenta o modelo gerado; cada textura ausente usa o fallback da mesma face. Sem `controller`, o bloco usa o próprio `id` e todas as texturas fallback. O JSON só cria blocos quando está dentro do jar do mod e usa o namespace `infinity_nexus_multiblock`. Datapacks externos carregam definições, mas não registram blocos; nesse caso `controller.block` precisa apontar para um bloco Java já registrado.
 
-No JEI, cada controller dinâmico `type=recipe` tem sua própria categoria e catalisador. As receitas exibidas são filtradas pelo `recipe_type` da definição; controllers `storage` e definições sem controller não geram categoria.
+No JEI, cada controller dinâmico gera uma categoria de **estrutura** e um catalisador. Controllers `type=recipe` também geram uma categoria de **receita**, filtrada pelo `recipe_type` da definição. Definições sem controller (carregadas só por datapack) não geram categoria.
 
-O layout do JEI usa o mesmo `MultiblockMenuLayout` da GUI da máquina para as posições de `item_slots` x/y e dos elementos `slot`, `fluid_bar`, `energy_bar`, `arrow`, `entity` e `title` de `gui.elements`; o fundo é `textures/gui/jei_base.png`. Fallbacks só são usados quando a posição não existe.
+A categoria de receita do JEI usa o mesmo `MultiblockMenuLayout` da GUI da máquina para as posições de `item_slots` x/y e dos elementos `slot`, `fluid_bar`, `energy_bar`, `arrow`, `entity` e `title` de `gui.elements`; o fundo é `textures/gui/jei_base.png`. Fallbacks só são usados quando a posição não existe. A categoria de estrutura usa um painel próprio e não usa esse layout.
 
 Na GUI da máquina, clicar na seta ou na barra de progresso abre a categoria de receitas daquele controller no JEI. A área clicável é registrada pelo plugin JEI a partir do layout sincronizado, então funciona com qualquer posição definida no JSON.
 
@@ -139,11 +139,11 @@ Datapacks podem adicionar ou sobrescrever definições e receitas, e resource pa
 | `schema_version` | sim | inteiro | — | Hoje só aceita `1`. |
 | `id` | sim | identifier | — | Precisa ser igual ao caminho do arquivo. |
 | `type` | sim | string | — | `recipe` ou `storage`. |
-| `recipe_type` | depende | identifier | — | Obrigatório em `type=recipe`; proibido em `type=storage`. Precisa ser um tipo registrado pelo mod; hoje `infinity_nexus_multiblock:nexus_smelting`. Datapacks não registram tipos novos. |
+| `recipe_type` | depende | identifier | — | Obrigatório em `type=recipe`; proibido em `type=storage`. Para processar receitas, o tipo precisa ter sido registrado no startup; o mod registra um tipo para cada `recipe_type` declarado por um controller empacotado no namespace `infinity_nexus_multiblock`. Não há lista fixa: se nenhum controller empacotado declarar um tipo, ele não existe. O carregamento da definição não valida o registro. Datapacks não registram tipos novos. |
 | `priority` | não | inteiro | `0` | Usado para resolver sobreposição entre estruturas. Pode ser negativo. |
 | `tier` | não | inteiro | `1` | Mínimo `1`. Hoje é apenas metadado; não altera comportamento. |
 | `controller` | não | objeto | ausente | Em JSON empacotado, define o bloco e as texturas geradas; em datapack, valida um bloco Java existente. Veja a seção 9. |
-| `recipe` | não | objeto | ausente | Receita shaped de crafting table do item do controller. Veja a seção 9.3.1. |
+| `recipe` | não | objeto | ausente | Receita shaped de crafting table do item do controller, lida apenas de JSONs empacotados (não faz parte do codec de datapack). Veja a seção 9.3.1. |
 | `inventory_rows` | não | inteiro | `3` | De `1` a `6`. Usado só quando `item_slots` está vazio. |
 | `item_slots` | não | lista | `[]` | Define os slots do inventário. Veja a seção 6. |
 | `capabilities` | não | objeto | vazio | Energia e fluidos. Veja a seção 7. |
@@ -206,7 +206,7 @@ Regras:
 }
 ```
 
-Esse JSON já carrega como definição. Se estiver empacotado no mod com o namespace `infinity_nexus_multiblock`, o bloco controller é criado automaticamente com o ID do arquivo e texturas fallback. Se estiver em um datapack ou usar outro namespace, ele não cria bloco: registre um controller Java cujo `definitionId` seja `minhamod:minha_maquina` (seção 9) ou use um dos controllers dinâmicos embutidos.
+Esse JSON já carrega como definição. Se estiver empacotado no mod com o namespace `infinity_nexus_multiblock`, o bloco controller é criado automaticamente com o ID do arquivo e texturas fallback. Se estiver em um datapack ou usar outro namespace, ele não cria bloco: registre um controller Java cujo `definitionId` seja `minhamod:minha_maquina` (seção 9). Não há controllers dinâmicos embutidos para reutilizar nesta build.
 
 ## 4. Pattern
 
@@ -217,6 +217,7 @@ Esse JSON já carrega como definição. Se estiver empacotado no mod com o names
 - Todas as camadas precisam ter a mesma quantidade de linhas.
 - Todas as linhas precisam ter a mesma largura.
 - Espaços (`" "`) são ignorados como células, mas continuam contando para a largura.
+- `anchor` é opcional e usa `C` por padrão.
 - Deve existir **exatamente um** símbolo de âncora.
 - Cada símbolo usado, exceto a âncora, precisa ter um matcher.
 - A célula da âncora é o controller. Ela não entra na lista de membros e não é testada pelo matcher.
@@ -505,7 +506,7 @@ Há dois jeitos de posicionar slots na GUI customizada:
 - Não misture elementos `slot` com `x`/`y` em `item_slots[]`.
 - O tamanho do slot é fixo em `18x18`; `width`/`height` do elemento são ignorados.
 
-No layout padrão (sem `gui.elements`), todos os slots são exibidos em uma grade de 9 colunas e `x`/`y` são ignorados.
+No layout padrão (sem `gui.elements`), slots com `x`/`y` que caibam em `176x166` são respeitados; os demais são distribuídos automaticamente. A grade usa 9 colunas, ou 8 quando há barras de energia/fluido ou barra de progresso.
 
 ### 6.7 Exemplo de `item_slots`
 
@@ -620,7 +621,7 @@ Regras:
 - `item` não é uma chave de `capabilities`: todo multiblock tem inventário (`item_slots` ou `inventory_rows`) e expõe item por padrão. Use `capability_ports.item` para limitar as portas ou `[]` para não expor item.
 - `energy` e `fluid` só têm efeito quando a máquina define `capabilities.energy` ou pelo menos um tanque em `capabilities.fluids`. Um tanque somente de fluido é possível com `capabilities.fluids` e, se quiser esconder o inventário, `"capability_ports": {"item": []}`. A GUI customizada pode ter só `fluid_bar` e `player_inventory`, sem `item_slots`.
 
-As portas são recalculadas quando a estrutura é validada. `/reload` atualiza a definição; se a máquina já estiver formada e você precisar forçar o recálculo, quebre e monte novamente.
+As portas são recalculadas na próxima validação da estrutura (a cada 20 ticks ou quando um vizinho muda). `/reload` atualiza a definição e agenda essa revalidação; não é preciso quebrar e montar de novo.
 
 No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Campo vazio omite a chave e libera a capability em qualquer bloco; `[]` não expõe nenhum bloco; símbolos, IDs e tags podem ser separados por vírgula ou espaço. As portas `energy`/`fluid` ficam desabilitadas enquanto a capability correspondente não existir.
 
@@ -652,13 +653,13 @@ Se a receita tem `fluid_ingredients`, a máquina precisa ter tanques suficientes
 
 Sem `gui`, ou com `gui.elements` vazio, o layout é automático:
 
-- slots do inventário em uma grade de 9 colunas;
+- slots do inventário em grade automática (9 colunas, ou 8 quando há barras/progresso); posições `x`/`y` que caibam em `176x166` são respeitadas;
 - título no topo;
 - uma barra de energia, se existir;
 - uma barra para cada tanque de fluido, se existirem;
 - uma barra de progresso à direita, se `type=recipe` e `recipe_type` existirem;
 - inventário do jogador abaixo dos slots;
-- largura e altura calculadas para caber tudo.
+- largura fixa em `176` e altura calculada para caber tudo (mínimo `166`).
 
 Se você definir `gui` sem `elements`, ainda pode definir `texture`, `width`, `height`, `texture_width` e `texture_height`; o layout continua automático, mas usa esses valores.
 
@@ -678,7 +679,7 @@ Com `gui.elements` não vazio:
 - `title` e `text` não têm validação de limites; cuidado para não desenhar fora da tela.
 - Em `title`/`text`, `x/y` representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.
 - No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,10` com `8x64`, e `entity` em `96,18` com `32x32`.
-- Slots novos começam em `8,16` e avançam `18` px por coluna, com 9 colunas por linha antes de descer para a próxima linha.
+- Slots novos começam em `8,16` e avançam `18` px por coluna, com 9 colunas por linha (ou 8 quando há barras de energia/fluido ou barra de progresso) antes de descer para a próxima linha.
 
 ### 8.3 Campos de `gui`
 
@@ -703,7 +704,7 @@ Com `gui.elements` não vazio:
 | `text` | não | string | `""` | Chave de tradução ou texto literal. |
 | `slot` | não | string | `""` | Só para o tipo `slot`; ID de `item_slots[]`. |
 | `capability` | não | string | `""` | ID de energia ou tanque para barras. |
-| `color` | não | inteiro ou string | `0xFF404040` | ARGB em inteiro decimal ou hexadecimal. Alpha `0` vira `0xFF`. |
+| `color` | não | inteiro ou string | depende do tipo | ARGB em inteiro decimal ou hexadecimal. Padrões: `0xFF404040` (texto), `0xFFFF0000` (`energy_bar`) e `0xFF00AA00` (`progress_bar`). Alpha `0` vira `0xFF`. |
 | `shadow` | não | booleano | `true` | Sombra do texto. |
 | `direction` | não | string | `up` | `up`, `down`, `left` ou `right`. |
 | `u` | não | inteiro | `-1` | Origem horizontal do sprite. Se `-1`, usa `x`. |
@@ -887,10 +888,10 @@ Regras:
 - com `controller`, cada textura declarada que não existir usa o fallback da mesma face;
 - IDs de bloco duplicados são ignorados com aviso no log.
 
-Os exemplos embutidos mostram os dois casos:
+O repositório não inclui JSONs em `src/main/resources/data`, então o scanner registra 0 controllers por padrão. Para testar os dois casos, adicione seus próprios JSONs:
 
-- `assembler`: tem `controller`, usa texturas próprias;
-- `a`: não tem `controller`, usa o próprio ID e texturas fallback.
+- com `controller`: o bloco é criado em `controller.block` e usa as texturas declaradas;
+- sem `controller`: o bloco é criado no próprio `id` e usa as texturas fallback.
 
 Adicionar ou remover um controller dinâmico exige recompilar o mod (quando o JSON está no jar) e reiniciar o jogo/servidor. `/reload` recarrega definições, mas não registra nem remove blocos.
 
@@ -898,11 +899,11 @@ Adicionar ou remover um controller dinâmico exige recompilar o mod (quando o JS
 
 Para cada controller dinâmico, o cliente recebe um resource pack interno, hidden, no topo da pilha:
 
-- blockstate com 8 variantes `facing` × `formed`;
+- blockstate com 16 variantes `facing` × `formed` × `processing`;
 - modelo de bloco `minecraft:block/cube` com as seis texturas;
 - modelo de item;
 - item definition `minecraft:model`;
-- lang `en_us` com as chaves `block.<namespace>.<path>` e `gui.<namespace>.<path>` para o bloco e para a definição, mesclada com a lang base do mod.
+- lang `en_us` e `pt_br` com as chaves `block.<namespace>.<path>` e `gui.<namespace>.<path>` para o bloco e para a definição, mesclada com a lang base do mod.
 
 O pack é montado em memória; nenhum arquivo é gravado em disco. O pack gerado tem prioridade sobre assets estáticos do mesmo ID.
 
@@ -911,7 +912,7 @@ Não são gerados:
 - texturas: não são geradas; as declaradas precisam existir em `assets/<namespace>/textures/block/...`, e cada face ausente usa `fallback`;
 - loot table: `getDrops` retorna o próprio item;
 - textura de GUI;
-- traduções além de `en_us`.
+- traduções além de `en_us` e `pt_br`.
 
 Para controllers manuais (seção 9.5), o pack não gera nada; todos os assets precisam existir.
 
@@ -935,7 +936,9 @@ Para controllers manuais (seção 9.5), o pack não gera nada; todos os assets p
 |---|---:|---|---|
 | `block` | sim | identifier | Bloco registrado que seja `MultiblockControllerBlock` e cujo `definitionId` seja igual ao `id` do JSON. |
 | `textures` | sim | objeto | Seis identificadores: `front`, `back`, `left`, `right`, `top`, `bottom`. |
-| `particle` | não | identifier | Identificador de partícula. |
+| `formed_textures` | não | objeto | As mesmas seis chaves, todas opcionais; sobrescreve a textura da face quando a máquina está formada. |
+| `particle` | não | identifier | Identificador de partícula. Usa `front` quando omitido ou quando a textura não existe. |
+| `light_level` | não | inteiro | `0` a `15`; luz emitida enquanto `processing=true` (0 caso contrário). |
 
 `controller` é opcional. Se existir, `textures` é obrigatório.
 
@@ -945,7 +948,7 @@ Em um datapack externo, `controller.block` não cria bloco: ele precisa apontar 
 
 As texturas e a partícula:
 
-- em controller dinâmico, geram o blockstate/modelo do bloco; `particle` usa `front` quando omitido;
+- em controller dinâmico, geram o blockstate/modelo do bloco; `particle` usa `front` quando omitido ou quando a textura não existe;
 - o fallback de cada face usa o sufixo `_off` fora de processamento e `_on` durante o processamento;
 - em controller Java manual, continuam validadas, mas a aparência vem do blockstate/modelo próprio do bloco.
 
@@ -1090,26 +1093,35 @@ assets/minhamod/lang/pt_br.json
 data/minhamod/loot_table/blocks/minha_maquina.json
 ```
 
-Para controllers dinâmicos empacotados, blockstate, modelo, modelo de item, item definition e lang `en_us` são gerados automaticamente (seção 9.2); ainda é necessário fornecer as texturas.
+Para controllers dinâmicos empacotados, blockstate, modelo, modelo de item, item definition e lang `en_us`/`pt_br` são gerados automaticamente (seção 9.2); ainda é necessário fornecer as texturas.
 
-O controller tem duas propriedades de blockstate:
+O controller tem três propriedades de blockstate:
 
 - `facing`: `north`, `south`, `east` ou `west`;
-- `formed`: `true` ou `false`.
+- `formed`: `true` ou `false`;
+- `processing`: `true` ou `false`.
 
-O blockstate precisa cobrir as 8 combinações:
+O blockstate precisa cobrir as 16 combinações:
 
 ```json
 {
   "variants": {
-    "facing=north,formed=false": { "model": "minhamod:block/minha_maquina" },
-    "facing=north,formed=true":  { "model": "minhamod:block/minha_maquina" },
-    "facing=south,formed=false": { "model": "minhamod:block/minha_maquina" },
-    "facing=south,formed=true":  { "model": "minhamod:block/minha_maquina" },
-    "facing=east,formed=false":  { "model": "minhamod:block/minha_maquina" },
-    "facing=east,formed=true":   { "model": "minhamod:block/minha_maquina" },
-    "facing=west,formed=false":  { "model": "minhamod:block/minha_maquina" },
-    "facing=west,formed=true":   { "model": "minhamod:block/minha_maquina" }
+    "facing=north,formed=false,processing=false": { "model": "minhamod:block/minha_maquina" },
+    "facing=north,formed=false,processing=true":  { "model": "minhamod:block/minha_maquina" },
+    "facing=north,formed=true,processing=false":  { "model": "minhamod:block/minha_maquina" },
+    "facing=north,formed=true,processing=true":   { "model": "minhamod:block/minha_maquina" },
+    "facing=south,formed=false,processing=false": { "model": "minhamod:block/minha_maquina" },
+    "facing=south,formed=false,processing=true":  { "model": "minhamod:block/minha_maquina" },
+    "facing=south,formed=true,processing=false":  { "model": "minhamod:block/minha_maquina" },
+    "facing=south,formed=true,processing=true":   { "model": "minhamod:block/minha_maquina" },
+    "facing=east,formed=false,processing=false":  { "model": "minhamod:block/minha_maquina" },
+    "facing=east,formed=false,processing=true":   { "model": "minhamod:block/minha_maquina" },
+    "facing=east,formed=true,processing=false":   { "model": "minhamod:block/minha_maquina" },
+    "facing=east,formed=true,processing=true":    { "model": "minhamod:block/minha_maquina" },
+    "facing=west,formed=false,processing=false":  { "model": "minhamod:block/minha_maquina" },
+    "facing=west,formed=false,processing=true":   { "model": "minhamod:block/minha_maquina" },
+    "facing=west,formed=true,processing=false":   { "model": "minhamod:block/minha_maquina" },
+    "facing=west,formed=true,processing=true":    { "model": "minhamod:block/minha_maquina" }
   }
 }
 ```
@@ -1191,22 +1203,24 @@ A definição da máquina precisa ter:
 
 ```json
 "type": "recipe",
-"recipe_type": "infinity_nexus_multiblock:nexus_smelting"
+"recipe_type": "infinity_nexus_multiblock:exemplo_smelting"
 ```
 
 A receita precisa ter exatamente o mesmo ID:
 
 ```json
-"type": "infinity_nexus_multiblock:nexus_smelting"
+"type": "infinity_nexus_multiblock:exemplo_smelting"
 ```
 
-O mod registra no startup um `RecipeType` e um `RecipeSerializer` para cada `recipe_type` único usado por controllers empacotados no namespace `infinity_nexus_multiblock`. O ID do tipo e o ID do serializer são iguais, então `type` da receita e `recipe_type` da definição usam o mesmo valor. Atualmente existe apenas `infinity_nexus_multiblock:nexus_smelting`; para criar outro tipo, adicione um controller empacotado que declare o novo `recipe_type` e reinicie o jogo/servidor (sem alterar Java). Datapacks podem reutilizar um tipo registrado, mas não podem criar tipos novos.
+`exemplo_smelting` é apenas um nome de exemplo: ele só é registrado se um controller empacotado declarar esse `recipe_type` (veja a seção 15.1).
+
+O mod registra no startup um `RecipeType` e um `RecipeSerializer` para cada `recipe_type` único usado por controllers empacotados no namespace `infinity_nexus_multiblock`. O ID do tipo e o ID do serializer são iguais, então `type` da receita e `recipe_type` da definição usam o mesmo valor. Não há lista fixa: nesta build, sem JSONs empacotados, nenhum tipo é registrado. Para criar um tipo, adicione um controller empacotado que declare o novo `recipe_type` e reinicie o jogo/servidor (sem alterar Java). Datapacks podem reutilizar um tipo registrado, mas não podem criar tipos novos.
 
 ### 10.2 Campos da receita
 
 | Campo | Obrigatório | Tipo | Padrão | Regras |
 |---|---:|---|---|---|
-| `type` | sim | string | — | ID de um `recipe_type` registrado pelo mod; atualmente `infinity_nexus_multiblock:nexus_smelting`. |
+| `type` | sim | string | — | ID de um `recipe_type` registrado pelo mod (veja a seção 10.1); não há tipos embutidos nesta build. |
 | `ingredients` | não | lista | `[]` | Lista de `Ingredient`. |
 | `fluid_ingredients` | não | lista | `[]` | Lista de `SizedFluidIngredient`. |
 | `output` | sim | objeto | — | Saída tipada `item`, `fluid` ou `entity`; `result` legado ainda é aceito para item. |
@@ -1304,7 +1318,7 @@ Saída de entidade:
 |---|---:|---|---|---|
 | `type` | sim | string | — | `item`, `fluid` ou `entity`. |
 | `id` | sim | identifier | — | Item, fluido ou tipo de entidade de saída. |
-| `count` | não | inteiro | `1` | Apenas `item`; de `1` a `99`. |
+| `count` | não | inteiro | `1` | Apenas `item`; de `1` a `99`. Na prática, o slot de saída limita a `64`, então valores acima disso não cabem. |
 | `components` | não | objeto | vazio | Apenas `item`; patch de data components. |
 | `amount` | sim | inteiro | — | Apenas `fluid`; positivo, em mB. |
 | `spawn` | sim | string | — | Apenas `entity`; símbolo do pattern, ID de bloco ou `#tag`. |
@@ -1451,7 +1465,7 @@ Se o bloco não tiver propriedades, a linha de `state` não é enviada. Os valor
   "id": "minhamod:fornalha_base",
   "template": true,
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "capabilities": {
     "energy": {
       "id": "energy",
@@ -1506,7 +1520,7 @@ Se o bloco não tiver propriedades, a linha de `state` não é enviada. Os valor
 }
 ```
 
-O filho herda `type`, `recipe_type` e `capabilities.energy`, mas troca `capacity` e `max_receive` via `overrides`.
+O filho herda `type`, `recipe_type` e `capabilities.energy`, mas troca `capacity` e `max_receive` via `overrides`. O `recipe_type` usado é ilustrativo: ele só existe se um controller empacotado o declarar (seção 10.1).
 
 ### 11.2 Regras de merge
 
@@ -1599,7 +1613,7 @@ A exportação normaliza posições e states para a orientação canônica `SOUT
 5. Adicione `item_slots`, `capabilities`, `gui` e `controller` conforme necessário.
 6. Rode `/reload` para recarregar a definição. Se o JSON for criar um controller dinâmico novo, ele precisa estar empacotado no mod e o jogo/servidor precisa ser reiniciado; `/reload` sozinho não registra o bloco.
 
-Exemplo de export limpo no projeto: [`a.json`](../../src/main/resources/data/infinity_nexus_multiblock/multiblock/a.json). O `id` foi ajustado para `infinity_nexus_multiblock:a` para bater com o nome do arquivo.
+Não há um exemplo exportado no repositório; use o JSON do clipboard como ponto de partida.
 
 ### 13.5 Limitações da exportação
 
@@ -1638,7 +1652,7 @@ Os arquivos ficam em [`exemplos/`](exemplos/).
 |---|---|
 | [`exemplo_storage.json`](exemplos/exemplo_storage.json) | `type=storage`, item slots com filtros/limites/faces, energia, fluido e GUI customizada com slots via `x`/`y`. |
 | [`exemplo_recipe.json`](exemplos/exemplo_recipe.json) | `type=recipe`, dois inputs, um output, energia, fluido e GUI padrão com barra de progresso. |
-| [`exemplo_recipe_iron.json`](exemplos/exemplo_recipe_iron.json) | Receita `nexus_smelting` com dois ingredientes de item, um de fluido, energia e tempo. |
+| [`exemplo_recipe_iron.json`](exemplos/exemplo_recipe_iron.json) | Receita de exemplo (tipo `exemplo_smelting`) com dois ingredientes de item, um de fluido, energia e tempo. |
 
 ### 15.1 Como testar
 
@@ -1654,28 +1668,21 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 3. Coloque o datapack em `world/datapacks`.
 4. Rode `/reload`.
 
-Os exemplos não têm `controller` no JSON. Em um datapack, isso significa que eles **não criam blocos**: para jogar, use um controller já registrado com o `definitionId` correspondente ou registre um controller Java (seção 9.5). Para testar sem Java, copie o pattern para a definição de um controller dinâmico existente, como `assembler.json` ou `a.json`, mantendo o `id` e o caminho do arquivo.
+Os exemplos não têm `controller` no JSON. Em um datapack, isso significa que eles **não criam blocos**: registre um controller Java (seção 9.5) ou empacote os exemplos no jar do mod. Se você adicionar os exemplos ao jar em `data/infinity_nexus_multiblock/multiblock`, eles passam a criar controllers dinâmicos no startup e o `recipe_type` `infinity_nexus_multiblock:exemplo_smelting` é registrado; nesse caso, recompile e reinicie.
 
-Se você adicionar os exemplos ao jar do mod em `data/infinity_nexus_multiblock/multiblock`, eles passam a criar controllers dinâmicos no startup; nesse caso, recompile e reinicie.
+### 15.2 Sobrescrever uma definição existente
 
-### 15.2 Sobrescrever um controller dinâmico existente
-
-Não há controller estático embutido. Para testar outro pattern com um bloco já existente, sobrescreva a definição de `assembler` ou `a` em um datapack:
+Não há controller dinâmico embutido para sobrescrever nesta build. Se você já adicionou um JSON ao jar e reiniciou o jogo, pode sobrescrever a definição em um datapack usando o mesmo caminho:
 
 ```text
-data/infinity_nexus_multiblock/multiblock/assembler.json
+data/infinity_nexus_multiblock/multiblock/<arquivo>.json
 ```
 
 Como o bloco já existe, basta `/reload`; não é preciso reiniciar. Para um controller novo, use a criação dinâmica (seção 9.1) ou registre em Java como API de extensão (seção 9.5).
 
 ### 15.3 Controllers dinâmicos embutidos
 
-Os controllers `assembler` e `a` são empacotados no mod e funcionam sem registro Java:
-
-- `assembler` tem `controller` com texturas próprias;
-- `a` não tem `controller` e usa o próprio ID com texturas fallback da pasta `fallback`.
-
-Para adicionar outro controller dinâmico, coloque o JSON em `src/main/resources/data/infinity_nexus_multiblock/multiblock/`, recompile e reinicie. Um datapack sozinho não cria o bloco.
+Esta build não inclui controllers dinâmicos empacotados. Para adicionar um, coloque o JSON em `src/main/resources/data/infinity_nexus_multiblock/multiblock/`, recompile e reinicie. Um datapack sozinho não cria o bloco.
 
 ## 16. Erros comuns
 
@@ -1703,6 +1710,7 @@ Para adicionar outro controller dinâmico, coloque o JSON em `src/main/resources
 | `Item slot id cannot be blank` | `id` vazio. | Use um ID não vazio. |
 | `Item slot ... must define both x and y` | Só um dos dois. | Informe os dois ou nenhum. |
 | `Slot position cannot be negative` | `x`/`y` negativo. | Use valores `>= 0`. |
+| `Capability port symbol 'X' is not used by the pattern` | Símbolo de `capability_ports` não existe no pattern. | Use um símbolo presente ou ajuste o pattern. |
 | `Unknown item` | ID de item no filtro inexistente. | Confira o registro. |
 | `Duplicate fluid tank id` | Tanques com mesmo ID. | Use IDs únicos. |
 | `Energy capability id conflicts with a fluid tank id` | `energy.id` igual a um tanque. | Troque um dos IDs. |
@@ -1729,7 +1737,7 @@ Para adicionar outro controller dinâmico, coloque o JSON em `src/main/resources
 
 O log fica em `logs/latest.log`.
 
-Se a definição está em um datapack e o log mostra `Unknown controller block`, o datapack não pode criar esse bloco. Use um controller dinâmico que já veio no mod, empacote o JSON no jar do mod ou registre o bloco em Java.
+Se a definição está em um datapack e o log mostra `Unknown controller block`, o datapack não pode criar esse bloco. Empacote o JSON no jar do mod ou registre o bloco em Java.
 
 ## 17. Checklist final
 
@@ -1747,8 +1755,8 @@ Antes de testar, confirme:
 - [ ] Para controller dinâmico: o JSON está empacotado no jar, no namespace `infinity_nexus_multiblock`.
 - [ ] Para controller Java: o bloco tem `definitionId` igual ao `id`.
 - [ ] As texturas do controller existem em `assets/<namespace>/textures/block/...`.
-- [ ] Para controller manual: o blockstate cobre `facing` e `formed`, e modelo/loot/lang existem.
-- [ ] Para controller dinâmico: blockstate, modelo, item e lang `en_us` são gerados; não é preciso criá-los.
+- [ ] Para controller manual: o blockstate cobre `facing`, `formed` e `processing`, e modelo/loot/lang existem.
+- [ ] Para controller dinâmico: blockstate, modelo, item e lang `en_us`/`pt_br` são gerados; não é preciso criá-los.
 - [ ] Se adicionou/removeu um controller dinâmico, reiniciou o jogo/servidor; `/reload` não registra blocos.
 - [ ] `item_slots` tem IDs únicos e filtros válidos.
 - [ ] `x`/`y` aparecem juntos.
@@ -1768,15 +1776,15 @@ Antes de testar, confirme:
 ### 18.1 Controllers e registro
 
 - A criação dinâmica de controllers só ocorre no startup e apenas para JSONs dentro do jar do mod, no namespace `infinity_nexus_multiblock`; datapacks externos não criam blocos.
-- O mod não registra blocos controller manualmente; todos os controllers embutidos são criados a partir de JSONs empacotados.
+- O mod não registra blocos controller manualmente; controllers dinâmicos são criados a partir de JSONs empacotados (esta build não inclui nenhum).
 - O antigo bloco estático `nexus_core` foi removido. Mundos criados com versões anteriores podem perder esses blocos e gerar avisos de registry ao carregar; faça backup antes de atualizar.
 - Adicionar ou remover um controller dinâmico exige recompilar o mod (quando o JSON está no jar) e reiniciar o jogo/servidor; `/reload` não registra nem remove blocos.
 - Controllers dinâmicos usam o block entity compartilhado `dynamic_controller`; comportamento ou capabilities Java específicos exigem um controller manual.
 
 ### 18.2 Máquinas, receitas e automação
 
-- `type=recipe` processa receitas cujo `recipe_type` seja um tipo registrado pelo mod. O registro é feito no startup a partir dos controllers empacotados; hoje só `infinity_nexus_multiblock:nexus_smelting` existe. Tipos não registrados são ignorados, e datapacks não podem criar tipos novos.
-- `type=storage` já funciona como inventário/capabilities/GUI, mas não tem comportamento especializado de armazenamento dedicado. `tier` é apenas metadado (exibido no JEI, sem efeito de processamento).
+- `type=recipe` processa receitas cujo `recipe_type` seja um tipo registrado pelo mod. O registro é feito no startup a partir dos controllers empacotados; não há tipos embutidos nesta build. Tipos não registrados são ignorados, e datapacks não podem criar tipos novos.
+- `type=storage` já funciona como inventário/capabilities/GUI, mas não tem comportamento especializado de armazenamento dedicado. `tier` é apenas metadado, sem efeito de processamento.
 - Receitas produzem uma única saída `item`, `fluid` ou `entity`; não há energia como saída, subproduto, múltiplas saídas simultâneas ou chance.
 - Não há prioridade entre receitas; a primeira receita compatível encontrada é usada.
 - Energia e fluidos não têm configuração por lado; as capabilities do controller e dos membros selecionados aceitam todas as faces. `capability_ports` escolhe blocos, não faces.
@@ -1785,7 +1793,7 @@ Antes de testar, confirme:
 
 ### 18.3 Assets e reload
 
-- Em controllers dinâmicos empacotados, blockstates, modelos de bloco, modelos de item, item definitions e lang `en_us` são gerados em memória. Texturas, loot tables (o drop usa `getDrops`), texturas de GUI e traduções além de `en_us` não são geradas.
+- Em controllers dinâmicos empacotados, blockstates, modelos de bloco, modelos de item, item definitions e lang `en_us`/`pt_br` são gerados em memória. Texturas, loot tables (o drop usa `getDrops`), texturas de GUI e traduções além de `en_us`/`pt_br` não são geradas.
 - Em controllers Java manuais, `controller.textures` e `controller.particle` são validados pelo schema, mas não geram modelo; a aparência vem do blockstate/modelo próprio do bloco.
 - `/reload` recarrega definições, mas não registra/remove blocos dinâmicos nem regenera o pack de assets; para isso, reinicie o jogo/servidor (e recompile o mod quando o JSON estiver no jar).
 

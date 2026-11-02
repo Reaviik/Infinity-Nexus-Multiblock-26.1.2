@@ -10,7 +10,7 @@
   "use strict";
 
   var SCHEMA_VERSION = 1;
-  var KNOWN_RECIPE_TYPES = ["infinity_nexus_multiblock:nexus_smelting"];
+  var KNOWN_RECIPE_TYPES = [];
   var NAMESPACE_PATTERN = /^[a-z0-9_.-]+$/;
   var PATH_PATTERN = /^[a-z0-9_./-]+$/;
   var ITEM_SLOT_ROLES = ["input", "output", "fuel", "upgrade", "component", "storage", "fluid"];
@@ -2294,7 +2294,7 @@
       namespace: "infinity_nexus_multiblock",
       path: "alloy_smelter",
       type: "recipe",
-      recipeType: "infinity_nexus_multiblock:nexus_smelting",
+      recipeType: "infinity_nexus_multiblock:exemplo_smelting",
       tier: 1,
       priority: 0,
       inventoryRows: 3,

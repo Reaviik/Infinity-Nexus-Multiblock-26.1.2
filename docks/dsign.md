@@ -7,14 +7,14 @@
 - Matchers aceitam ID de bloco (`minecraft:iron_block`), tag (`#namespace:tag`) ou objeto com `block`/`tag` e `state` para blockstates específicos.
 - No criativo, `shift+click` em um controller exporta a estrutura conectada (limite configurável em `export.pattern_scan_limit`, padrão 256 blocos) como JSON no clipboard, contendo apenas `schema_version`, `id`, `type` e `pattern` com blockstates normalizados para a orientação canônica (controller virado para `south`).
 - `schema_version`, `id`, `type`, `recipe_type` e `tier` já são lidos e validados.
-- `type=recipe` processa receitas próprias de qualquer `recipe_type` registrado pelo mod, com duração, energia e progresso persistido. O mod registra um `RecipeType` + serializer por `recipe_type` único dos controllers empacotados; atualmente `infinity_nexus_multiblock:nexus_smelting`. Tipos não registrados são ignorados.
+- `type=recipe` processa receitas próprias de qualquer `recipe_type` registrado pelo mod, com duração, energia e progresso persistido. O mod registra um `RecipeType` + serializer por `recipe_type` único dos controllers empacotados no namespace `infinity_nexus_multiblock`; esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão. Tipos não registrados são ignorados.
 - GUI data-driven e menu customizado já estão implementados, incluindo `progress_bar` e `arrow`; o `controller` e as seis texturas por face são carregados do JSON e usados no modelo gerado dos controllers dinâmicos; controllers manuais usam assets próprios.
 - Receitas vanilla estão adiadas; veja “Receitas vanilla (adiado)”.
-- O inventário usa `RestrictedItemStackHandler` e a capability de item é exposta no controller e em qualquer bloco membro formado.
+- O inventário usa `RestrictedItemStackHandler` e a capability de item é exposta no controller e nos blocos membros formados, sujeita a `capability_ports`.
 - `item_slots` data-driven já aplica roles, filtros, limites e faces no handler; a GUI posiciona os slots conforme `x`/`y` do próprio slot.
 - O controller usa `MultiblockMenu`/`MultiblockScreen`; sem `gui.elements`, um layout padrão é gerado.
-- Capabilities genéricas de energia e fluidos já são criadas a partir de `capabilities`, expostas em todas as faces e persistidas no NBT do controller.
-- `capabilities` não é reconfigurado em controllers existentes por `/reload`; as capabilities são criadas junto com o block entity.
+- Capabilities genéricas de energia e fluidos já são criadas a partir de `capabilities`, expostas em todas as faces (sujeitas a `capability_ports`) e persistidas no NBT do controller.
+- `/reload` não reconfigura o armazenamento de energia/fluidos já existente, mas cria capabilities que passaram a existir e remove as que deixaram de existir; o layout da GUI é recalculado a partir da definição.
 
 ## Objetivo
 
@@ -61,18 +61,18 @@ Regras:
   "schema_version": 1,
   "id": "infinity_nexus_multiblock:example_controller",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "tier": 1,
   "inventory_rows": 3,
   "controller": {
     "block": "infinity_nexus_multiblock:example_controller",
     "textures": {
-      "front": "infinity_nexus_multiblock:block/assembler/front",
-      "back": "infinity_nexus_multiblock:block/assembler/back",
-      "left": "infinity_nexus_multiblock:block/assembler/left",
-      "right": "infinity_nexus_multiblock:block/assembler/right",
-      "top": "infinity_nexus_multiblock:block/assembler/top",
-      "bottom": "infinity_nexus_multiblock:block/assembler/bottom"
+      "front": "infinity_nexus_multiblock:block/example_controller/front",
+      "back": "infinity_nexus_multiblock:block/example_controller/back",
+      "left": "infinity_nexus_multiblock:block/example_controller/left",
+      "right": "infinity_nexus_multiblock:block/example_controller/right",
+      "top": "infinity_nexus_multiblock:block/example_controller/top",
+      "bottom": "infinity_nexus_multiblock:block/example_controller/bottom"
     }
   },
   "capabilities": {
@@ -133,12 +133,12 @@ O exemplo acima omite `item_slots` e `gui`; ambos são opcionais. Sem `gui.eleme
 "controller": {
   "block": "infinity_nexus_multiblock:example_controller",
   "textures": {
-    "front": "infinity_nexus_multiblock:block/assembler/front",
-    "back": "infinity_nexus_multiblock:block/assembler/back",
-    "left": "infinity_nexus_multiblock:block/assembler/left",
-    "right": "infinity_nexus_multiblock:block/assembler/right",
-    "top": "infinity_nexus_multiblock:block/assembler/top",
-    "bottom": "infinity_nexus_multiblock:block/assembler/bottom"
+    "front": "infinity_nexus_multiblock:block/example_controller/front",
+    "back": "infinity_nexus_multiblock:block/example_controller/back",
+    "left": "infinity_nexus_multiblock:block/example_controller/left",
+    "right": "infinity_nexus_multiblock:block/example_controller/right",
+    "top": "infinity_nexus_multiblock:block/example_controller/top",
+    "bottom": "infinity_nexus_multiblock:block/example_controller/bottom"
   }
 }
 ```
@@ -150,7 +150,7 @@ O exemplo acima omite `item_slots` e `gui`; ambos são opcionais. Sem `gui.eleme
 - Para blocos que não rotacionam, pode ser usada uma variante absoluta com `north`, `south`, `east`, `west`, `up` e `down`; não misturar as duas convenções.
 - Caminhos de blocos: `namespace:block/caminho` corresponde a `assets/<namespace>/textures/block/caminho.png`.
 - Opcional: `particle` para a partícula do bloco.
-- Opcional futuro: `formed_textures` com as mesmas seis chaves para mudar a aparência quando formado.
+- Opcional: `formed_textures` com as mesmas seis chaves para mudar a aparência quando formado; o loader gera modelos `_formed`/`_formed_on` separados.
 
 Para controllers dinâmicos empacotados, as texturas do JSON alimentam o blockstate e o modelo gerados em memória pelo loader. O mod não possui controller estático embutido; controllers manuais de addons usam o blockstate/modelo próprios em `assets`.
 
@@ -164,7 +164,7 @@ A GUI é montada em `MultiblockMenuLayout`, criado no servidor a partir da defin
 
 ```json
 "gui": {
-  "texture": "infinity_nexus_multiblock:textures/gui/assembler.png",
+  "texture": "infinity_nexus_multiblock:textures/gui/example_controller.png",
   "width": 176,
   "height": 166,
   "texture_width": 256,
@@ -186,12 +186,12 @@ A GUI é montada em `MultiblockMenuLayout`, criado no servidor a partir da defin
 Usado quando não há `gui.elements`:
 
 - gera a quantidade de `item_slots` (ou `inventory_rows * 9` quando `item_slots` está ausente);
-- posiciona os slots em uma grade de 9 colunas;
+- respeita `x`/`y` dos slots que caibam em `176x166` e distribui os demais em grade de 9 colunas (ou 8 quando há barras de energia/fluido ou barra de progresso);
 - coloca o inventário do jogador abaixo dos slots;
 - adiciona o título no topo;
 - adiciona uma barra para `energy` e uma para cada tank de fluido, à esquerda dos slots;
 - adiciona uma barra de progresso à direita dos slots quando `type=recipe` e `recipe_type` está definido;
-- aumenta `width`/`height` se as barras ou o inventário não couberem nas dimensões de `gui`.
+- usa largura fixa `176` e altura calculada para caber tudo (mínimo `166`).
 
 ### Layout customizado
 
@@ -208,7 +208,7 @@ Com `gui.elements` não vazio:
 - slots com `x`/`y`, inventário do jogador e barras precisam caber em `width`/`height`;
 - slots sem coordenadas não são reposicionados automaticamente: ficam ocultos e disponíveis apenas para automação.
 
-`/reload` atualiza a definição e o layout de novos controllers; um controller já criado mantém o layout e as capabilities atuais.
+`/reload` atualiza a definição; o layout da GUI é recalculado e capabilities ausentes podem ser criadas, mas armazenamentos de energia/fluidos já existentes não são reconfigurados.
 
 ## Capabilities
 
@@ -353,7 +353,7 @@ Elementos implementados ficam em `gui.elements`. Campos comuns:
 ```json
 {
   "type": "title",
-  "text": "gui.infinity_nexus_multiblock.assembler",
+  "text": "gui.infinity_nexus_multiblock.example_controller",
   "x": 8,
   "y": 6,
   "color": 4282400832,
@@ -555,6 +555,8 @@ Planejado:
 
 ## Tipos de máquina, tiers e receitas compartilhadas
 
+Nesta build, `tier` é apenas metadado e não altera estatísticas nem capacidades; o restante desta seção descreve o comportamento planejado.
+
 ### Decisão de arquitetura
 
 Cada tier terá seu próprio `id` de definição, mas todos os tiers da mesma máquina compartilharão o mesmo `recipe_type`. O `tier` não será usado para localizar receitas; ele apenas altera estatísticas e capacidades. Para evitar duplicação de GUI, capabilities e elementos, a definição usa `extends`/`family` apontando para um template da library core.
@@ -575,7 +577,7 @@ Exemplo com três tiers:
 {
   "id": "mymod:alloy_smelter_basic",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "tier": 1
 }
 ```
@@ -584,7 +586,7 @@ Exemplo com três tiers:
 {
   "id": "mymod:alloy_smelter_advanced",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "tier": 2
 }
 ```
@@ -593,7 +595,7 @@ Exemplo com três tiers:
 {
   "id": "mymod:alloy_smelter_elite",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "tier": 3
 }
 ```
@@ -602,7 +604,7 @@ Os três IDs são diferentes, mas o `recipe_type` é o mesmo. O mod registra ess
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:iron_ingot",
     "minecraft:copper_ingot"
@@ -640,11 +642,11 @@ Se uma receita for exclusiva de tier, isso deve ser uma condição da receita, p
 
 ### Receitas próprias (tipos registrados dinamicamente)
 
-Implementado para receitas em `data/<namespace>/recipe/<arquivo>.json` com `type` igual a um `recipe_type` registrado pelo mod. No startup, cada `recipe_type` único declarado por um controller empacotado no namespace `infinity_nexus_multiblock` gera um `RecipeType` e um `RecipeSerializer` com o mesmo ID; atualmente o tipo embutido é `infinity_nexus_multiblock:nexus_smelting`:
+Implementado para receitas em `data/<namespace>/recipe/<arquivo>.json` com `type` igual a um `recipe_type` registrado pelo mod. No startup, cada `recipe_type` único declarado por um controller empacotado no namespace `infinity_nexus_multiblock` gera um `RecipeType` e um `RecipeSerializer` com o mesmo ID. Esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão; os exemplos abaixo usam `exemplo_smelting` apenas como nome ilustrativo:
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:iron_ore"
   ],
@@ -668,7 +670,7 @@ Exemplo com fluidos:
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:iron_ore",
     "minecraft:gold_ore",
@@ -688,7 +690,7 @@ Exemplo com fluidos:
 }
 ```
 
-Exemplo embutido: `data/infinity_nexus_multiblock/recipe/iron_ingot_from_iron_ore.json`.
+Não há receita embutida nesta build; use um tipo registrado por um controller empacotado.
 
 A definição precisa de slots `input` para ingredientes de item e de um slot `output` para saída de item. Saídas de fluido exigem tanque e saídas de entidade exigem um `spawn` válido no pattern; esses casos não exigem slot de saída de item. O matching é shapeless: cada ingrediente procura qualquer slot de role `input` que contenha um item aceito, sem ordem fixa, e cada slot satisfaz no máximo um ingrediente por craft. Filtros de `item_slots` continuam limitando o que pode entrar em cada slot. A saída de item vai para o primeiro slot `output` compatível, a de fluido para o primeiro tanque compatível e a entidade spawna acima do bloco indicado. Cada craft consome uma unidade de cada ingrediente. Se houver `fluid_ingredients`, a receita só inicia com todos os fluidos disponíveis e cada craft consome `amount` mB do tanque que contém o fluido. O custo de energia é distribuído por tick e o craft pausa sem energia suficiente.
 
@@ -733,7 +735,7 @@ Um arquivo base contém o comportamento e a aparência compartilhados:
   "id": "mymod:alloy_smelter_template",
   "template": true,
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "gui": {
     "elements": []
   },
@@ -857,7 +859,7 @@ O loader valida:
 - [x] Implementar energy e fluid genéricos.
 - [x] Criar menu customizado e tela.
 - [x] Adicionar `player_inventory`, slots e títulos.
-- [x] Adicionar receita própria `nexus_smelting` e registro dinâmico de tipos a partir dos controllers empacotados.
+- [x] Registro dinâmico de tipos a partir dos controllers empacotados (sem tipo embutido nesta build).
 - [x] Adicionar progresso, energia por tick e sincronização.
 - [x] Adicionar `progress_bar`.
 - [x] Adicionar `arrow` com sprite e `u`/`v` opcionais.

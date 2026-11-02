@@ -12,7 +12,7 @@ Implementado:
 - `schema_version`, `id`, `type`, `recipe_type` e `tier` lidos e validados;
 - controllers dinâmicos criados no startup a partir de JSONs empacotados no mod, com bloco, item e block entity automáticos;
 - `controller` opcional: com ele, o bloco usa o ID e as texturas declaradas; texturas ausentes caem para o fallback por face; sem ele, usa o próprio `id` e texturas fallback;
-- nenhum bloco controller registrado manualmente pelo mod; todos os controllers embutidos vêm de JSON;
+- nenhum bloco controller registrado manualmente pelo mod; controllers dinâmicos vêm de JSON empacotado no jar (esta build não inclui nenhum);
 - seis texturas semânticas por face (`front`, `back`, `left`, `right`, `top`, `bottom`), usadas no modelo gerado dos controllers dinâmicos;
 - formação, rotação, invalidação e persistência da estrutura;
 - prioridade para resolver sobreposição entre multiblocos e revalidação no primeiro tick após carregar;
@@ -30,9 +30,9 @@ Implementado:
 - montagem automática ao clicar em um controller não formado, usando blocos compatíveis do inventário;
 - exportação da estrutura conectada para JSON no clipboard com `shift+click` no criativo, limitada ao `export.pattern_scan_limit` (padrão 256);
 - matchers com blockstate específico, além de bloco e tag;
-- assets gerados em memória para controllers dinâmicos: blockstate, modelo de bloco, modelo de item, item definition e lang `en_us`;
-- JEI cria uma categoria e um catalisador por controller dinâmico do tipo `recipe`, mostrando apenas as receitas compatíveis com a definição daquele controller; controllers `storage` e definições sem controller não geram categoria JEI;
-- o layout do JEI usa as posições de `item_slots` x/y e os elementos `slot`, `fluid_bar`, `energy_bar`, `arrow` e `title` de `gui.elements`; o fundo é `textures/gui/jei_base.png` e fallbacks só são usados quando a posição não existe;
+- assets gerados em memória para controllers dinâmicos: blockstate, modelo de bloco, modelo de item, item definition e lang `en_us`/`pt_br`;
+- JEI cria uma categoria de estrutura e um catalisador por controller dinâmico; controllers `type=recipe` também geram uma categoria de receitas filtrada pelo `recipe_type`, e definições sem controller não geram nada;
+- a categoria de receita usa as posições de `item_slots` x/y e os elementos `slot`, `fluid_bar`, `energy_bar`, `arrow` e `title` de `gui.elements`, com fundo `textures/gui/jei_base.png`; a categoria de estrutura usa um painel próprio;
 - clicar na seta ou na barra de progresso da GUI abre a categoria de receitas daquele controller no JEI;
 - transferência de itens do JEI para os slots `input` compatíveis; fluidos precisam ser inseridos manualmente;
 - controllers dropam o próprio item via `getDrops`, sem exigir loot table;
@@ -47,7 +47,7 @@ Ainda planejado:
 
 - comportamento especializado de `type=storage` além do inventário/capabilities/GUI atual;
 - adaptadores para receitas vanilla;
-- geração de assets para controllers dinâmicos em outros idiomas além de `en_us`.
+- geração de assets para controllers dinâmicos em outros idiomas além de `en_us` e `pt_br`.
 
 A especificação completa fica em [`docks/dsign.md`](docks/dsign.md). O guia passo a passo para criadores de datapacks, com todos os campos e exemplos completos, fica em [`docks/wiki/README.md`](docks/wiki/README.md). As seções abaixo documentam apenas o formato atualmente implementado.
 
@@ -102,7 +102,7 @@ Para cada definição válida nesse namespace, ele registra automaticamente um b
 
 - `controller` é opcional. Com ele, o bloco é criado em `controller.block` e usa `definitionId = id`; sem ele, o bloco é criado no próprio `id`.
 - `controller.textures` alimenta o modelo gerado; cada textura ausente usa o fallback correspondente da pasta `fallback`. Sem `controller`, todas usam fallback. O fallback usa `_off` fora de processamento e `_on` durante o processamento (`front_off`, `front_on`, etc.).
-- todos os controllers embutidos são dinâmicos; não há bloco controller estático.
+- esta build não inclui controllers dinâmicos; não há bloco controller estático.
 - Apenas JSONs dentro do jar do mod e no namespace `infinity_nexus_multiblock` criam blocos. Datapacks externos carregam definições, mas não registram blocos novos.
 - Adicionar/remover um controller dinâmico exige recompilar o mod quando o JSON estiver no jar e reiniciar o jogo/servidor; `/reload` não registra blocos.
 
@@ -156,7 +156,7 @@ my_datapack/
   "schema_version": 1,
   "id": "mymod:alloy_smelter",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "tier": 1,
   "controller": {
     "block": "mymod:alloy_smelter",
@@ -205,7 +205,7 @@ Campos:
 - `pattern.anchor`: símbolo que representa o controller. O padrão é `C`.
 - `pattern.matchers`: mapa de símbolo para bloco ou tag.
 
-`type=recipe` executa receitas cujo `type` seja igual ao `recipe_type` da definição. O mod registra um `RecipeType` e um serializer por `recipe_type` único encontrado nos controllers empacotados; atualmente o único tipo é `infinity_nexus_multiblock:nexus_smelting`. Datapacks podem reutilizar um tipo registrado, mas não criar tipos novos. `type=storage` e `tier` continuam apenas como metadados. As receitas vanilla estão adiadas.
+`type=recipe` executa receitas cujo `type` seja igual ao `recipe_type` da definição. O mod registra um `RecipeType` e um serializer por `recipe_type` único encontrado nos controllers empacotados; esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão. Datapacks podem reutilizar um tipo registrado, mas não criar tipos novos. `type=storage` e `tier` continuam apenas como metadados. As receitas vanilla estão adiadas.
 
 ### Herança e templates (`extends`/`family`)
 
@@ -219,7 +219,7 @@ Template compartilhado:
   "id": "mymod:alloy_smelter_template",
   "template": true,
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:nexus_smelting",
+  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "capabilities": {
     "energy": {
       "id": "energy",
@@ -336,9 +336,9 @@ Acesso padrão por role:
 
 O filtro e o limite valem também para o menu do jogador. As restrições de face valem para automação (capability/hopper); o jogador pode retirar de qualquer slot visível. Sem `item_slots`, o controller usa o inventário genérico com todas as faces acessando todos os slots.
 
-Em uma estrutura formada, a capability de item também é exposta em qualquer bloco membro. Um hopper adjacente a qualquer membro acessa o mesmo inventário do controller, respeitando as faces configuradas.
+Em uma estrutura formada, a capability de item também é exposta em qualquer bloco membro, sujeita a `capability_ports`. Um hopper adjacente a qualquer membro acessa o mesmo inventário do controller, respeitando as faces configuradas.
 
-`/reload` atualiza a definição e reconfigura o inventário de controllers já criados quando o tamanho ou os `item_slots` mudam; stacks que não cabem no novo tamanho são descartados.
+`/reload` atualiza a definição e reconfigura o inventário de controllers já criados quando a definição muda; stacks que não cabem no novo tamanho são descartados.
 
 ### Energia e fluidos (`capabilities`)
 
@@ -380,18 +380,18 @@ Em uma estrutura formada, a capability de item também é exposta em qualquer bl
 - `fluids[].max_extract`: mB liberados por extração. Padrão `0` quando omitido.
 - `fluids[].filter`: opcional; ID de fluido (`minecraft:water`) ou tag (`#c:water`). Sem filtro, o tank aceita qualquer fluido.
 
-Quando presentes, as capabilities são expostas em todas as faces do controller. O `energy.id` e os `fluids[].id` são usados pela GUI para localizar as barras, mas ainda não alteram o comportamento por lado. Energia e fluidos são persistidos no NBT do controller. `/reload` atualiza a definição, mas não recria nem reconfigura as capabilities de controllers já existentes; novos controllers usam a nova definição.
+Quando presentes, as capabilities são expostas em todas as faces do controller, sujeitas a `capability_ports`. O `energy.id` e os `fluids[].id` são usados pela GUI para localizar as barras, mas ainda não alteram o comportamento por lado. Energia e fluidos são persistidos no NBT do controller. `/reload` atualiza a definição, cria capabilities que passaram a existir e remove as que deixaram de existir; armazenamentos de energia/fluidos já existentes não são reconfigurados. Novos controllers usam a nova definição.
 
 ### GUI (`gui`)
 
 `gui` é opcional. Sem `gui` ou sem `gui.elements`, o controller usa um layout padrão com:
 
-- a quantidade de `item_slots` (ou `inventory_rows * 9` quando ausente), respeitando `x`/`y` explícitos e auto-posicionando os demais em uma grade com espaçamento de 18 px;
+- a quantidade de `item_slots` (ou `inventory_rows * 9` quando ausente), respeitando `x`/`y` explícitos que caibam em `176x166` e auto-posicionando os demais em grade de 9 colunas (ou 8 quando há barras de energia/fluido ou barra de progresso), com espaçamento de 18 px;
 - inventário do jogador abaixo dos slots;
 - título no topo;
 - uma barra para `energy` e uma para cada tank de fluido, à esquerda dos slots;
 - uma barra de progresso à direita dos slots quando `type=recipe` e `recipe_type` estiver definido;
-- largura/altura calculadas para caber tudo.
+- largura fixa `176` e altura calculada para caber tudo (mínimo `166`).
 
 Com `gui.elements` não vazio, o layout é customizado. Nesse caso:
 
@@ -416,7 +416,7 @@ Com `gui.elements` não vazio, o layout é customizado. Nesse caso:
   "texture_width": 256,
   "texture_height": 256,
   "elements": [
-    { "type": "title", "text": "gui.infinity_nexus_multiblock.assembler", "x": 8, "y": 6, "color": "0xFF404040" },
+    { "type": "title", "text": "gui.mymod.alloy_smelter", "x": 8, "y": 6, "color": "0xFF404040" },
     { "type": "energy_bar", "capability": "energy", "x": 8, "y": 17, "width": 12, "height": 52, "direction": "up" },
     { "type": "fluid_bar", "capability": "input_tank", "x": 26, "y": 17, "width": 12, "height": 52 },
     { "type": "player_inventory", "x": 8, "y": 84, "text": "container.inventory" }
@@ -453,11 +453,11 @@ Receitas próprias ficam em:
 data/<namespace>/recipe/<arquivo>.json
 ```
 
-O `recipe_type` da definição precisa corresponder a um tipo registrado pelo mod, e o `type` da receita precisa usar exatamente esse ID. No startup, o mod lê os controllers empacotados e registra um `RecipeType` + `RecipeSerializer` para cada `recipe_type` único no namespace `infinity_nexus_multiblock`, sem exigir Java extra. Atualmente o tipo registrado é `infinity_nexus_multiblock:nexus_smelting`; para adicionar outro, inclua um controller empacotado que declare o novo `recipe_type` e reinicie o jogo/servidor. Datapacks podem reutilizar um tipo registrado, mas não criar tipos novos. Exemplo embutido: `data/infinity_nexus_multiblock/recipe/iron_ingot_from_iron_ore.json`.
+O `recipe_type` da definição precisa corresponder a um tipo registrado pelo mod, e o `type` da receita precisa usar exatamente esse ID. No startup, o mod lê os controllers empacotados e registra um `RecipeType` + `RecipeSerializer` para cada `recipe_type` único no namespace `infinity_nexus_multiblock`, sem exigir Java extra. Esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão; os exemplos abaixo usam `exemplo_smelting` apenas como nome ilustrativo. Para adicionar um tipo, inclua um controller empacotado que declare o novo `recipe_type` e reinicie o jogo/servidor. Datapacks podem reutilizar um tipo registrado, mas não criar tipos novos.
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:iron_ore"
   ],
@@ -471,7 +471,7 @@ O `recipe_type` da definição precisa corresponder a um tipo registrado pelo mo
 }
 ```
 
-- `type`: obrigatório; use o mesmo ID de um `recipe_type` registrado pelo mod (atualmente `infinity_nexus_multiblock:nexus_smelting`).
+- `type`: obrigatório; use o mesmo ID de um `recipe_type` registrado pelo mod (o exemplo usa `exemplo_smelting`, que só existe se um controller empacotado o declarar).
 - `ingredients`: lista de `Ingredient`; use IDs de item, tags `#namespace:tag` ou listas aceitas pelo codec vanilla.
 - `fluid_ingredients`: opcional; lista de `SizedFluidIngredient` com `ingredient` (ID ou tag de fluido) e `amount` em mB. A máquina procura cada fluido nos tanques da definição e consome no fim do craft.
 - `output`: saída tipada. Use `type: "item"` com `id`, `count` opcional (padrão `1`) e `components` opcional; `type: "fluid"` com `id` e `amount` em mB; ou `type: "entity"` com `id` e `spawn` (símbolo do pattern, ID de bloco ou tag). O campo legado `result` continua aceito como saída de item.
@@ -482,7 +482,7 @@ Exemplo com fluidos:
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:iron_ore",
     "minecraft:gold_ore",
@@ -595,21 +595,13 @@ Ainda não há suporte a:
 - listas de alternativas (`any`);
 - matchers opcionais.
 
-### Controllers dinâmicos embutidos
+### Controllers dinâmicos empacotados
 
-O mod não registra blocos controller manualmente. Os controllers embutidos `assembler` (recipe) e `a` (storage) são criados no startup a partir de JSONs empacotados.
+O mod não registra blocos controller manualmente. Controllers dinâmicos são criados no startup a partir de JSONs empacotados no namespace `infinity_nexus_multiblock`; esta build não inclui nenhum, então não há controller jogável por padrão.
 
-Versões anteriores tinham o bloco estático `nexus_core`; ele foi removido. Mundos antigos que ainda contêm esse bloco podem perder essas posições e gerar avisos de registry ao carregar; faça backup antes de atualizar.
+Para adicionar um controller, crie o JSON em `src/main/resources/data/infinity_nexus_multiblock/multiblock/<path>.json`, recompile o mod e reinicie o jogo/servidor. Para testar outro pattern com um bloco já existente, sobrescreva a definição correspondente em um datapack e use `/reload`.
 
-Para testar outro pattern com um bloco existente, sobrescreva a definição correspondente em um datapack:
-
-```text
-data/infinity_nexus_multiblock/multiblock/assembler.json
-```
-
-Como o bloco já existe, basta `/reload`.
-
-Criar um JSON novo em um datapack **não** cria um bloco controller: para um novo controller dinâmico, empacote o JSON no mod no namespace `infinity_nexus_multiblock` e reinicie; para datapack, use um controller existente ou registre um bloco manual em Java como API de extensão.
+Criar um JSON novo em um datapack **não** cria um bloco controller: use um controller existente ou registre um bloco manual em Java como API de extensão.
 
 ### Preview e montagem automática
 
@@ -643,7 +635,7 @@ Use `/reload` no servidor para recarregar as definições.
 - controllers formados são revalidados;
 - blocos controller dinâmicos e o pack de assets gerado são criados apenas no startup; `/reload` não registra, remove nem regenera blocos/modelos;
 - se a definição não existir mais, a estrutura é invalidada;
-- inventário e layout da GUI são reconfigurados quando a definição fica disponível ou muda; capabilities de energia/fluidos já existentes não são recriadas nem reconfiguradas (veja a seção de capabilities);
+- inventário e layout da GUI são reconfigurados quando a definição fica disponível ou muda; capabilities ausentes são criadas e as removidas são descartadas, mas armazenamentos de energia/fluidos já existentes não são reconfigurados (veja a seção de capabilities);
 - o layout da GUI também é persistido no block entity para sobreviver ao carregamento antes da sincronização;
 - os membros são persistidos no block entity e sincronizados via NBT;
 - as definições resolvidas são enviadas aos clientes para a preview.
@@ -700,9 +692,8 @@ Para adicionar ou remover um controller dinâmico, recompile o mod quando o JSON
 - `src/main/java/com/Infinity/Nexus/Multiblock/event`: eventos de interação e quebra.
 - `src/main/java/com/Infinity/Nexus/Multiblock/registry`: scanner de controllers dinâmicos, blocks, itens, menus, receitas e tipos de receita.
 - `src/main/java/com/Infinity/Nexus/Multiblock/resource`: resource pack em memória que gera assets dos controllers dinâmicos.
-- `src/main/resources/data/infinity_nexus_multiblock/multiblock`: definições embutidas; cada JSON válido cria um controller dinâmico.
-- `src/main/resources/data/infinity_nexus_multiblock/recipe`: receitas embutidas.
 - `src/main/resources/assets/infinity_nexus_multiblock`: texturas, lang base e assets estáticos.
+- `src/main/resources/data/infinity_nexus_multiblock`: esta build não inclui definições nem receitas embutidas; para adicionar controllers/receitas, crie os JSONs aqui e recompile.
 
 ## Licença
 

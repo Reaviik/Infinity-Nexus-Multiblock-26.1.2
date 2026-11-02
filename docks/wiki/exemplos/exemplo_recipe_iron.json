@@ -1,5 +1,5 @@
 {
-  "type": "infinity_nexus_multiblock:nexus_smelting",
+  "type": "infinity_nexus_multiblock:exemplo_smelting",
   "ingredients": [
     "minecraft:raw_iron",
     "minecraft:coal"

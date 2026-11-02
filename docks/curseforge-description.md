@@ -13,12 +13,12 @@ Build complex structures and turn patterns into functional machines with invento
 - **Energy and fluids:** configurable capabilities with per-face automation ports.
 - **Data-driven GUI:** placeable slots, energy and fluid bars, progress, text, and player inventory.
 - **Custom recipes:** duration, energy consumption, progress, and persistence.
-- **JEI integration:** per-controller category, structure preview, and ingredient transfer to the correct slots.
+- **JEI integration:** per-controller recipe category and structure preview, plus ingredient transfer to the correct slots.
 - **In-game tools:** structure preview, automatic assembly from inventory, and structure export to JSON.
 
 ## For datapack creators
 
-Patterns, slots, capabilities, GUI, recipes, inheritance, and templates are loaded from JSON and can be updated with `/reload`. Dynamic controllers bundled with the mod are registered at startup; to add a new controller block, the JSON must be in the mod namespace and the game must be restarted.
+Patterns, slots, capabilities, GUI, recipes, inheritance, and templates are loaded from JSON and can be updated with `/reload`. Dynamic controllers are registered at startup from JSONs bundled in the mod; this build ships none, so to add a new controller block, put the JSON in the mod namespace, recompile, and restart the game.
 
 ## Visual builder
 
@@ -34,4 +34,4 @@ Build the pattern, slots, capabilities, GUI, and recipes in a visual interface a
 - **Infinity Nexus Core 8.0.4+** — required
 - **JEI** — optional, for recipe categories and transfer
 
-> This is a framework mod: it provides the multiblock system and working examples, not a complete machine progression.
+> This is a framework mod: it provides the multiblock system and example JSONs, not a complete machine progression.
