@@ -97,7 +97,9 @@ test("estado padrão é válido e exporta o esqueleto", () => {
   assert.deepEqual(result.errors, []);
   assert.ok(result.checks.every((check) => check.ok));
   const json = V.buildDefinition(V.createDefaultState());
-  assert.equal(json.schema_version, 1);
+  assert.equal(json.schema_version, 2);
+  assert.equal(json.recipe_type, undefined);
+  assert.equal(json.controller, undefined);
   assert.equal(json.id, "infinity_nexus_multiblock:minha_maquina");
   assert.equal(json.type, "storage");
   assert.equal(json.tier, undefined);
@@ -108,46 +110,42 @@ test("estado padrão é válido e exporta o esqueleto", () => {
   assert.equal(json.pattern.matchers.I, "minecraft:iron_block");
 });
 
-test("type=recipe exige recipe_type", () => {
-  const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "";
-  });
-  const result = V.validateState(state);
-  assert.ok(codes(result).includes("recipe_type.required"));
-  assert.ok(result.errors.length > 0);
-});
-
-test("recipe_type desconhecido em namespace externo gera aviso, não erro", () => {
+test("namespace externo usa o controller único sem erro", () => {
   const state = withState((value) => {
     value.namespace = "mymod";
     value.path = "fornalha";
     value.type = "recipe";
-    value.recipeType = "mymod:outro_tipo";
-    withController(value, "mymod:fornalha", "mymod:block/fornalha");
   });
   const result = V.validateState(state);
-  assert.ok(codes(result).includes("recipe_type.unknown"));
-  assert.equal(result.errors.length, 0);
-});
-
-test("recipe_type novo no namespace do mod é aceito sem aviso", () => {
-  const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_tester";
-  });
-  const result = V.validateState(state);
-  assert.ok(!codes(result).includes("recipe_type.unknown"));
-  assert.equal(result.errors.length, 0);
-});
-
-test("storage com recipe_type gera aviso e o JSON omite o campo", () => {
-  const state = withState((value) => {
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
-  });
-  const result = V.validateState(state);
-  assert.ok(codes(result).includes("recipe_type.ignored"));
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.checks.find((check) => check.id === "identity").ok, true);
+  assert.equal(result.checks.find((check) => check.id === "controller").ok, true);
+  assert.equal(V.buildDefinition(state).controller, undefined);
   assert.equal(V.buildDefinition(state).recipe_type, undefined);
+});
+
+test("recipe_type e controller antigos são ignorados na importação", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "infinity_nexus_multiblock:legado",
+    type: "recipe",
+    recipe_type: "infinity_nexus_multiblock:multiblock",
+    controller: {
+      block: "mymod:fornalha",
+      textures: { front: "mymod:block/fornalha/front" }
+    },
+    pattern: {
+      anchor: "C",
+      layers: [["ICI"]],
+      matchers: { I: "minecraft:iron_block" }
+    }
+  });
+  const json = V.buildDefinition(imported.state);
+  assert.equal(json.schema_version, 2);
+  assert.equal(json.recipe_type, undefined);
+  assert.equal(json.controller, undefined);
+  assert.ok(imported.notes.some((note) => note.message.includes("recipe_type")));
+  assert.ok(imported.notes.some((note) => note.message.includes("controller dinâmico")));
 });
 
 test("namespace e path inválidos são rejeitados", () => {
@@ -158,101 +156,6 @@ test("namespace e path inválidos são rejeitados", () => {
   const result = V.validateState(state);
   assert.ok(codes(result).includes("id.namespace.invalid"));
   assert.ok(codes(result).includes("id.path.invalid"));
-});
-
-test("namespace externo sem controller bloqueia a exportação", () => {
-  const state = withState((value) => {
-    value.namespace = "infinity_nexus_build_test";
-    value.path = "maquina_teste";
-  });
-  const result = V.validateState(state);
-  assert.ok(codes(result).includes("controller.dynamic.required"));
-  assert.ok(result.errors.length > 0);
-  assert.equal(result.checks.find((check) => check.id === "identity").ok, true);
-  assert.equal(result.checks.find((check) => check.id === "controller").ok, false);
-});
-
-test("namespace externo com controller registrado só gera aviso", () => {
-  const state = withState((value) => {
-    value.namespace = "mymod";
-    value.path = "fornalha";
-    withController(value, "mymod:fornalha", "mymod:block/fornalha");
-  });
-  const result = V.validateState(state);
-  assert.equal(result.errors.length, 0);
-  assert.ok(codes(result).includes("controller.datapack"));
-});
-
-test("controller.block é sincronizado com o id no download", () => {
-  const state = withState((value) => {
-    value.namespace = "infinity_nexus_multiblock";
-    value.path = "nexus_tester";
-    withController(value, "infinity_nexus_multiblock:assembler", "infinity_nexus_multiblock:block/assembler");
-  });
-  const result = V.validateState(state);
-  assert.equal(result.errors.length, 0);
-  assert.ok(codes(result).includes("controller.block.sync"));
-  assert.equal(V.buildDefinition(state).controller.block, "infinity_nexus_multiblock:nexus_tester");
-  assert.deepEqual(V.buildDefinition(state).controller.textures, controllerTextures("infinity_nexus_multiblock:block/assembler"));
-});
-
-test("controller exige as seis texturas e aponta a face ausente", () => {
-  const raw = rawController("infinity_nexus_multiblock:nexus_tester", "infinity_nexus_multiblock:block/nexus_tester");
-  delete raw.textures.back;
-  const state = withState((value) => {
-    value.path = "nexus_tester";
-    value.controller = V.parseController(raw, []);
-  });
-  const result = V.validateState(state);
-  assert.ok(codes(result).includes("controller.texture.required"));
-  const issue = result.errors.find((entry) => entry.code === "controller.texture.required");
-  assert.equal(issue.field, "texture:back");
-});
-
-test("controller valida formed_textures, particle e light_level", () => {
-  const state = withState((value) => {
-    value.path = "nexus_tester";
-    withController(value, "infinity_nexus_multiblock:nexus_tester", "infinity_nexus_multiblock:block/nexus_tester", {
-      formed_textures: { front: "infinity_nexus_multiblock:block/nexus_tester/formed_front" },
-      particle: "minecraft:smoke",
-      light_level: 7
-    });
-  });
-  assert.deepEqual(V.validateState(state).errors, []);
-  const built = V.buildDefinition(state).controller;
-  assert.deepEqual(built.formed_textures, { front: "infinity_nexus_multiblock:block/nexus_tester/formed_front" });
-  assert.equal(built.particle, "minecraft:smoke");
-  assert.equal(built.light_level, 7);
-
-  const broken = withState((value) => {
-    value.path = "nexus_tester";
-    withController(value, "infinity_nexus_multiblock:nexus_tester", "infinity_nexus_multiblock:block/nexus_tester", {
-      formed_textures: { front: "bad texture" },
-      particle: "bad particle"
-    });
-    value.controller.lightLevel = 16;
-  });
-  const brokenCodes = codes(V.validateState(broken));
-  assert.ok(brokenCodes.includes("controller.formed_texture.invalid"));
-  assert.ok(brokenCodes.includes("controller.particle.invalid"));
-  assert.ok(brokenCodes.includes("controller.light_level.invalid"));
-});
-
-test("controller sem bloco ou com textura inválida bloqueia", () => {
-  const missingBlock = withState((value) => {
-    value.namespace = "mymod";
-    value.path = "nexus_tester";
-    withController(value, "", "mymod:block/nexus_tester");
-  });
-  assert.ok(codes(V.validateState(missingBlock)).includes("controller.block.required"));
-
-  const badTexture = withState((value) => {
-    value.path = "nexus_tester";
-    const raw = rawController("infinity_nexus_multiblock:nexus_tester", "infinity_nexus_multiblock:block/nexus_tester");
-    raw.textures.left = "sem namespace";
-    value.controller = V.parseController(raw, []);
-  });
-  assert.ok(codes(V.validateState(badTexture)).includes("controller.texture.invalid"));
 });
 
 test("gui é opcional e só aparece quando definida", () => {
@@ -596,18 +499,12 @@ test("objeto com tag e state vindo do JSON é inválido", () => {
 
 test("importação preserva campos opcionais desconhecidos", () => {
   const raw = {
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:fornalha",
     type: "recipe",
-    recipe_type: "infinity_nexus_multiblock:nexus_smelting",
     priority: 4,
     tier: 2,
     inventory_rows: 5,
-    controller: {
-      block: "mymod:fornalha",
-      textures: { front: "mymod:block/fornalha/front" },
-      custom_controller: { note: "keep" }
-    },
     item_slots: [{ id: "input_0", role: "input" }],
     gui: { width: 176, height: 166, elements: [] },
     pattern: {
@@ -628,10 +525,6 @@ test("importação preserva campos opcionais desconhecidos", () => {
   assert.equal(imported.state.priority, 4);
   assert.equal(imported.state.tier, 2);
   assert.equal(imported.state.inventoryRows, 5);
-  assert.equal(imported.state.extras.controller, undefined);
-  assert.equal(imported.state.controller.block, "mymod:fornalha");
-  assert.equal(imported.state.controller.textures.front, "mymod:block/fornalha/front");
-  assert.deepEqual(imported.state.controller.extras.custom_controller, { note: "keep" });
   assert.equal(imported.state.extras.item_slots, undefined);
   assert.equal(imported.state.itemSlots.length, 1);
   assert.equal(imported.state.itemSlots[0].id, "input_0");
@@ -640,7 +533,6 @@ test("importação preserva campos opcionais desconhecidos", () => {
   assert.equal(imported.state.matchers.I.kind, "state");
 
   const json = V.buildDefinition(imported.state);
-  assert.deepEqual(json.controller, raw.controller);
   assert.deepEqual(json.item_slots, raw.item_slots);
   assert.equal(json.priority, 4);
   assert.equal(json.tier, 2);
@@ -654,7 +546,7 @@ test("importação preserva campos opcionais desconhecidos", () => {
 
 test("importação normaliza camadas irregulares e registra nota", () => {
   const imported = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:teste",
     type: "storage",
     pattern: {
@@ -675,7 +567,7 @@ test("importação normaliza camadas irregulares e registra nota", () => {
 
 test("importação de JSON sem id mantém o erro visível", () => {
   const imported = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     type: "storage",
     pattern: {
       anchor: "C",
@@ -698,15 +590,13 @@ test("extras com template geram aviso", () => {
 
 test("checks refletem os erros do esqueleto", () => {
   const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "";
     value.layers = [["CCC"]];
     value.matchers = {};
   });
   const result = V.validateState(state);
   const byId = Object.fromEntries(result.checks.map((check) => [check.id, check.ok]));
   assert.equal(byId.anchor, false);
-  assert.equal(byId.recipe, false);
+  assert.equal(byId.controller, true);
   assert.equal(byId.geometry, true);
 });
 
@@ -791,7 +681,7 @@ test("item_slots rejeita ids duplicados", () => {
 
 test("item_slots importado preserva campos extras e lista vazia", () => {
   const imported = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:teste",
     type: "storage",
     item_slots: [{
@@ -817,7 +707,7 @@ test("item_slots importado preserva campos extras e lista vazia", () => {
   }]);
 
   const empty = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:vazio",
     type: "storage",
     item_slots: [],
@@ -920,7 +810,7 @@ test("energia não pode reutilizar o id de um tanque", () => {
 
 test("capabilities importadas preservam extras e listas vazias", () => {
   const imported = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:teste",
     type: "storage",
     capabilities: {
@@ -966,7 +856,7 @@ test("capabilities importadas preservam extras e listas vazias", () => {
   });
 
   const empty = V.importDefinition({
-    schema_version: 1,
+    schema_version: 2,
     id: "mymod:vazio",
     type: "storage",
     capabilities: { fluids: [] },
@@ -1060,14 +950,6 @@ test("capability_ports omite capabilities nao implementadas", () => {
 
 test("JSON exportado pode ser importado de volta sem perdas do escopo", () => {
   const original = V.createExampleState();
-  original.controller = V.parseController({
-    block: "infinity_nexus_multiblock:alloy_smelter",
-    textures: controllerTextures("infinity_nexus_multiblock:block/alloy_smelter"),
-    formed_textures: { front: "infinity_nexus_multiblock:block/alloy_smelter/formed_front" },
-    particle: "minecraft:smoke",
-    light_level: 5,
-    custom_controller: { note: "keep" }
-  }, []);
   original.capabilities = V.createCapabilities();
   original.capabilities.energy = V.createEnergy();
   original.capabilities.energy.id = "energy";
@@ -1172,7 +1054,7 @@ test("importacao de heranca tira os campos de extras e avisa extends+family", ()
 test("receita valida exporta ingredientes, fluidos e resultado", () => {
   const recipe = V.createRecipe();
   recipe.file = "gold_ingot_from_ore";
-  recipe.type = "infinity_nexus_multiblock:nexus_smelting";
+  recipe.type = "infinity_nexus_multiblock:multiblock";
   recipe.ingredientsRaw = "minecraft:iron_ore\n#minecraft:coals";
   recipe.fluidsRaw = "minecraft:water 50";
   recipe.resultId = "minecraft:gold_ingot";
@@ -1180,9 +1062,10 @@ test("receita valida exporta ingredientes, fluidos e resultado", () => {
   recipe.componentsRaw = '{"minecraft:custom_name":"ouro"}';
   recipe.energy = 300;
   recipe.time = 120;
-  const built = V.buildRecipe(recipe);
+  const built = V.buildRecipe(recipe, { definitionId: "infinity_nexus_multiblock:minha_maquina" });
   assert.deepEqual(built, {
-    type: "infinity_nexus_multiblock:nexus_smelting",
+    type: "infinity_nexus_multiblock:multiblock",
+    definition: "infinity_nexus_multiblock:minha_maquina",
     ingredients: ["minecraft:iron_ore", "#minecraft:coals"],
     fluid_ingredients: [{ ingredient: "minecraft:water", amount: 50 }],
     output: {
@@ -1244,7 +1127,8 @@ test("receitas invalidas e duplicadas bloqueiam", () => {
 
 test("receita faz round-trip pelo parser e aceita somente fluidos", () => {
   const raw = {
-    type: "infinity_nexus_multiblock:nexus_smelting",
+    type: "infinity_nexus_multiblock:multiblock",
+    definition: "infinity_nexus_multiblock:alloy_smelter",
     fluid_ingredients: [{ ingredient: "minecraft:water", amount: 100 }],
     output: { type: "item", id: "minecraft:ice", count: 1 },
     energy: 10,
@@ -1275,7 +1159,7 @@ test("receita faz round-trip pelo parser e aceita somente fluidos", () => {
 test("saida fluid omite energia e exige tanque", () => {
   const recipe = V.createRecipe();
   recipe.file = "water_out";
-  recipe.type = "infinity_nexus_multiblock:nexus_smelting";
+  recipe.type = "infinity_nexus_multiblock:multiblock";
   recipe.outputType = "fluid";
   recipe.ingredientsRaw = "minecraft:stone";
   recipe.resultId = "minecraft:water";
@@ -1303,7 +1187,7 @@ test("saida fluid omite energia e exige tanque", () => {
 test("saida entity usa seletor de bloco e valida o pattern", () => {
   const recipe = V.createRecipe();
   recipe.file = "pig_out";
-  recipe.type = "infinity_nexus_multiblock:nexus_smelting";
+  recipe.type = "infinity_nexus_multiblock:multiblock";
   recipe.outputType = "entity";
   recipe.ingredientsRaw = "minecraft:carrot";
   recipe.resultId = "minecraft:pig";
@@ -1323,7 +1207,7 @@ test("saida entity usa seletor de bloco e valida o pattern", () => {
 test("saida item sem slot de saida bloqueia e buildRecipe troca para tipo permitido", () => {
   const recipe = V.createRecipe();
   recipe.file = "no_slot";
-  recipe.type = "infinity_nexus_multiblock:nexus_smelting";
+  recipe.type = "infinity_nexus_multiblock:multiblock";
   recipe.ingredientsRaw = "minecraft:stone";
   recipe.resultId = "minecraft:stone";
   const built = V.buildRecipe(recipe, { energy: false, fluid: true, itemOutput: false, symbols: ["C"] });
@@ -1336,23 +1220,23 @@ test("saida item sem slot de saida bloqueia e buildRecipe troca para tipo permit
   assert.ok(codes(V.validateState(state)).includes("recipe.output.item_slot"));
 });
 
-test("receita de maquina type=recipe exige type igual e avisa diferenca", () => {
+test("receita de maquina sempre usa type fixo e definition atual", () => {
   const recipe = V.createRecipe();
   recipe.file = "test";
-  recipe.type = "infinity_nexus_multiblock:nexus_smelting";
+  recipe.type = "infinity_nexus_multiblock:tipo_antigo";
   recipe.ingredientsRaw = "minecraft:stone";
   recipe.resultId = "minecraft:stone";
   const state = withState((value) => {
     value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:13x13";
     value.itemSlots = [V.createItemSlot()];
     value.itemSlots[0].id = "output_0";
     value.itemSlots[0].role = "output";
     value.recipes = [recipe];
   });
-  const result = V.validateState(state);
-  assert.deepEqual(result.errors, []);
-  assert.ok(codes(result).includes("recipe.type.mismatch"));
+  assert.deepEqual(V.validateState(state).errors, []);
+  const built = V.buildRecipe(recipe, { definitionId: "mymod:fornalha" });
+  assert.equal(built.type, V.RECIPE_TYPE);
+  assert.equal(built.definition, "mymod:fornalha");
 });
 
 test("receita do controller exporta shaped no root e faz round-trip", () => {

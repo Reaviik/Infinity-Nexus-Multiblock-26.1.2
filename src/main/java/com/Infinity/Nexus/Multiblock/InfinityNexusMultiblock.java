@@ -11,9 +11,10 @@ import com.Infinity.Nexus.Multiblock.network.MultiblockDefinitionSyncPayload;
 import com.Infinity.Nexus.Multiblock.network.MultiblockExportPayload;
 import com.Infinity.Nexus.Multiblock.network.SetSlotLockPayload;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.Infinity.Nexus.Multiblock.registry.ModMenus;
 import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
-import com.Infinity.Nexus.Multiblock.resource.DynamicControllerResourcePack;
+import com.Infinity.Nexus.Multiblock.resource.ControllerRecipePack;
 import com.Infinity.Nexus.Multiblock.tab.ModCreativeTab;
 import org.slf4j.Logger;
 
@@ -52,6 +53,7 @@ public class InfinityNexusMultiblock {
     public static final String MOD_ID = "infinity_nexus_multiblock";
     public static final Logger LOGGER = LogUtils.getLogger();
     public InfinityNexusMultiblock(IEventBus modEventBus, ModContainer modContainer) {
+        ModDataComponents.register(modEventBus);
         ModBlocks.register(modEventBus);
         ModMenus.register(modEventBus);
         ModRecipes.register(modEventBus);
@@ -59,7 +61,7 @@ public class InfinityNexusMultiblock {
         modEventBus.addListener(EventPriority.HIGHEST, this::registerCapabilities);
         modEventBus.addListener(this::registerPayloads);
         modEventBus.addListener(MultiblockGameTests::register);
-        modEventBus.addListener(DynamicControllerResourcePack::addTo);
+        modEventBus.addListener(ControllerRecipePack::addTo);
         NeoForge.EVENT_BUS.register(this);
         NeoForge.EVENT_BUS.addListener(MultiblockReloadListeners::onAddServerReloadListeners);
         NeoForge.EVENT_BUS.addListener(MultiblockCommands::register);
@@ -68,7 +70,7 @@ public class InfinityNexusMultiblock {
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
-        registerMultiblockCapabilities(event, ModBlocks.DYNAMIC_CONTROLLER_BLOCK_ENTITY.get());
+        registerMultiblockCapabilities(event, ModBlocks.CONTROLLER_BLOCK_ENTITY.get());
         Block[] blocks = BuiltInRegistries.BLOCK.stream().toArray(Block[]::new);
         event.registerBlock(
                 Capabilities.Item.BLOCK,

@@ -11,6 +11,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.Identifier;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.item.ItemStack;
@@ -28,6 +29,7 @@ import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 
 public record MultiblockRecipe(
         RecipeType<MultiblockRecipe> recipeType,
+        Identifier definition,
         int energy,
         int time,
         List<Ingredient> ingredients,
@@ -36,6 +38,7 @@ public record MultiblockRecipe(
 
     public MultiblockRecipe {
         Objects.requireNonNull(recipeType, "recipeType");
+        Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(output, "output");
         if (energy < 0) {
             throw new IllegalArgumentException("Recipe energy cannot be negative");
@@ -167,8 +170,9 @@ public record MultiblockRecipe(
         return RecipeBookCategories.CRAFTING_MISC;
     }
 
-    public static MapCodec<MultiblockRecipe> codec(RecipeType<MultiblockRecipe> recipeType) {
+    public static MapCodec<MultiblockRecipe> codec() {
         MapCodec<RecipeFields> fields = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Identifier.CODEC.fieldOf("definition").forGetter(RecipeFields::definition),
                 Codec.intRange(0, Integer.MAX_VALUE).optionalFieldOf("energy", 0).forGetter(RecipeFields::energy),
                 Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("time", 100).forGetter(RecipeFields::time),
                 Ingredient.CODEC.listOf().optionalFieldOf("ingredients", List.of()).forGetter(RecipeFields::ingredients),
@@ -179,23 +183,25 @@ public record MultiblockRecipe(
                 ItemStackTemplate.CODEC.optionalFieldOf("result").forGetter(RecipeFields::legacyResult))
                 .apply(instance, RecipeFields::new));
         return fields.flatXmap(
-                value -> value.toRecipe(recipeType),
+                RecipeFields::toRecipe,
                 recipe -> DataResult.success(RecipeFields.from(recipe)));
     }
 
-    public static StreamCodec<RegistryFriendlyByteBuf, MultiblockRecipe> streamCodec(
-            RecipeType<MultiblockRecipe> recipeType) {
+    public static StreamCodec<RegistryFriendlyByteBuf, MultiblockRecipe> streamCodec() {
         return StreamCodec.composite(
+                Identifier.STREAM_CODEC, MultiblockRecipe::definition,
                 ByteBufCodecs.INT, MultiblockRecipe::energy,
                 ByteBufCodecs.INT, MultiblockRecipe::time,
                 Ingredient.CONTENTS_STREAM_CODEC.apply(ByteBufCodecs.list()), MultiblockRecipe::ingredients,
                 SizedFluidIngredient.STREAM_CODEC.apply(ByteBufCodecs.list()), MultiblockRecipe::fluidIngredients,
                 MultiblockRecipeOutput.STREAM_CODEC, MultiblockRecipe::output,
-                (energy, time, ingredients, fluidIngredients, output) ->
-                        new MultiblockRecipe(recipeType, energy, time, ingredients, fluidIngredients, output));
+                (definition, energy, time, ingredients, fluidIngredients, output) ->
+                        new MultiblockRecipe(ModRecipes.MULTIBLOCK_TYPE, definition, energy, time,
+                                ingredients, fluidIngredients, output));
     }
 
     private record RecipeFields(
+            Identifier definition,
             int energy,
             int time,
             List<Ingredient> ingredients,
@@ -203,14 +209,15 @@ public record MultiblockRecipe(
             Optional<MultiblockRecipeOutput> output,
             Optional<ItemStackTemplate> legacyResult) {
 
-        private DataResult<MultiblockRecipe> toRecipe(RecipeType<MultiblockRecipe> recipeType) {
+        private DataResult<MultiblockRecipe> toRecipe() {
             Optional<MultiblockRecipeOutput> resolved = this.output.or(() ->
                     this.legacyResult.map(MultiblockRecipeOutput.Item::new));
             if (resolved.isEmpty()) {
                 return DataResult.error(() -> "Recipe needs an output");
             }
             return DataResult.success(new MultiblockRecipe(
-                    recipeType,
+                    ModRecipes.MULTIBLOCK_TYPE,
+                    this.definition,
                     this.energy,
                     this.time,
                     this.ingredients,
@@ -220,6 +227,7 @@ public record MultiblockRecipe(
 
         private static RecipeFields from(MultiblockRecipe recipe) {
             return new RecipeFields(
+                    recipe.definition(),
                     recipe.energy(),
                     recipe.time(),
                     recipe.ingredients(),

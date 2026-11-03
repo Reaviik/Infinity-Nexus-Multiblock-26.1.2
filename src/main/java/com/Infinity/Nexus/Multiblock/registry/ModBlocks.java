@@ -1,18 +1,16 @@
 package com.Infinity.Nexus.Multiblock.registry;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.item.MultiblockControllerItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.material.MapColor;
@@ -28,59 +26,42 @@ public final class ModBlocks {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, InfinityNexusMultiblock.MOD_ID);
 
-    public static final List<DynamicControllerSpec> DYNAMIC_CONTROLLER_SPECS = DynamicControllerRegistry.specs();
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MultiblockControllerBlockEntity>>
+            CONTROLLER_BLOCK_ENTITY = BLOCK_ENTITIES.register(
+                    "multiblock_controller", ModBlocks::createBlockEntityType);
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MultiblockControllerBlockEntity>> DYNAMIC_CONTROLLER_BLOCK_ENTITY =
-            BLOCK_ENTITIES.register("dynamic_controller", ModBlocks::createDynamicBlockEntityType);
+    public static final DeferredBlock<MultiblockControllerBlock> CONTROLLER = BLOCKS.registerBlock(
+            "multiblock_controller",
+            properties -> new MultiblockControllerBlock(
+                    () -> CONTROLLER_BLOCK_ENTITY.get(),
+                    properties),
+            properties -> properties
+                    .mapColor(MapColor.METAL)
+                    .strength(4.0F)
+                    .requiresCorrectToolForDrops()
+                    .lightLevel(state -> state.getValue(MultiblockControllerBlock.PROCESSING) ? 15 : 0));
 
-    public static final Map<Identifier, DeferredBlock<MultiblockControllerBlock>> DYNAMIC_CONTROLLERS =
-            registerDynamicControllers();
-
-    public static final Map<Identifier, DeferredItem<BlockItem>> DYNAMIC_CONTROLLER_ITEMS =
-            registerDynamicItems();
-
-    private static Map<Identifier, DeferredBlock<MultiblockControllerBlock>> registerDynamicControllers() {
-        Map<Identifier, DeferredBlock<MultiblockControllerBlock>> blocks = new LinkedHashMap<>();
-        for (DynamicControllerSpec spec : DYNAMIC_CONTROLLER_SPECS) {
-            DeferredBlock<MultiblockControllerBlock> block = BLOCKS.registerBlock(
-                    spec.blockId().getPath(),
-                    properties -> new MultiblockControllerBlock(
-                            spec.definitionId(),
-                            () -> DYNAMIC_CONTROLLER_BLOCK_ENTITY.get(),
-                            properties),
-                    properties -> properties
-                            .mapColor(MapColor.METAL)
-                            .strength(4.0F)
-                            .requiresCorrectToolForDrops()
-                            .lightLevel(state -> state.getValue(MultiblockControllerBlock.PROCESSING)
-                                    ? spec.lightLevel()
-                                    : 0));
-            blocks.put(spec.blockId(), block);
-        }
-        return Collections.unmodifiableMap(blocks);
-    }
-
-    private static Map<Identifier, DeferredItem<BlockItem>> registerDynamicItems() {
-        Map<Identifier, DeferredItem<BlockItem>> items = new LinkedHashMap<>();
-        DYNAMIC_CONTROLLERS.forEach((id, block) ->
-                items.put(id, ITEMS.registerSimpleBlockItem(id.getPath(), block)));
-        return Collections.unmodifiableMap(items);
-    }
-
-    private static BlockEntityType<MultiblockControllerBlockEntity> createDynamicBlockEntityType() {
-        Set<Block> validBlocks = DYNAMIC_CONTROLLERS.values().stream()
-                .map(holder -> (Block) holder.get())
-                .collect(Collectors.toUnmodifiableSet());
-        return new BlockEntityType<>(
-                (pos, state) -> new MultiblockControllerBlockEntity(
-                        DYNAMIC_CONTROLLER_BLOCK_ENTITY.get(), pos, state),
-                validBlocks);
-    }
+    public static final DeferredItem<BlockItem> CONTROLLER_ITEM =
+            ITEMS.registerItem("multiblock_controller",
+                    properties -> new MultiblockControllerItem(CONTROLLER.get(), properties.useBlockDescriptionPrefix()));
 
     private ModBlocks() {}
 
-    public static List<DeferredItem<BlockItem>> dynamicControllerItems() {
-        return List.copyOf(DYNAMIC_CONTROLLER_ITEMS.values());
+    private static BlockEntityType<MultiblockControllerBlockEntity> createBlockEntityType() {
+        return new BlockEntityType<>(
+                (pos, state) -> new MultiblockControllerBlockEntity(
+                        CONTROLLER_BLOCK_ENTITY.get(), pos, state),
+                Set.<Block>of(CONTROLLER.get()));
+    }
+
+    public static List<DeferredItem<BlockItem>> controllerItems() {
+        return List.of(CONTROLLER_ITEM);
+    }
+
+    public static ItemStack controllerWithDefinition(Identifier definitionId) {
+        ItemStack stack = new ItemStack(CONTROLLER_ITEM.get());
+        stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), definitionId);
+        return stack;
     }
 
     public static void register(IEventBus modEventBus) {

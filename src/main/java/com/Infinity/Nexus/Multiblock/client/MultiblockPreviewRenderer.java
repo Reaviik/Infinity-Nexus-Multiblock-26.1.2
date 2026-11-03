@@ -10,6 +10,9 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.block.MultiblockAssemblyHelper;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
+import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
@@ -22,6 +25,7 @@ import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.item.BlockItem;
@@ -98,9 +102,11 @@ public final class MultiblockPreviewRenderer {
     private static @Nullable Preview resolvePreview(LocalPlayer player, ClientLevel level, HitResult hitResult, float partialTick) {
         if (hitResult instanceof BlockHitResult blockHit) {
             BlockState hitState = level.getBlockState(blockHit.getBlockPos());
-            if (hitState.getBlock() instanceof MultiblockControllerBlock controller
-                    && !hitState.getValue(MultiblockControllerBlock.FORMED)) {
-                MultiblockDefinition definition = controller.definition();
+            if (hitState.getBlock() instanceof MultiblockControllerBlock
+                    && !hitState.getValue(MultiblockControllerBlock.FORMED)
+                    && level.getBlockEntity(blockHit.getBlockPos())
+                            instanceof MultiblockControllerBlockEntity blockEntity) {
+                MultiblockDefinition definition = blockEntity.definition();
                 if (definition == null) {
                     return null;
                 }
@@ -113,11 +119,13 @@ public final class MultiblockPreviewRenderer {
         if (held == null) {
             return null;
         }
-        MultiblockControllerBlock controller = (MultiblockControllerBlock) ((BlockItem) held.getItem()).getBlock();
-        MultiblockDefinition definition = controller.definition();
+        Identifier definitionId = held.get(ModDataComponents.MULTIBLOCK_DEFINITION.get());
+        MultiblockDefinition definition = definitionId == null ? null : MultiblockDefinitions.get(definitionId);
         if (definition == null) {
             return null;
         }
+        MultiblockControllerBlock controller =
+                (MultiblockControllerBlock) ((BlockItem) held.getItem()).getBlock();
 
         BlockPos controllerPos;
         if (hitResult instanceof BlockHitResult blockHit) {

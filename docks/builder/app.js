@@ -3,8 +3,8 @@
 
   var V = window.MultiblockValidation;
   var Preview = window.MultiblockPreview;
-  var STORAGE_KEY = "infinity-nexus-multiblock-builder.v1";
-  var STORAGE_VERSION = 1;
+  var STORAGE_KEY = "infinity-nexus-multiblock-builder.v2";
+  var STORAGE_VERSION = 2;
   var ERASER = " ";
   var COLORS = [
     "#6bd64a",
@@ -44,7 +44,7 @@
     { id: "matchers", label: "Matchers", hint: "blocos e tags" },
     { id: "slots", label: "Slots", hint: "item_slots" },
     { id: "capabilities", label: "Capabilities", hint: "energia, fluidos e portas" },
-    { id: "controller", label: "Controller", hint: "bloco e texturas" },
+    { id: "controller", label: "Controller", hint: "item único e receita" },
     { id: "gui", label: "GUI", hint: "layout e elementos" },
     { id: "recipes", label: "Receitas", hint: "data-driven e JEI" },
     { id: "inheritance", label: "Herança", hint: "extends/family e overrides" },
@@ -61,7 +61,6 @@
   var FIELD_INPUTS = {
     namespace: "namespace",
     path: "path",
-    recipeType: "recipeType",
     tier: "tier",
     priority: "priority",
     inventoryRows: "inventoryRows",
@@ -70,7 +69,6 @@
   var FIELD_TARGETS = {
     namespace: "namespace",
     path: "path",
-    recipeType: "recipeType",
     tier: "tier",
     priority: "priority",
     inventoryRows: "inventoryRows",
@@ -354,16 +352,10 @@
       state.capabilityPorts = null;
     }
     delete state.extras.capability_ports;
-    if (!isPlainObject(state.controller) && isPlainObject(state.extras.controller)) {
-      state.controller = V.parseController(state.extras.controller, []);
-    }
-    if (state.controller === undefined) {
-      state.controller = null;
-    }
-    if (state.controller !== null && !isPlainObject(state.controller)) {
-      state.controller = null;
-    }
+    delete state.controller;
+    delete state.recipeType;
     delete state.extras.controller;
+    delete state.extras.recipe_type;
     if (!isPlainObject(state.controllerRecipe) && isPlainObject(state.extras.recipe)) {
       state.controllerRecipe = V.parseControllerRecipe(state.extras.recipe, []);
     }
@@ -607,7 +599,6 @@
     $("schemaVersion").value = String(V.SCHEMA_VERSION);
     $("namespace").value = state.namespace || "";
     $("path").value = state.path || "";
-    $("recipeType").value = state.recipeType || "";
     $("tier").value = state.tier === undefined || state.tier === null ? "" : String(state.tier);
     $("priority").value = state.priority === undefined || state.priority === null ? "" : String(state.priority);
     $("inventoryRows").value = state.inventoryRows === undefined || state.inventoryRows === null ? "" : String(state.inventoryRows);
@@ -636,7 +627,7 @@
   }
 
   function renderFieldErrors() {
-    ["namespace", "path", "recipeType", "tier", "priority", "inventoryRows", "anchor", "pattern", "inheritanceParent"].forEach(function (field) {
+    ["namespace", "path", "tier", "priority", "inventoryRows", "anchor", "pattern", "inheritanceParent"].forEach(function (field) {
       setFieldError(field);
     });
     Object.keys(FIELD_INPUTS).forEach(function (field) {
@@ -773,8 +764,6 @@
   }
 
   function renderIdentityMeta() {
-    var recipeField = $("recipeTypeField");
-    recipeField.hidden = state.type !== "recipe";
     var extras = isPlainObject(state.extras) ? state.extras : {};
     var keys = Object.keys(extras).sort(compareSymbols);
     var extrasPanel = $("extrasPanel");
@@ -785,12 +774,9 @@
     var callout = $("namespaceCallout");
     var namespace = trim(state.namespace);
     if (namespace && V.isValidNamespace(namespace) && namespace !== "infinity_nexus_multiblock") {
-      var hasController = isPlainObject(state.controller) && V.isValidIdentifier(state.controller.block);
       callout.hidden = false;
-      callout.className = "callout callout-warning";
-      callout.innerHTML = hasController
-        ? "<strong>Namespace externo:</strong> só funciona se o controller já existir em Java; o download preserva esse controller."
-        : "<strong>Namespace externo:</strong> não cria bloco controller dinâmico. A exportação fica bloqueada; use <code>infinity_nexus_multiblock</code>.";
+      callout.className = "callout callout-info";
+      callout.innerHTML = "<strong>Namespace externo:</strong> a definição usa o controller compartilhado <code>infinity_nexus_multiblock:multiblock_controller</code>. Nenhum bloco novo precisa ser registrado.";
     } else {
       callout.hidden = true;
       callout.innerHTML = "";
@@ -1307,7 +1293,7 @@
           esc(trim(tank.id) || ("Fluido " + (index + 1))) + "'></i>");
         barIndex++;
       });
-      if (state.type === "recipe" && trim(state.recipeType)) {
+      if (state.type === "recipe") {
         items.push("<i class='gui-preview-progress' style='left:171px;top:17px' title='Progresso'></i>");
       }
 
@@ -1989,235 +1975,6 @@
     removeFluidTank(index);
   }
 
-  function controllerBlockId() {
-    return (trim(state.namespace) || "namespace") + ":" + (trim(state.path) || "path");
-  }
-
-  function controllerFallbackTextures() {
-    var textures = V.createController().textures;
-    V.CONTROLLER_FACES.forEach(function (face) {
-      textures[face] = "infinity_nexus_multiblock:block/fallback/" + face;
-    });
-    return textures;
-  }
-
-  function ensureController() {
-    if (!isPlainObject(state.controller)) {
-      state.controller = V.createController();
-      state.controller.block = controllerBlockId();
-      state.controller.textures = controllerFallbackTextures();
-    }
-    return state.controller;
-  }
-
-  function syncControllerBlock() {
-    if (isPlainObject(state.controller) && state.namespace === "infinity_nexus_multiblock") {
-      state.controller.block = controllerBlockId();
-    }
-  }
-
-  function controllerTextureCount(controller) {
-    if (!isPlainObject(controller) || !isPlainObject(controller.textures)) {
-      return 0;
-    }
-    return V.CONTROLLER_FACES.filter(function (face) {
-      return Boolean(trim(controller.textures[face]));
-    }).length;
-  }
-
-  function controllerSummaryText() {
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    if (!controller) {
-      return "Sem controller; o loader usa o id e texturas fallback.";
-    }
-    var block = trim(controller.block);
-    if (!block && state.namespace === "infinity_nexus_multiblock") {
-      block = controllerBlockId();
-    }
-    var light = controller.lightLevel === null || controller.lightLevel === undefined
-      ? 0
-      : controller.lightLevel;
-    return (block || "sem bloco") + " - " + controllerTextureCount(controller) + "/6 texturas - light " + light;
-  }
-
-  function controllerFieldElement(field) {
-    return document.querySelector("[data-controller-field='" + field + "']");
-  }
-
-  function updateControllerCard() {
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    var summary = $("controllerSummary");
-    var feedback = $("controllerFeedback");
-    var jsonElement = $("controllerJson");
-    if (!summary) {
-      return;
-    }
-    summary.textContent = controllerSummaryText();
-    if (!controller) {
-      if (feedback) {
-        feedback.hidden = true;
-        feedback.textContent = "";
-      }
-      if (jsonElement) {
-        jsonElement.textContent = "";
-      }
-      return;
-    }
-    var problem = V.controllerProblem(controller);
-    if (feedback) {
-      feedback.className = "matcher-feedback controller-feedback" + (problem ? " is-error" : "");
-      feedback.textContent = problem || "";
-      feedback.hidden = !problem;
-    }
-    if (jsonElement) {
-      var serialized = JSON.stringify(V.buildController(controller), null, 2);
-      jsonElement.textContent = serialized === undefined ? "null" : serialized;
-    }
-  }
-
-  function renderController() {
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    var summary = $("controllerSummary");
-    var empty = $("controllerEmpty");
-    var form = $("controllerForm");
-    var addButton = $("addControllerBtn");
-    var removeButton = $("removeControllerBtn");
-    var fallbackButton = $("controllerFallbackBtn");
-    if (!summary || !empty || !form) {
-      return;
-    }
-    if (!controller) {
-      summary.textContent = controllerSummaryText();
-      empty.hidden = false;
-      empty.textContent = state.namespace === "infinity_nexus_multiblock"
-        ? "Sem controller. O bloco dinâmico ainda é criado com o id e texturas fallback."
-        : "Sem controller. Um datapack externo precisa de um controller já registrado em Java.";
-      form.hidden = true;
-      if (addButton) {
-        addButton.disabled = false;
-      }
-      if (removeButton) {
-        removeButton.disabled = true;
-      }
-      if (fallbackButton) {
-        fallbackButton.disabled = true;
-      }
-      updateControllerCard();
-      return;
-    }
-
-    var textures = isPlainObject(controller.textures) ? controller.textures : {};
-    var formed = isPlainObject(controller.formedTextures) ? controller.formedTextures : {};
-    var blockInput = $("controllerBlock");
-    var particleInput = $("controllerParticle");
-    var lightInput = $("controllerLightLevel");
-    if (blockInput) {
-      blockInput.value = trim(controller.block) ||
-        (state.namespace === "infinity_nexus_multiblock" ? controllerBlockId() : "");
-      blockInput.readOnly = state.namespace === "infinity_nexus_multiblock";
-    }
-    var blockHint = $("controllerBlockHint");
-    if (blockHint) {
-      blockHint.textContent = state.namespace === "infinity_nexus_multiblock"
-        ? "Sincronizado com o id da definição; o bloco dinâmico é criado no startup."
-        : "Precisa apontar para um MultiblockControllerBlock já registrado em Java.";
-    }
-    V.CONTROLLER_FACES.forEach(function (face) {
-      var textureInput = controllerFieldElement("texture:" + face);
-      if (textureInput) {
-        textureInput.value = trim(textures[face]);
-      }
-      var formedInput = controllerFieldElement("formed:" + face);
-      if (formedInput) {
-        formedInput.value = trim(formed[face]);
-      }
-    });
-    if (particleInput) {
-      particleInput.value = trim(controller.particle);
-    }
-    if (lightInput) {
-      lightInput.value = controller.lightLevel === null || controller.lightLevel === undefined
-        ? "0"
-        : String(controller.lightLevel);
-    }
-    empty.hidden = true;
-    form.hidden = false;
-    if (addButton) {
-      addButton.disabled = true;
-    }
-    if (removeButton) {
-      removeButton.disabled = false;
-    }
-    if (fallbackButton) {
-      fallbackButton.disabled = false;
-    }
-    updateControllerCard();
-  }
-
-  function addController() {
-    ensureController();
-    refresh();
-    var blockInput = $("controllerBlock");
-    var firstTexture = controllerFieldElement("texture:front");
-    focusElement(blockInput && !blockInput.readOnly ? blockInput : firstTexture, false);
-  }
-
-  function removeController() {
-    if (!isPlainObject(state.controller)) {
-      return;
-    }
-    if (!window.confirm("Remover o controller customizado? O loader voltará a usar o id e as texturas fallback.")) {
-      return;
-    }
-    state.controller = null;
-    refresh();
-    showToast("Controller removido.");
-  }
-
-  function fillControllerFallback() {
-    var controller = ensureController();
-    controller.textures = controllerFallbackTextures();
-    refresh();
-    showToast("Texturas fallback aplicadas.");
-  }
-
-  function onControllerFormInput(event) {
-    var target = event.target;
-    var field = target ? target.getAttribute("data-controller-field") : "";
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    if (!field || !controller) {
-      return;
-    }
-    if (field === "block") {
-      controller.block = target.value;
-    } else if (field === "particle") {
-      controller.particle = target.value;
-    } else if (field === "lightLevel") {
-      controller.lightLevel = target.value === "" ? 0 : target.value;
-    } else if (field.indexOf("texture:") === 0) {
-      if (!isPlainObject(controller.textures)) {
-        controller.textures = V.createFormedTextures();
-      }
-      controller.textures[field.slice("texture:".length)] = target.value;
-    } else if (field.indexOf("formed:") === 0) {
-      if (!isPlainObject(controller.formedTextures)) {
-        controller.formedTextures = V.createFormedTextures();
-      }
-      controller.formedTextures[field.slice("formed:".length)] = target.value;
-    } else {
-      return;
-    }
-    updateControllerCard();
-    refresh({
-      skipPattern: true,
-      skipMatchers: true,
-      skipSlots: true,
-      skipCapabilities: true,
-      skipController: true,
-      skipControllerRecipe: true
-    });
-  }
-
   var CONTROLLER_RECIPE_SYMBOLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
   var activeControllerRecipeSymbol = "A";
 
@@ -2312,10 +2069,7 @@
     rows.forEach(function (row) {
       width = Math.max(width, trim(row).length);
     });
-    var result = isPlainObject(state.controller) && trim(state.controller.block)
-      ? trim(state.controller.block)
-      : controllerBlockId();
-    return "Shaped " + rows.length + "x" + width + " -> " + result;
+    return "Shaped " + rows.length + "x" + width + " -> infinity_nexus_multiblock:multiblock_controller";
   }
 
   function updateControllerRecipeCard() {
@@ -2565,7 +2319,7 @@
       : [];
     var slots = Array.isArray(state.itemSlots) ? state.itemSlots : [];
     var hasSlotCoordinates = slots.some(guiSlotHasCoordinate);
-    var hasRecipe = state.type === "recipe" && trim(state.recipeType) !== "";
+    var hasRecipe = state.type === "recipe";
     return {
       title: true,
       text: true,
@@ -2587,7 +2341,7 @@
       return "Adicione um tanque na etapa 05 para liberar fluid_bar.";
     }
     if (type === "progress_bar" || type === "arrow" || type === "entity") {
-      return "Use type=recipe com recipe_type para liberar progress_bar, arrow e entity.";
+      return "Use type=recipe para liberar progress_bar, arrow e entity.";
     }
     if (type === "slot") {
       return "slot exige item_slots sem x/y (formato antigo).";
@@ -3475,7 +3229,9 @@
   }
 
   function recipeJson(recipe) {
-    return JSON.stringify(V.buildRecipe(recipe, recipeAvailability()), null, 2);
+    var options = recipeAvailability();
+    options.definitionId = (trim(state.namespace) || "namespace") + ":" + (trim(state.path) || "path");
+    return JSON.stringify(V.buildRecipe(recipe, options), null, 2);
   }
 
   function recipeErrors(index) {
@@ -3567,7 +3323,8 @@
       noticesHtml +
       "<div class='recipe-grid'>" +
       "<label class='field'><span>arquivo</span><input data-recipe-field='file' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.file) + "' placeholder='gold_ingot_from_ore'></label>" +
-      "<label class='field'><span>type</span><input data-recipe-field='type' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.type) + "' placeholder='infinity_nexus_multiblock:exemplo_smelting'></label>" +
+      "<label class='field'><span>type (fixo)</span><input type='text' value='" + esc(V.RECIPE_TYPE) + "' readonly></label>" +
+      "<label class='field'><span>definition (fixo)</span><input type='text' value='" + esc((trim(state.namespace) || "namespace") + ":" + (trim(state.path) || "path")) + "' readonly></label>" +
       "<label class='field'><span>output.type</span><select data-recipe-field='outputType'>" + outputTypeOptions + "</select></label>" +
       outputFields +
       energyField +
@@ -3627,7 +3384,7 @@
     var recipes = Array.isArray(state.recipes) ? state.recipes : [];
     var summary = $("recipeSummary");
     var empty = $("recipeEmpty");
-    var note = $("recipeTypeNote");
+    var note = $("recipeNote");
     if (note) {
       note.hidden = state.type === "recipe";
     }
@@ -3720,7 +3477,6 @@
     }
     var recipe = V.createRecipe();
     recipe.file = file;
-    recipe.type = state.type === "recipe" ? trim(state.recipeType) : "";
     state.recipes.push(recipe);
     refresh();
     var card = recipeCardElement(state.recipes.length - 1);
@@ -3784,40 +3540,15 @@
     (Array.isArray(state.recipes) ? state.recipes : []).forEach(function (recipe, index) {
       add("receita " + pad2(index + 1), recipePath(recipe));
     });
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    if (controller) {
-      add("controller.block", trim(controller.block) || controllerBlockId());
-      var textures = isPlainObject(controller.textures) ? controller.textures : {};
-      V.CONTROLLER_FACES.forEach(function (face) {
-        add("textura " + face, textureAssetPath(textures[face]));
-      });
-      if (isPlainObject(controller.formedTextures)) {
-        V.CONTROLLER_FACES.forEach(function (face) {
-          var path = textureAssetPath(controller.formedTextures[face]);
-          if (path) {
-            add("formada " + face, path);
-          }
-        });
-      }
-      rows.push({
-        note: state.namespace === "infinity_nexus_multiblock"
-          ? "Controller dinâmico: blockstate e modelo são gerados em memória pelo mod."
-          : "Namespace externo: o bloco controller precisa existir e estar registrado em Java."
-      });
-    } else {
-      rows.push({ note: "Sem controller customizado: o mod usa id e texturas fallback." });
-    }
+    rows.push({
+      note: "Controller compartilhado: infinity_nexus_multiblock:multiblock_controller. Nenhum blockstate ou textura por definição."
+    });
     if (isPlainObject(state.controllerRecipe)) {
+      add("receita do controller", "data/" + (trim(state.namespace) || "namespace") +
+        "/recipe/controller/" + (trim(state.path) || "path") + ".json");
       rows.push({
-        note: "Receita shaped do controller: o mod gera data/" +
-          (trim(state.namespace) || "namespace") + "/recipe/controller/" +
-          (trim(state.path) || "path") + ".json com resultado no item do controller."
+        note: "O resultado da receita shaped deve ser infinity_nexus_multiblock:multiblock_controller."
       });
-    }
-    if (state.namespace !== "infinity_nexus_multiblock") {
-      add("blockstate manual", "assets/" + state.namespace + "/blockstates/" + state.path + ".json");
-      add("modelo do bloco", "assets/" + state.namespace + "/models/block/" + state.path + ".json");
-      add("modelo do item", "assets/" + state.namespace + "/models/item/" + state.path + ".json");
     }
     return rows;
   }
@@ -3857,7 +3588,7 @@
       return "<div class='summary-card'><span>" + esc(label) + "</span><strong title='" +
         esc(title || value) + "'>" + esc(value) + "</strong></div>";
     }
-    var typeTitle = state.type === "recipe" ? "recipe · " + (state.recipeType || "sem recipe_type") : "storage";
+    var typeTitle = state.type === "recipe" ? "recipe · " + V.RECIPE_TYPE : "storage";
     var slots = Array.isArray(state.itemSlots) ? state.itemSlots : null;
     var slotTitle = slots === null
       ? "inventory_rows=" + (state.inventoryRows || 3)
@@ -3877,15 +3608,8 @@
       ? (energy ? "energia " + (trim(energy.id) || "sem id") + " · " + capabilityFieldValue(energy.capacity) + " FE" : "sem energia") +
         " · " + (capabilityFluids.length === 1 ? "1 tanque" : capabilityFluids.length + " tanques")
       : "sem capabilities";
-    var controller = isPlainObject(state.controller) ? state.controller : null;
-    var controllerValue = controller ? "custom" : "fallback";
-    var controllerBlock = controller ? trim(controller.block) : "";
-    if (!controllerBlock && controller && state.namespace === "infinity_nexus_multiblock") {
-      controllerBlock = controllerBlockId();
-    }
-    var controllerTitle = controller
-      ? (controllerBlock || "sem bloco") + " - " + controllerTextureCount(controller) + "/6 texturas"
-      : "id e texturas fallback";
+    var controllerValue = "único";
+    var controllerTitle = "infinity_nexus_multiblock:multiblock_controller";
     var controllerRecipe = isPlainObject(state.controllerRecipe) ? state.controllerRecipe : null;
     var controllerRecipeValue = controllerRecipe ? "shaped" : "nenhuma";
     var controllerRecipeTitle = controllerRecipe
@@ -4053,7 +3777,6 @@
       return;
     }
     var settings = options || {};
-    syncControllerBlock();
     report = V.validateState(state);
     definition = V.buildDefinition(state);
     jsonText = JSON.stringify(definition, null, 2);
@@ -4078,9 +3801,6 @@
     }
     if (activeStep === "capabilities" && !settings.skipCapabilities) {
       renderCapabilities();
-    }
-    if (activeStep === "controller" && !settings.skipController) {
-      renderController();
     }
     if (activeStep === "controller" && !settings.skipControllerRecipe) {
       renderControllerRecipe();
@@ -4193,34 +3913,6 @@
     }
     if (field === "controllerRecipeKey") {
       focusElement($("controllerRecipeKeyList"), false);
-      return;
-    }
-    if (field === "block") {
-      focusElement($("controllerBlock"), true);
-      return;
-    }
-    if (field === "textures") {
-      focusElement(controllerFieldElement("texture:front") || $("controllerPanel"), true);
-      return;
-    }
-    if (field.indexOf("texture:") === 0) {
-      focusElement(controllerFieldElement(field), true);
-      return;
-    }
-    if (field === "formedTextures") {
-      focusElement(controllerFieldElement("formed:front") || $("controllerPanel"), true);
-      return;
-    }
-    if (field.indexOf("formed:") === 0) {
-      focusElement(controllerFieldElement(field), true);
-      return;
-    }
-    if (field === "particle") {
-      focusElement($("controllerParticle"), true);
-      return;
-    }
-    if (field === "lightLevel") {
-      focusElement($("controllerLightLevel"), true);
       return;
     }
     if (field === "gui") {
@@ -4907,10 +4599,6 @@
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);
     $("capabilityPortsPanel").addEventListener("input", onCapabilityPortsInput);
-    $("addControllerBtn").addEventListener("click", addController);
-    $("controllerFallbackBtn").addEventListener("click", fillControllerFallback);
-    $("removeControllerBtn").addEventListener("click", removeController);
-    $("controllerForm").addEventListener("input", onControllerFormInput);
     $("addControllerRecipeBtn").addEventListener("click", addControllerRecipe);
     $("removeControllerRecipeBtn").addEventListener("click", removeControllerRecipe);
     $("controllerRecipePalette").addEventListener("click", onControllerRecipePaletteClick);

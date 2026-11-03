@@ -18,6 +18,8 @@ import com.Infinity.Nexus.Multiblock.api.ItemSlot;
 import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
+import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
+import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
@@ -96,6 +98,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private boolean capabilitySyncPending;
     private int[] inputSlots;
     private int[] outputSlots;
+    private @Nullable Identifier definitionId;
     private @Nullable MultiblockDefinition configuredDefinition;
     private @Nullable CompoundTag pendingEnergy;
     private @Nullable CompoundTag pendingFluid;
@@ -107,14 +110,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     public MultiblockControllerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
-        MultiblockDefinition definition = resolveDefinition(state);
-        int inventorySize = definition == null ? 54 : definition.inventorySize();
-        this.inventory = new RestrictedItemStackHandler(inventorySize);
+        this.inventory = new RestrictedItemStackHandler(54);
         this.inventory.setOnChangeCallback(this::setChanged);
         this.inputSlots = new int[0];
         this.outputSlots = new int[0];
-        this.menuLayout = MultiblockMenuLayout.create(definition);
-        this.configure(definition);
+        this.menuLayout = MultiblockMenuLayout.create(null);
+        this.configure(null);
     }
 
     private void configure(@Nullable MultiblockDefinition definition) {
@@ -219,10 +220,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.applyPendingCapabilities();
     }
 
-    private static @Nullable MultiblockDefinition resolveDefinition(BlockState state) {
-        return state.getBlock() instanceof MultiblockControllerBlock controller ? controller.definition() : null;
-    }
-
     private static int[] slotIndices(@Nullable MultiblockDefinition definition, ItemSlotRole role) {
         if (definition == null) {
             return new int[0];
@@ -238,7 +235,27 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     }
 
     public @Nullable MultiblockDefinition definition() {
-        return this.getBlockState().getBlock() instanceof MultiblockControllerBlock controller ? controller.definition() : null;
+        return this.definitionId == null ? null : MultiblockDefinitions.get(this.definitionId);
+    }
+
+    public @Nullable Identifier definitionId() {
+        return this.definitionId;
+    }
+
+    public void setDefinitionId(Identifier definitionId) {
+        if (java.util.Objects.equals(this.definitionId, definitionId)) {
+            return;
+        }
+        this.definitionId = definitionId;
+        MultiblockDefinition definition = this.definition();
+        if (definition != null) {
+            this.configure(definition);
+        }
+        this.setChanged();
+        if (this.level != null && !this.level.isClientSide()) {
+            BlockState state = this.getBlockState();
+            this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
+        }
     }
 
     public boolean isFormed() {
@@ -431,6 +448,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 .byType((RecipeType) recipeType);
         for (RecipeHolder<?> holder : holders) {
             if (holder.value() instanceof MultiblockRecipe recipe
+                    && java.util.Objects.equals(recipe.definition(), this.definitionId)
                     && recipe.output() instanceof MultiblockRecipeOutput.Entity entity) {
                 return entity.entityType();
             }
@@ -578,7 +596,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 .byKey(ResourceKey.create(Registries.RECIPE, recipeId));
         if (holder.isPresent()
                 && holder.get().value() instanceof MultiblockRecipe recipe
-                && recipe.getType() == recipeType) {
+                && recipe.getType() == recipeType
+                && java.util.Objects.equals(recipe.definition(), this.definitionId)) {
             this.activeRecipe = recipe;
             if (this.maxProgress <= 0) {
                 this.maxProgress = recipe.time();
@@ -590,21 +609,21 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     private @Nullable RecipeType<?> recipeType() {
         MultiblockDefinition definition = this.definition();
-        if (definition == null) {
-            return null;
-        }
-        Identifier recipeTypeId = definition.recipeType().orElse(null);
-        return recipeTypeId == null ? null : BuiltInRegistries.RECIPE_TYPE.getValue(recipeTypeId);
+        return definition != null && definition.type() == MultiblockType.RECIPE
+                ? ModRecipes.MULTIBLOCK_TYPE
+                : null;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Optional<RecipeHolder<MultiblockRecipe>> findRecipe(
+    private Optional<RecipeHolder<MultiblockRecipe>> findRecipe(
             ServerLevel serverLevel, RecipeType<?> recipeType, MultiblockRecipeInput input) {
         Collection<RecipeHolder<?>> holders = (Collection) serverLevel.recipeAccess()
                 .recipeMap()
                 .byType((RecipeType) recipeType);
         for (RecipeHolder<?> holder : holders) {
-            if (holder.value() instanceof MultiblockRecipe recipe && recipe.matches(input, serverLevel)) {
+            if (holder.value() instanceof MultiblockRecipe recipe
+                    && java.util.Objects.equals(recipe.definition(), this.definitionId)
+                    && recipe.matches(input, serverLevel)) {
                 return Optional.of((RecipeHolder<MultiblockRecipe>) (RecipeHolder) holder);
             }
         }
@@ -1255,6 +1274,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     @Override
     protected void saveAdditional(ValueOutput output) {
+        if (this.definitionId != null) {
+            output.store("Definition", Identifier.CODEC, this.definitionId);
+        }
         output.putBoolean("Formed", this.formed);
         output.store("Rotation", Rotation.CODEC, this.rotation);
         output.store("Origin", BlockPos.CODEC, this.origin);
@@ -1286,6 +1308,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     @Override
     protected void loadAdditional(ValueInput input) {
+        this.definitionId = input.read("Definition", Identifier.CODEC).orElse(null);
         this.formed = input.getBooleanOr("Formed", false);
         this.structureValidated = false;
         this.rotation = input.read("Rotation", Rotation.CODEC).orElse(Rotation.NONE);
@@ -1409,7 +1432,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     @Override
     public Component getDisplayName() {
-        return this.getBlockState().getBlock().getName();
+        MultiblockDefinition definition = this.definition();
+        return definition == null ? this.getBlockState().getBlock().getName() : definition.displayName();
     }
 
     @Override

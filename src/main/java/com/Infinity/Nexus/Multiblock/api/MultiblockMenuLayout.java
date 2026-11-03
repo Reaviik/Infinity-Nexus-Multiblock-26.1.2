@@ -79,9 +79,7 @@ public record MultiblockMenuLayout(
         int slotCount = itemSlots.isEmpty() ? configuredRows * 9 : itemSlots.size();
         boolean hasEnergy = definition != null && definition.energy().isPresent();
         List<FluidTank> tanks = definition == null ? List.of() : definition.fluidTanks();
-        boolean hasProgress = definition != null
-                && definition.type() == MultiblockType.RECIPE
-                && definition.recipeType().isPresent();
+        boolean hasProgress = definition != null && definition.type() == MultiblockType.RECIPE;
         int barCount = (hasEnergy ? 1 : 0) + tanks.size();
         boolean reservedRail = barCount > 0 || hasProgress;
         int columns = reservedRail ? 8 : 9;

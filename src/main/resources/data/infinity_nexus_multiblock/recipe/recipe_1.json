@@ -1,0 +1,20 @@
+{
+  "type": "infinity_nexus_multiblock:multiblock",
+  "definition": "infinity_nexus_multiblock:fabrica_de_voxel_cube",
+  "ingredients": [
+    "minecraft:raw_iron"
+  ],
+  "fluid_ingredients": [
+    {
+      "ingredient": "minecraft:lava",
+      "amount": 50
+    }
+  ],
+  "output": {
+    "type": "item",
+    "id": "minecraft:iron_ingot",
+    "count": 1
+  },
+  "energy": 0,
+  "time": 100
+}

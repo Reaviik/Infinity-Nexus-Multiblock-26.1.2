@@ -9,8 +9,9 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  var SCHEMA_VERSION = 1;
-  var KNOWN_RECIPE_TYPES = [];
+  var SCHEMA_VERSION = 2;
+  var RECIPE_TYPE = "infinity_nexus_multiblock:multiblock";
+  var KNOWN_RECIPE_TYPES = [RECIPE_TYPE];
   var NAMESPACE_PATTERN = /^[a-z0-9_.-]+$/;
   var PATH_PATTERN = /^[a-z0-9_./-]+$/;
   var ITEM_SLOT_ROLES = ["input", "output", "fuel", "upgrade", "component", "storage", "fluid"];
@@ -59,16 +60,15 @@
   var KNOWN_PATTERN_KEYS = ["anchor", "layers", "matchers"];
   var STEP_ORDER = ["identity", "pattern", "matchers", "slots", "capabilities", "controller", "gui", "recipes", "inheritance", "review"];
   var CHECK_LABELS = {
-    schema: "schema_version = 1",
+    schema: "schema_version = 2",
     identity: "id, namespace, path e type válidos",
-    recipe: "recipe_type coerente com o type",
     geometry: "camadas e linhas uniformes",
     anchor: "exatamente uma âncora",
     matchers: "todos os símbolos com matcher válido",
     slots: "item_slots válidos",
     capabilities: "capabilities válidas",
     capabilityPorts: "capability_ports válidas",
-    controller: "controller e texturas válidos",
+    controller: "controller único e item compartilhado",
     controllerRecipe: "receita shaped do controller válida",
     gui: "gui e elementos válidos",
     recipes: "receitas data-driven válidas",
@@ -366,7 +366,8 @@
   function createRecipe() {
     return {
       file: "",
-      type: "",
+      type: RECIPE_TYPE,
+      definition: "",
       outputType: "item",
       ingredientsRaw: "",
       fluidsRaw: "",
@@ -390,10 +391,13 @@
       });
       return recipe;
     }
-    if (typeof raw.type === "string") {
-      recipe.type = raw.type;
-    } else if (raw.type !== undefined) {
-      notes.push({ severity: "warning", message: "recipe.type inválido foi ignorado." });
+    if (typeof raw.type === "string" && raw.type !== RECIPE_TYPE) {
+      notes.push({ severity: "warning", message: "recipe.type antigo foi substituído por " + RECIPE_TYPE + "." });
+    }
+    if (typeof raw.definition === "string") {
+      recipe.definition = raw.definition;
+    } else if (raw.definition !== undefined) {
+      notes.push({ severity: "warning", message: "recipe.definition inválido foi ignorado." });
     }
     if (Array.isArray(raw.ingredients)) {
       recipe.ingredientsRaw = raw.ingredients.map(function (entry) {
@@ -450,7 +454,7 @@
       recipe.time = raw.time;
     }
     Object.keys(raw).forEach(function (key) {
-      if (["type", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
+      if (["type", "definition", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
         recipe.extras[key] = clone(raw[key]);
       }
     });
@@ -631,9 +635,13 @@
     } else {
       output.spawn = trimString(source.resultSpawn);
     }
+    var definitionId = trimString(options && options.definitionId) || trimString(source.definition);
     var built = {
-      type: trimString(source.type)
+      type: RECIPE_TYPE
     };
+    if (definitionId) {
+      built.definition = definitionId;
+    }
     if (ingredients.length > 0) {
       built.ingredients = ingredients;
     }
@@ -647,7 +655,7 @@
     built.time = toIntOr(source.time, 100);
     var extras = isPlainObject(source.extras) ? source.extras : {};
     Object.keys(extras).forEach(function (key) {
-      if (["type", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
+      if (["type", "definition", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
         built[key] = clone(extras[key]);
       }
     });
@@ -658,7 +666,7 @@
     var settings = options || {};
     var list = Array.isArray(recipes) ? recipes : [];
     var machineType = settings.machineType;
-    var machineRecipeType = trimString(settings.machineRecipeType);
+    var definitionId = trimString(settings.definitionId);
     var issues = [];
     var ok = true;
     var seenFiles = new Set();
@@ -697,17 +705,13 @@
         seenFiles.add(file);
       }
 
-      var type = trimString(recipe.type);
-      if (!type) {
-        addRecipeIssue("recipe.type.required", "error", index, "type", "Informe o type da receita.");
-      } else if (!isValidIdentifier(type)) {
-        addRecipeIssue("recipe.type.invalid", "error", index, "type", "O type da receita precisa ser um identifier válido.");
-      } else if (machineRecipeType && type !== machineRecipeType) {
-        addRecipeIssue("recipe.type.mismatch", "warning", index, "type",
-          "O type da receita difere do recipe_type desta máquina.");
-      } else if (!KNOWN_RECIPE_TYPES.includes(type)) {
-        addRecipeIssue("recipe.type.unknown", "warning", index, "type",
-          "Confirme no servidor se este recipe_type está registrado.");
+      var definition = trimString(recipe.definition) || definitionId;
+      if (!definition) {
+        addRecipeIssue("recipe.definition.required", "error", index, "definition",
+          "A receita precisa apontar para uma definição.");
+      } else if (!isValidIdentifier(definition)) {
+        addRecipeIssue("recipe.definition.invalid", "error", index, "definition",
+          "definition precisa ser um identifier válido.");
       }
 
       var ingredients = parseIngredientLines(recipe.ingredientsRaw);
@@ -2258,14 +2262,12 @@
       namespace: "infinity_nexus_multiblock",
       path: "minha_maquina",
       type: "storage",
-      recipeType: "",
       tier: 1,
       priority: 0,
       inventoryRows: 3,
       itemSlots: null,
       capabilities: null,
       capabilityPorts: null,
-      controller: null,
       controllerRecipe: null,
       gui: null,
       recipes: [],
@@ -2294,14 +2296,12 @@
       namespace: "infinity_nexus_multiblock",
       path: "alloy_smelter",
       type: "recipe",
-      recipeType: "infinity_nexus_multiblock:exemplo_smelting",
       tier: 1,
       priority: 0,
       inventoryRows: 3,
       itemSlots: null,
       capabilities: null,
       capabilityPorts: null,
-      controller: null,
       controllerRecipe: null,
       gui: null,
       recipes: [],
@@ -2519,7 +2519,7 @@
     if (raw.schema_version !== SCHEMA_VERSION) {
       notes.push({
         severity: "warning",
-        message: "schema_version diferente de 1 foi normalizado para 1."
+        message: "schema_version diferente de 2 foi normalizado para 2."
       });
     }
 
@@ -2556,14 +2556,24 @@
       });
     }
 
-    state.recipeType = typeof raw.recipe_type === "string" ? raw.recipe_type : "";
+    if (raw.recipe_type !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: "recipe_type foi removido no schema 2 e foi ignorado."
+      });
+    }
+    if (raw.controller !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: "controller dinâmico foi removido no schema 2 e foi ignorado."
+      });
+    }
     state.tier = toIntOr(raw.tier, 1);
     state.priority = toIntOr(raw.priority, 0);
     state.inventoryRows = toIntOr(raw.inventory_rows, 3);
     state.itemSlots = parseItemSlots(raw.item_slots, notes);
     state.capabilities = parseCapabilities(raw.capabilities, notes);
     state.capabilityPorts = parseCapabilityPorts(raw.capability_ports, notes);
-    state.controller = parseController(raw.controller, notes);
     state.controllerRecipe = parseControllerRecipe(raw.recipe, notes);
     state.gui = parseGui(raw.gui, notes);
     state.inheritance = parseInheritance(raw, notes);
@@ -2663,13 +2673,6 @@
       type: state.type === "recipe" ? "recipe" : "storage"
     };
 
-    if (definition.type === "recipe") {
-      var recipeType = trimString(state.recipeType);
-      if (recipeType) {
-        definition.recipe_type = recipeType;
-      }
-    }
-
     var inheritance = buildInheritance(state.inheritance);
     Object.keys(inheritance).forEach(function (key) {
       definition[key] = inheritance[key];
@@ -2700,13 +2703,6 @@
       if (capabilityPorts && Object.keys(capabilityPorts).length > 0) {
         definition.capability_ports = capabilityPorts;
       }
-    }
-    if (isPlainObject(state.controller)) {
-      var controller = buildController(state.controller);
-      if (namespace === "infinity_nexus_multiblock") {
-        controller.block = id;
-      }
-      definition.controller = controller;
     }
     if (isPlainObject(state.controllerRecipe)) {
       var controllerRecipe = buildControllerRecipe(state.controllerRecipe);
@@ -2772,7 +2768,7 @@
     var schema = toInt(state.schemaVersion);
     if (schema !== SCHEMA_VERSION) {
       add("schema.unsupported", "error", "identity", "schemaVersion",
-        "schema_version precisa ser 1.");
+        "schema_version precisa ser 2.");
     }
 
     var namespace = trimString(state.namespace);
@@ -2796,23 +2792,6 @@
     if (!typeIsValid) {
       add("type.invalid", "error", "identity", "type",
         "type precisa ser recipe ou storage.");
-    }
-
-    var recipeType = trimString(state.recipeType);
-    if (state.type === "recipe") {
-      if (!recipeType) {
-        add("recipe_type.required", "error", "identity", "recipeType",
-          "type=recipe exige um recipe_type.");
-      } else if (!isValidIdentifier(recipeType)) {
-        add("recipe_type.invalid", "error", "identity", "recipeType",
-          "recipe_type não é um identifier válido.");
-      } else if (!KNOWN_RECIPE_TYPES.includes(recipeType) && namespace !== "infinity_nexus_multiblock") {
-        add("recipe_type.unknown", "warning", "identity", "recipeType",
-          "Este recipe_type não é um dos tipos conhecidos neste repositório. Datapacks externos não registram tipos novos; confirme no servidor.");
-      }
-    } else if (state.type === "storage" && recipeType) {
-      add("recipe_type.ignored", "warning", "identity", "recipeType",
-        "recipe_type não é permitido em type=storage e será omitido do JSON.");
     }
 
     var inheritance = isPlainObject(state.inheritance) ? state.inheritance : createInheritance();
@@ -2870,7 +2849,7 @@
     var tier = toInt(state.tier);
     var recipeValidation = validateRecipes(state.recipes, Object.assign({
       machineType: state.type,
-      machineRecipeType: recipeType
+      definitionId: namespace && path ? namespace + ":" + path : ""
     }, recipeAvailability(state)));
     recipeValidation.issues.forEach(function (entry) {
       issues.push(entry);
@@ -2891,80 +2870,6 @@
     if (inventoryRows === null || inventoryRows < 1 || inventoryRows > 6) {
       add("inventory_rows.invalid", "error", "identity", "inventoryRows",
         "inventory_rows precisa ser um inteiro de 1 a 6.");
-    }
-
-    if (namespace && path && isValidNamespace(namespace) && isValidPath(path)) {
-      var id = namespace + ":" + path;
-      var controller = state.controller;
-      if (controller === null || controller === undefined) {
-        if (namespace !== "infinity_nexus_multiblock") {
-          add("controller.dynamic.required", "error", "controller", "controller",
-            "Namespace externo não cria bloco controller dinâmico. Use infinity_nexus_multiblock ou registre um controller em Java.");
-        }
-      } else if (!isPlainObject(controller)) {
-        add("controller.invalid", "error", "controller", "controller",
-          "controller precisa ser um objeto.");
-      } else {
-        var controllerBlock = trimString(controller.block);
-        if (namespace === "infinity_nexus_multiblock") {
-          if (controllerBlock !== id) {
-            add("controller.block.sync", "warning", "controller", "block",
-              "controller.block será sincronizado com o id no download.");
-          }
-        } else {
-          add("controller.datapack", "warning", "controller", "block",
-            "Namespace externo só funciona com um controller já registrado em Java; o controller será preservado.");
-          if (!controllerBlock) {
-            add("controller.block.required", "error", "controller", "block",
-              "Informe o bloco do controller.");
-          } else if (!isValidIdentifier(controllerBlock)) {
-            add("controller.block.invalid", "error", "controller", "block",
-              "controller.block precisa ser um identifier válido.");
-          }
-        }
-
-        if (!isPlainObject(controller.textures)) {
-          add("controller.textures.invalid", "error", "controller", "textures",
-            "controller.textures precisa ser um objeto com as seis faces.");
-        } else {
-          CONTROLLER_FACES.forEach(function (face) {
-            var texture = trimString(controller.textures[face]);
-            if (!texture) {
-              add("controller.texture.required", "error", "controller", "texture:" + face,
-                "Informe a textura " + face + " do controller.");
-            } else if (!isValidIdentifier(texture)) {
-              add("controller.texture.invalid", "error", "controller", "texture:" + face,
-                "A textura " + face + " do controller precisa ser um identifier válido.");
-            }
-          });
-        }
-
-        if (controller.formedTextures !== null && controller.formedTextures !== undefined) {
-          if (!isPlainObject(controller.formedTextures)) {
-            add("controller.formed_textures.invalid", "error", "controller", "formedTextures",
-              "controller.formed_textures precisa ser um objeto.");
-          } else {
-            CONTROLLER_FACES.forEach(function (face) {
-              var formedTexture = trimString(controller.formedTextures[face]);
-              if (formedTexture && !isValidIdentifier(formedTexture)) {
-                add("controller.formed_texture.invalid", "error", "controller", "formed:" + face,
-                  "A textura formada " + face + " precisa ser um identifier válido.");
-              }
-            });
-          }
-        }
-
-        var particle = trimString(controller.particle);
-        if (particle && !isValidIdentifier(particle)) {
-          add("controller.particle.invalid", "error", "controller", "particle",
-            "A partícula do controller precisa ser um identifier válido.");
-        }
-        var lightLevel = toInt(controller.lightLevel);
-        if (lightLevel === null || lightLevel < 0 || lightLevel > MAX_LIGHT_LEVEL) {
-          add("controller.light_level.invalid", "error", "controller", "lightLevel",
-            "light_level precisa ser um inteiro de 0 a " + MAX_LIGHT_LEVEL + ".");
-        }
-      }
     }
 
     var controllerRecipeOk = true;
@@ -3636,14 +3541,6 @@
       step: "identity"
     });
     checks.push({
-      id: "recipe",
-      label: CHECK_LABELS.recipe,
-      ok: !["recipe_type.required", "recipe_type.invalid"].some(function (code) {
-        return errorCodes.has(code);
-      }),
-      step: "identity"
-    });
-    checks.push({
       id: "geometry",
       label: CHECK_LABELS.geometry,
       ok: geometryOk,
@@ -3682,13 +3579,7 @@
     checks.push({
       id: "controller",
       label: CHECK_LABELS.controller,
-      ok: !["controller.dynamic.required", "controller.invalid", "controller.block.required",
-        "controller.block.invalid", "controller.textures.invalid", "controller.texture.required",
-        "controller.texture.invalid", "controller.formed_textures.invalid",
-        "controller.formed_texture.invalid", "controller.particle.invalid",
-        "controller.light_level.invalid"].some(function (code) {
-        return errorCodes.has(code);
-      }),
+      ok: true,
       step: "controller"
     });
     checks.push({
@@ -3778,6 +3669,7 @@
 
   return {
     SCHEMA_VERSION: SCHEMA_VERSION,
+    RECIPE_TYPE: RECIPE_TYPE,
     KNOWN_RECIPE_TYPES: KNOWN_RECIPE_TYPES.slice(),
     ITEM_SLOT_ROLES: ITEM_SLOT_ROLES.slice(),
     CONTROLLER_FACES: CONTROLLER_FACES.slice(),

@@ -2,23 +2,24 @@ package com.Infinity.Nexus.Multiblock.api;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Rotation;
 
 public final class MultiblockDefinition {
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     private final Identifier id;
     private final int schemaVersion;
     private final MultiblockType type;
-    private final Identifier recipeType;
     private final int priority;
     private final int tier;
     private final MultiblockPattern pattern;
@@ -27,14 +28,12 @@ public final class MultiblockDefinition {
     private final Optional<EnergyCapability> energy;
     private final List<FluidTank> fluidTanks;
     private final Optional<MultiblockGui> gui;
-    private final Optional<MultiblockControllerConfig> controller;
     private final CapabilityPorts capabilityPorts;
 
     private MultiblockDefinition(
             Identifier id,
             int schemaVersion,
             MultiblockType type,
-            Identifier recipeType,
             int priority,
             int tier,
             MultiblockPattern pattern,
@@ -43,12 +42,10 @@ public final class MultiblockDefinition {
             Optional<EnergyCapability> energy,
             List<FluidTank> fluidTanks,
             Optional<MultiblockGui> gui,
-            Optional<MultiblockControllerConfig> controller,
             CapabilityPorts capabilityPorts) {
         this.id = id;
         this.schemaVersion = schemaVersion;
         this.type = type;
-        this.recipeType = recipeType;
         this.priority = priority;
         this.tier = tier;
         this.pattern = pattern;
@@ -57,7 +54,6 @@ public final class MultiblockDefinition {
         this.energy = energy;
         this.fluidTanks = fluidTanks;
         this.gui = gui;
-        this.controller = controller;
         this.capabilityPorts = capabilityPorts;
     }
 
@@ -69,16 +65,33 @@ public final class MultiblockDefinition {
         return this.id;
     }
 
+    public Component displayName() {
+        String key = "multiblock." + this.id.getNamespace() + "." + this.id.getPath();
+        return Component.translatableWithFallback(key, fallbackName(this.id.getPath()));
+    }
+
+    private static String fallbackName(String path) {
+        String[] words = path.split("_");
+        StringBuilder name = new StringBuilder(path.length());
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (!name.isEmpty()) {
+                name.append(' ');
+            }
+            name.append(word.substring(0, 1).toUpperCase(Locale.ROOT));
+            name.append(word.substring(1).toLowerCase(Locale.ROOT));
+        }
+        return name.isEmpty() ? path : name.toString();
+    }
+
     public int schemaVersion() {
         return this.schemaVersion;
     }
 
     public MultiblockType type() {
         return this.type;
-    }
-
-    public Optional<Identifier> recipeType() {
-        return Optional.ofNullable(this.recipeType);
     }
 
     public int priority() {
@@ -117,10 +130,6 @@ public final class MultiblockDefinition {
         return this.gui;
     }
 
-    public Optional<MultiblockControllerConfig> controller() {
-        return this.controller;
-    }
-
     public CapabilityPorts capabilityPorts() {
         return this.capabilityPorts;
     }
@@ -146,7 +155,6 @@ public final class MultiblockDefinition {
         private final Identifier id;
         private int schemaVersion = CURRENT_SCHEMA_VERSION;
         private MultiblockType type = MultiblockType.RECIPE;
-        private Identifier recipeType;
         private int priority;
         private int tier = 1;
         private MultiblockPattern pattern;
@@ -155,7 +163,6 @@ public final class MultiblockDefinition {
         private EnergyCapability energy;
         private List<FluidTank> fluidTanks = List.of();
         private MultiblockGui gui;
-        private MultiblockControllerConfig controller;
         private CapabilityPorts capabilityPorts = CapabilityPorts.ALL;
 
         private Builder(Identifier id) {
@@ -172,11 +179,6 @@ public final class MultiblockDefinition {
 
         public Builder type(MultiblockType type) {
             this.type = Objects.requireNonNull(type, "type");
-            return this;
-        }
-
-        public Builder recipeType(Identifier recipeType) {
-            this.recipeType = Objects.requireNonNull(recipeType, "recipeType");
             return this;
         }
 
@@ -226,11 +228,6 @@ public final class MultiblockDefinition {
             return this;
         }
 
-        public Builder controller(MultiblockControllerConfig controller) {
-            this.controller = Objects.requireNonNull(controller, "controller");
-            return this;
-        }
-
         public Builder capabilityPorts(CapabilityPorts capabilityPorts) {
             this.capabilityPorts = Objects.requireNonNull(capabilityPorts, "capabilityPorts");
             return this;
@@ -239,12 +236,6 @@ public final class MultiblockDefinition {
         public MultiblockDefinition build() {
             if (this.pattern == null) {
                 throw new IllegalStateException("A multiblock definition needs a pattern");
-            }
-            if (this.type == MultiblockType.RECIPE && this.recipeType == null) {
-                throw new IllegalStateException("Recipe multiblocks need a recipe_type");
-            }
-            if (this.type == MultiblockType.STORAGE && this.recipeType != null) {
-                throw new IllegalStateException("Storage multiblocks cannot define a recipe_type");
             }
             Set<String> slotIds = new HashSet<>();
             for (ItemSlot slot : this.itemSlots) {
@@ -266,7 +257,6 @@ public final class MultiblockDefinition {
                     this.id,
                     this.schemaVersion,
                     this.type,
-                    this.recipeType,
                     this.priority,
                     this.tier,
                     this.pattern,
@@ -275,7 +265,6 @@ public final class MultiblockDefinition {
                     Optional.ofNullable(this.energy),
                     this.fluidTanks,
                     Optional.ofNullable(this.gui),
-                    Optional.ofNullable(this.controller),
                     this.capabilityPorts);
         }
     }

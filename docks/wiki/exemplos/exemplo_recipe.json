@@ -1,8 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "infinity_nexus_multiblock:exemplo_recipe",
   "type": "recipe",
-  "recipe_type": "infinity_nexus_multiblock:exemplo_smelting",
   "priority": 0,
   "tier": 1,
   "item_slots": [

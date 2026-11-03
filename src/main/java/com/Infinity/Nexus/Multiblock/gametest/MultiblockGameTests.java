@@ -17,11 +17,14 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
+import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.serialization.MapCodec;
 import java.util.EnumSet;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestInstance;
 import net.minecraft.gametest.framework.TestData;
@@ -30,8 +33,12 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.server.loading.ServerModLoader;
 
@@ -111,7 +118,51 @@ public final class MultiblockGameTests {
             assertEarlySlotPositions(helper);
             assertFluidOnlyGui(helper);
             assertSlotLockBehavior(helper);
+            assertControllerRecipe(helper);
             helper.succeed();
+        }
+
+        private static void assertControllerRecipe(GameTestHelper helper) {
+            Identifier definitionId = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "fabrica_de_voxel_cube1");
+            Identifier recipeId = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "controller/fabrica_de_voxel_cube1");
+            ResourceKey<net.minecraft.world.item.crafting.Recipe<?>> recipeKey =
+                    ResourceKey.create(Registries.RECIPE, recipeId);
+            RecipeHolder<?> holder = helper.getLevel().getServer().getRecipeManager()
+                    .byKey(recipeKey)
+                    .orElse(null);
+            if (holder == null) {
+                List<String> known = helper.getLevel().getServer().getRecipeManager().getRecipes().stream()
+                        .map(recipe -> recipe.id().identifier().toString())
+                        .filter(id -> id.startsWith(InfinityNexusMultiblock.MOD_ID + ":"))
+                        .sorted()
+                        .toList();
+                throw helper.assertionException(Component.literal(
+                        "Generated controller recipe is missing: " + recipeId
+                                + "; total: " + helper.getLevel().getServer().getRecipeManager().getRecipes().size()
+                                + "; mod recipes: " + known));
+            }
+            if (!(holder.value() instanceof ShapedRecipe shapedRecipe)) {
+                throw helper.assertionException(Component.literal(
+                        "Generated controller recipe is not shaped: " + recipeId));
+            }
+
+            ItemStack result = shapedRecipe.assemble(CraftingInput.EMPTY);
+            if (!result.is(ModBlocks.CONTROLLER_ITEM.get())) {
+                throw helper.assertionException(Component.literal(
+                        "Generated controller recipe has the wrong result item: " + result));
+            }
+            if (result.getCount() != 1) {
+                throw helper.assertionException(Component.literal(
+                        "Generated controller recipe must output exactly one item, got " + result.getCount()));
+            }
+            Identifier componentDefinition = result.get(ModDataComponents.MULTIBLOCK_DEFINITION.get());
+            if (!definitionId.equals(componentDefinition)) {
+                throw helper.assertionException(Component.literal(
+                        "Generated controller recipe has definition " + componentDefinition
+                                + " instead of " + definitionId));
+            }
         }
 
         private static void assertSlotLockBehavior(GameTestHelper helper) {
@@ -224,7 +275,8 @@ public final class MultiblockGameTests {
 
         @Override
         protected MutableComponent typeDescription() {
-            return Component.literal("maquina_teste fallback gui layout and explicit slot positions");
+            return Component.literal(
+                    "maquina_teste fallback gui layout, explicit slot positions and generated controller recipe");
         }
     }
 }

@@ -12,7 +12,6 @@ import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
 import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
 import com.Infinity.Nexus.Multiblock.api.EnergyCapability;
-import com.Infinity.Nexus.Multiblock.api.MultiblockControllerConfig;
 import com.Infinity.Nexus.Multiblock.api.FluidFilter;
 import com.Infinity.Nexus.Multiblock.api.FluidTank;
 import com.Infinity.Nexus.Multiblock.api.ItemFilter;
@@ -24,7 +23,6 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
-import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -68,10 +66,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             Codec.INT.fieldOf("schema_version").forGetter(DefinitionFile::schemaVersion),
             Identifier.CODEC.fieldOf("id").forGetter(DefinitionFile::id),
             MultiblockType.CODEC.fieldOf("type").forGetter(DefinitionFile::type),
-            Identifier.CODEC.optionalFieldOf("recipe_type").forGetter(DefinitionFile::recipeType),
             Codec.INT.optionalFieldOf("priority", 0).forGetter(DefinitionFile::priority),
             Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("tier", 1).forGetter(DefinitionFile::tier),
-            MultiblockControllerConfig.CODEC.optionalFieldOf("controller").forGetter(DefinitionFile::controller),
             Codec.intRange(1, 6).optionalFieldOf("inventory_rows", 3).forGetter(DefinitionFile::inventoryRows),
             ItemSlotFile.CODEC.listOf().optionalFieldOf("item_slots", List.of()).forGetter(DefinitionFile::itemSlots),
             CapabilitiesFile.CODEC.optionalFieldOf("capabilities", CapabilitiesFile.EMPTY).forGetter(DefinitionFile::capabilities),
@@ -102,13 +98,6 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
         if (file.schemaVersion() != MultiblockDefinition.CURRENT_SCHEMA_VERSION) {
             throw new IllegalArgumentException("Unsupported schema_version: " + file.schemaVersion());
         }
-        if (file.type() == MultiblockType.RECIPE && file.recipeType().isEmpty()) {
-            throw new IllegalArgumentException("Recipe multiblocks need a recipe_type");
-        }
-        if (file.type() == MultiblockType.STORAGE && file.recipeType().isPresent()) {
-            throw new IllegalArgumentException("Storage multiblocks cannot define a recipe_type");
-        }
-        file.controller().ifPresent(controller -> validateController(id, controller));
 
         MultiblockPattern.Builder pattern = MultiblockPattern.builder().anchor(file.pattern().anchor());
         file.pattern().matchers().forEach((symbol, matcher) -> pattern.matcher(symbol, matcher));
@@ -130,23 +119,9 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .pattern(pattern.build());
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
         file.gui().ifPresent(definition::gui);
-        file.controller().ifPresent(definition::controller);
-        file.recipeType().ifPresent(definition::recipeType);
         MultiblockDefinition built = definition.build();
         MultiblockMenuLayout.create(built);
         return built;
-    }
-
-    private static void validateController(Identifier definitionId, MultiblockControllerConfig controller) {
-        Block block = BuiltInRegistries.BLOCK.getOptional(controller.block())
-                .orElseThrow(() -> new IllegalArgumentException("Unknown controller block: " + controller.block()));
-        if (!(block instanceof MultiblockControllerBlock controllerBlock)) {
-            throw new IllegalArgumentException("Block is not a multiblock controller: " + controller.block());
-        }
-        if (!controllerBlock.definitionId().equals(definitionId)) {
-            throw new IllegalArgumentException("Controller block " + controller.block()
-                    + " references definition " + controllerBlock.definitionId() + ", expected " + definitionId);
-        }
     }
 
     @Override
@@ -216,10 +191,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             int schemaVersion,
             Identifier id,
             MultiblockType type,
-            Optional<Identifier> recipeType,
             int priority,
             int tier,
-            Optional<MultiblockControllerConfig> controller,
             int inventoryRows,
             List<ItemSlotFile> itemSlots,
             CapabilitiesFile capabilities,

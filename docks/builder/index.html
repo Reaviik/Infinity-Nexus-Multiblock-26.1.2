@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Builder visual de multiblocos data-driven do Infinity Nexus Multiblock, schema_version 1.">
+  <meta name="description" content="Builder visual de multiblocos data-driven do Infinity Nexus Multiblock, schema_version 2.">
   <title>Infinity Nexus · Multiblock Builder</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -28,7 +28,7 @@
     </a>
 
     <div class="header-meta">
-      <span class="pill pill-muted">schema_version 1</span>
+      <span class="pill pill-muted">schema_version 2</span>
       <span class="pill pill-status" id="statusPill" data-tone="ok">Pronto</span>
     </div>
 
@@ -69,8 +69,8 @@
           <div class="form-grid">
             <div class="field">
               <label for="schemaVersion">schema_version <span class="required">*</span></label>
-              <input id="schemaVersion" type="text" value="1" readonly aria-readonly="true">
-              <p class="field-hint">Somente <code>1</code> é aceito.</p>
+              <input id="schemaVersion" type="text" value="2" readonly aria-readonly="true">
+              <p class="field-hint">Somente <code>2</code> é aceito.</p>
             </div>
 
             <div class="field">
@@ -128,21 +128,12 @@
                 <span class="type-icon" aria-hidden="true">⟳</span>
                 <span>
                   <strong>Recipe</strong>
-                  <small>Processa um <code>recipe_type</code> registrado e exibe progresso.</small>
+                  <small>Processa receitas do tipo fixo <code>infinity_nexus_multiblock:multiblock</code> e exibe progresso.</small>
                 </span>
               </span>
             </label>
           </div>
 
-          <div class="field field-recipe" id="recipeTypeField" hidden>
-            <label for="recipeType">recipe_type <span class="required">*</span></label>
-            <input id="recipeType" data-bind="recipeType" type="text" list="recipeTypeOptions" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:exemplo_smelting">
-            <datalist id="recipeTypeOptions">
-              <option value="infinity_nexus_multiblock:exemplo_smelting"></option>
-            </datalist>
-            <p class="field-hint">Obrigatório em <code>recipe</code>; precisa ser um tipo já registrado pelo mod. Datapacks não registram tipos novos.</p>
-            <p class="field-error" data-error-for="recipeType"></p>
-          </div>
         </div>
 
         <div class="panel">
@@ -359,103 +350,23 @@
         <div class="view-head">
           <div>
             <p class="eyebrow">Etapa 06 · opcional</p>
-            <h1 id="controllerTitle">Controller e texturas</h1>
-            <p class="view-subtitle">Define o bloco controller e as seis texturas semânticas. Sem controller, o loader usa o próprio id e as texturas fallback.</p>
+            <h1 id="controllerTitle">Controller único e receita</h1>
+            <p class="view-subtitle">Todas as definições usam o mesmo bloco e item controller. Aqui você apenas configura a receita shaped opcional que cria esse item.</p>
           </div>
           <span class="badge badge-neutral" id="controllerBadge">Pendente</span>
         </div>
 
         <div class="panel" id="controllerPanel">
-          <div class="panel-head panel-head-wrap">
+          <div class="panel-head">
             <div>
-              <h2>controller</h2>
-              <p class="panel-subtitle" id="controllerSummary">Sem controller; o loader usa o id e texturas fallback.</p>
-            </div>
-            <div class="button-row">
-              <button type="button" class="btn btn-tiny" id="addControllerBtn">+ controller</button>
-              <button type="button" class="btn btn-tiny" id="controllerFallbackBtn">usar fallback</button>
-              <button type="button" class="btn btn-tiny btn-danger" id="removeControllerBtn">remover controller</button>
+              <h2>controller compartilhado</h2>
+              <p class="panel-subtitle" id="controllerSummary">Todas as definições usam o mesmo controller; não há bloco ou textura por máquina.</p>
             </div>
           </div>
-          <div class="missing-empty" id="controllerEmpty"></div>
-          <div id="controllerForm" hidden>
-            <div class="controller-form">
-              <div class="field field-wide">
-                <label for="controllerBlock">block</label>
-                <input id="controllerBlock" type="text" data-controller-field="block" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:minha_maquina">
-                <p class="field-hint" id="controllerBlockHint"></p>
-              </div>
-            </div>
-
-            <h3 class="controller-section-title">Texturas por face <span class="required">*</span></h3>
-            <div class="controller-texture-grid">
-              <div class="field">
-                <label for="controllerTextureFront">front</label>
-                <input id="controllerTextureFront" type="text" data-controller-field="texture:front" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../front">
-              </div>
-              <div class="field">
-                <label for="controllerTextureBack">back</label>
-                <input id="controllerTextureBack" type="text" data-controller-field="texture:back" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../back">
-              </div>
-              <div class="field">
-                <label for="controllerTextureLeft">left</label>
-                <input id="controllerTextureLeft" type="text" data-controller-field="texture:left" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../left">
-              </div>
-              <div class="field">
-                <label for="controllerTextureRight">right</label>
-                <input id="controllerTextureRight" type="text" data-controller-field="texture:right" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../right">
-              </div>
-              <div class="field">
-                <label for="controllerTextureTop">top</label>
-                <input id="controllerTextureTop" type="text" data-controller-field="texture:top" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../top">
-              </div>
-              <div class="field">
-                <label for="controllerTextureBottom">bottom</label>
-                <input id="controllerTextureBottom" type="text" data-controller-field="texture:bottom" spellcheck="false" autocomplete="off" placeholder="namespace:block/.../bottom">
-              </div>
-            </div>
-
-            <h3 class="controller-section-title">Texturas quando formado <span class="controller-optional">opcional</span></h3>
-            <div class="controller-texture-grid">
-              <div class="field">
-                <label for="controllerFormedFront">front</label>
-                <input id="controllerFormedFront" type="text" data-controller-field="formed:front" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-              <div class="field">
-                <label for="controllerFormedBack">back</label>
-                <input id="controllerFormedBack" type="text" data-controller-field="formed:back" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-              <div class="field">
-                <label for="controllerFormedLeft">left</label>
-                <input id="controllerFormedLeft" type="text" data-controller-field="formed:left" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-              <div class="field">
-                <label for="controllerFormedRight">right</label>
-                <input id="controllerFormedRight" type="text" data-controller-field="formed:right" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-              <div class="field">
-                <label for="controllerFormedTop">top</label>
-                <input id="controllerFormedTop" type="text" data-controller-field="formed:top" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-              <div class="field">
-                <label for="controllerFormedBottom">bottom</label>
-                <input id="controllerFormedBottom" type="text" data-controller-field="formed:bottom" spellcheck="false" autocomplete="off" placeholder="vazio = textura base">
-              </div>
-            </div>
-
-            <div class="controller-extra">
-              <div class="field">
-                <label for="controllerParticle">particle</label>
-                <input id="controllerParticle" type="text" data-controller-field="particle" spellcheck="false" autocomplete="off" placeholder="minecraft:smoke">
-              </div>
-              <div class="field">
-                <label for="controllerLightLevel">light_level</label>
-                <input id="controllerLightLevel" type="number" min="0" max="15" step="1" data-controller-field="lightLevel" placeholder="0">
-              </div>
-            </div>
-
-            <code class="matcher-json slot-json controller-json" id="controllerJson"></code>
-            <p class="matcher-feedback controller-feedback" id="controllerFeedback" hidden></p>
+          <div class="missing-empty">
+            <p>O bloco, o item e o block entity são registrados uma única vez pelo mod:</p>
+            <p><code>infinity_nexus_multiblock:multiblock_controller</code></p>
+            <p>Cada definição é associada ao controller pelo componente <code>infinity_nexus_multiblock:multiblock_definition</code>.</p>
           </div>
         </div>
 
@@ -471,7 +382,7 @@
             </div>
           </div>
           <div class="missing-empty" id="controllerRecipeEmpty">
-            Sem receita. O mod não gera crafting para este controller.
+            Sem receita. O mod não gera crafting do controller.
           </div>
           <div id="controllerRecipeForm" hidden>
             <h3 class="controller-section-title">Pattern 3x3 <span class="controller-optional">clique na letra e depois no slot</span></h3>
@@ -491,9 +402,7 @@
         </div>
 
         <div class="callout callout-info">
-          <code>block</code> e as seis texturas são obrigatórios quando há controller. Em <code>infinity_nexus_multiblock</code>, o bloco é sincronizado com o id; namespace externo exige um controller já registrado em Java.
-          <code>formed_textures</code>, <code>particle</code> e <code>light_level</code> são opcionais.
-          <code>recipe</code> é opcional e gera uma receita shaped de crafting table cujo resultado é o próprio item do controller.
+          O controller, suas texturas e o block entity são compartilhados por todas as definições. O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
         </div>
       </section>
 
@@ -583,12 +492,12 @@
           <div>
             <p class="eyebrow">Etapa 08 · opcional</p>
             <h1 id="recipesTitle">Receitas data-driven</h1>
-            <p class="view-subtitle">Crie os arquivos de receita em <code>data/&lt;namespace&gt;/recipe/</code>. O JEI gera a categoria a partir do controller; o builder só valida e exporta os JSONs.</p>
+            <p class="view-subtitle">Crie os arquivos de receita em <code>data/&lt;namespace&gt;/recipe/</code>. O tipo é fixo e o builder preenche <code>definition</code> automaticamente.</p>
           </div>
           <span class="badge badge-neutral" id="recipesBadge">Opcional</span>
         </div>
 
-        <div class="callout callout-warn" id="recipeTypeNote" hidden>
+        <div class="callout callout-warn" id="recipeNote" hidden>
           Esta definição é <code>storage</code>; receitas não serão processadas por ela. Use uma máquina <code>type=recipe</code>.
         </div>
 
@@ -608,7 +517,7 @@
         </div>
 
         <div class="callout callout-info">
-          <code>ingredients</code>: um id ou tag por linha; também aceita JSON de ingrediente em uma linha. <code>fluid_ingredients</code>: use <code>fluido quantidade</code> por linha e só aparece quando a máquina tem tanque. <code>output.type</code> aceita <code>item</code>, <code>fluid</code> ou <code>entity</code>; o builder oculta energia, fluidos e saídas que a máquina não suporta. O <code>type</code> precisa ser o mesmo <code>recipe_type</code> registrado pela máquina. O JEI mostra as receitas automaticamente quando o controller tem <code>type=recipe</code>.
+          <code>ingredients</code>: um id ou tag por linha; também aceita JSON de ingrediente em uma linha. <code>fluid_ingredients</code>: use <code>fluido quantidade</code> por linha e só aparece quando a máquina tem tanque. <code>output.type</code> aceita <code>item</code>, <code>fluid</code> ou <code>entity</code>; o builder oculta energia, fluidos e saídas que a máquina não suporta. Toda receita usa <code>type: infinity_nexus_multiblock:multiblock</code> e recebe <code>definition</code> com o id desta máquina. O JEI mostra as receitas quando o controller está associado a uma definição <code>type=recipe</code>.
         </div>
 
         <div class="callout callout-info">
@@ -730,7 +639,7 @@
         </div>
 
         <div class="callout callout-info">
-          Para testar, salve em <code id="reviewFilePath">data/.../multiblock/....json</code> exatamente com esse nome e rode <code>/reload</code>. O id é o caminho do arquivo: não renomeie depois de baixar. Um controller dinâmico novo só é registrado no startup; datapack externo não cria bloco.
+          Para testar, salve em <code id="reviewFilePath">data/.../multiblock/....json</code> exatamente com esse nome e rode <code>/reload</code>. O id é o caminho do arquivo: não renomeie depois de baixar. O controller é único e já registrado pelo mod; qualquer namespace pode apontar para ele.
         </div>
       </section>
       </div>
@@ -801,8 +710,8 @@
 
       <div class="notes-card">
         <h3>Escopo do builder</h3>
-        <p>Identidade, pattern, matchers, slots, capabilities, controller, GUI, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
-        <p>Assets de bloco, controller e modelos são gerados no código Java. Em namespace externo, registre o controller e os modelos manualmente; o builder apenas valida e mostra os caminhos.</p>
+        <p>Identidade, pattern, matchers, slots, capabilities, receita do controller, GUI, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
+        <p>O controller é único e registrado pelo mod. O builder não gera blockstates, modelos ou texturas de controller por definição.</p>
       </div>
     </aside>
   </div>

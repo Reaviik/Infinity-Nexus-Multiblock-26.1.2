@@ -16,7 +16,6 @@ import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
 import mezz.jei.api.recipe.transfer.IRecipeTransferInfo;
 import mezz.jei.api.recipe.types.IRecipeType;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -25,15 +24,12 @@ import net.minecraft.world.item.crafting.Ingredient;
 public final class MultiblockRecipeTransferInfo
         implements IRecipeTransferInfo<MultiblockMenu, MultiblockJeiRecipe> {
     private final IRecipeTransferHandlerHelper helper;
-    private final Identifier definitionId;
     private final IRecipeType<MultiblockJeiRecipe> recipeType;
 
     public MultiblockRecipeTransferInfo(
             IRecipeTransferHandlerHelper helper,
-            Identifier definitionId,
             IRecipeType<MultiblockJeiRecipe> recipeType) {
         this.helper = helper;
-        this.definitionId = definitionId;
         this.recipeType = recipeType;
     }
 
@@ -55,7 +51,7 @@ public final class MultiblockRecipeTransferInfo
     @Override
     public boolean canHandle(MultiblockMenu container, MultiblockJeiRecipe recipe) {
         MultiblockDefinition definition = container.blockEntity().definition();
-        if (definition == null || !definition.id().equals(this.definitionId)) {
+        if (definition == null || !definition.id().equals(recipe.definition().id())) {
             return false;
         }
         return matchSlots(container, recipe).size() == recipe.recipe().ingredients().size();
@@ -64,7 +60,7 @@ public final class MultiblockRecipeTransferInfo
     @Override
     public IRecipeTransferError getHandlingError(MultiblockMenu container, MultiblockJeiRecipe recipe) {
         MultiblockDefinition definition = container.blockEntity().definition();
-        if (definition == null || !definition.id().equals(this.definitionId)) {
+        if (definition == null || !definition.id().equals(recipe.definition().id())) {
             return null;
         }
         return this.helper.createUserErrorWithTooltip(

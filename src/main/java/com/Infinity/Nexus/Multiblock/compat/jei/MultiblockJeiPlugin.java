@@ -2,7 +2,6 @@ package com.Infinity.Nexus.Multiblock.compat.jei;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,47 +17,52 @@ import com.Infinity.Nexus.Multiblock.client.preview.MultiblockStructureData;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
-import com.Infinity.Nexus.Multiblock.registry.DynamicControllerSpec;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.gui.handlers.IGuiClickableArea;
 import mezz.jei.api.gui.handlers.IGuiContainerHandler;
 import mezz.jei.api.helpers.IGuiHelper;
+import mezz.jei.api.recipe.IFocus;
 import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeManager;
+import mezz.jei.api.recipe.advanced.IRecipeManagerPlugin;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
 import mezz.jei.api.recipe.types.IRecipeType;
+import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.registration.IRecipeCatalystRegistration;
 import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.registration.IRecipeRegistration;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
+import mezz.jei.api.registration.ISubtypeRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import mezz.jei.api.runtime.IRecipesGui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeMap;
 import net.minecraft.world.level.ItemLike;
-import net.neoforged.neoforge.registries.DeferredItem;
 import org.jspecify.annotations.Nullable;
 
 @JeiPlugin
 public final class MultiblockJeiPlugin implements IModPlugin {
+    public static final IRecipeType<MultiblockJeiRecipe> RECIPE_TYPE = IRecipeType.create(
+            Identifier.fromNamespaceAndPath(InfinityNexusMultiblock.MOD_ID, "multiblock_crafting"),
+            MultiblockJeiRecipe.class);
+    public static final IRecipeType<MultiblockStructureData> STRUCTURE_TYPE = IRecipeType.create(
+            Identifier.fromNamespaceAndPath(InfinityNexusMultiblock.MOD_ID, "multiblock_structure"),
+            MultiblockStructureData.class);
+
     private static @Nullable MultiblockJeiPlugin instance;
 
     private final Runnable definitionsListener = this::scheduleRefreshRuntime;
-    private final Map<Identifier, IRecipeType<MultiblockJeiRecipe>> recipeTypes = new LinkedHashMap<>();
-    private final Map<Identifier, IRecipeType<MultiblockStructureData>> structureTypes = new LinkedHashMap<>();
-    private final Map<Identifier, ItemLike> catalysts = new LinkedHashMap<>();
-    private final Map<Identifier, ItemLike> structureCatalysts = new LinkedHashMap<>();
     private @Nullable IJeiRuntime runtime;
-    private Map<Identifier, List<MultiblockJeiRecipe>> registeredRecipes = Map.of();
-    private Map<Identifier, MultiblockStructureData> registeredStructures = Map.of();
+    private @Nullable MultiblockJeiCategory recipeCategory;
+    private List<MultiblockJeiRecipe> registeredRecipes = List.of();
+    private List<MultiblockStructureData> registeredStructures = List.of();
     private boolean listeningForDefinitions;
 
     public MultiblockJeiPlugin() {
@@ -71,78 +75,57 @@ public final class MultiblockJeiPlugin implements IModPlugin {
     }
 
     @Override
+    public void registerItemSubtypes(ISubtypeRegistration registration) {
+        registration.registerSubtypeInterpreter(
+                ModBlocks.CONTROLLER_ITEM.get(),
+                (stack, context) -> stack.get(ModDataComponents.MULTIBLOCK_DEFINITION.get()));
+    }
+
+    @Override
     public void registerCategories(IRecipeCategoryRegistration registration) {
         IGuiHelper guiHelper = registration.getJeiHelpers().getGuiHelper();
-        this.recipeTypes.clear();
-        this.structureTypes.clear();
-        this.catalysts.clear();
-        this.structureCatalysts.clear();
-        for (DynamicControllerSpec spec : ModBlocks.DYNAMIC_CONTROLLER_SPECS) {
-            DeferredItem<BlockItem> item = ModBlocks.DYNAMIC_CONTROLLER_ITEMS.get(spec.blockId());
-            if (item == null) {
-                continue;
-            }
-            Identifier definitionId = spec.definitionId();
-            if (spec.type() == MultiblockType.RECIPE) {
-                IRecipeType<MultiblockJeiRecipe> recipeType = recipeType(definitionId);
-                this.recipeTypes.put(definitionId, recipeType);
-                this.catalysts.put(definitionId, item.get());
-                registration.addRecipeCategories(new MultiblockJeiCategory(
-                        guiHelper, recipeType, definitionId, item.get()));
-            }
-            IRecipeType<MultiblockStructureData> structureType = structureType(definitionId);
-            this.structureTypes.put(definitionId, structureType);
-            this.structureCatalysts.put(definitionId, item.get());
-            registration.addRecipeCategories(new MultiblockStructureCategory(
-                    guiHelper, structureType, definitionId, item.get()));
-        }
+        ItemLike catalyst = ModBlocks.CONTROLLER_ITEM.get();
+        MultiblockJeiCategory category = new MultiblockJeiCategory(guiHelper, RECIPE_TYPE, catalyst);
+        this.recipeCategory = category;
+        registration.addRecipeCategories(category);
+        registration.addRecipeCategories(new MultiblockStructureCategory(guiHelper, STRUCTURE_TYPE, catalyst));
+    }
+
+    @Override
+    public void registerAdvanced(IAdvancedRegistration registration) {
+        registration.addRecipeManagerPlugin(new ControllerRecipeLookupPlugin());
     }
 
     @Override
     public void registerRecipes(IRecipeRegistration registration) {
-        Map<Identifier, List<MultiblockJeiRecipe>> recipes = collectRecipes();
-        for (Map.Entry<Identifier, IRecipeType<MultiblockJeiRecipe>> entry : this.recipeTypes.entrySet()) {
-            List<MultiblockJeiRecipe> controllerRecipes = recipes.getOrDefault(entry.getKey(), List.of());
-            if (!controllerRecipes.isEmpty()) {
-                registration.addRecipes(entry.getValue(), controllerRecipes);
-            }
+        List<MultiblockJeiRecipe> recipes = collectRecipes();
+        if (!recipes.isEmpty()) {
+            registration.addRecipes(RECIPE_TYPE, recipes);
         }
         this.registeredRecipes = recipes;
-        Map<Identifier, MultiblockStructureData> structures = collectStructures();
-        for (Map.Entry<Identifier, IRecipeType<MultiblockStructureData>> entry : this.structureTypes.entrySet()) {
-            MultiblockStructureData structure = structures.get(entry.getKey());
-            if (structure != null) {
-                registration.addRecipes(entry.getValue(), List.of(structure));
-            }
+
+        List<MultiblockStructureData> structures = collectStructures();
+        if (!structures.isEmpty()) {
+            registration.addRecipes(STRUCTURE_TYPE, structures);
         }
         this.registeredStructures = structures;
     }
 
     @Override
     public void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
-        for (Map.Entry<Identifier, IRecipeType<MultiblockJeiRecipe>> entry : this.recipeTypes.entrySet()) {
-            ItemLike catalyst = this.catalysts.get(entry.getKey());
-            if (catalyst != null) {
-                registration.addCraftingStation(entry.getValue(), catalyst);
-            }
-        }
-        for (Map.Entry<Identifier, IRecipeType<MultiblockStructureData>> entry : this.structureTypes.entrySet()) {
-            ItemLike catalyst = this.structureCatalysts.get(entry.getKey());
-            if (catalyst != null) {
-                registration.addCraftingStation(entry.getValue(), catalyst);
-            }
+        registration.addCraftingStation(STRUCTURE_TYPE, ModBlocks.CONTROLLER_ITEM.get());
+        for (MultiblockDefinition definition : MultiblockDefinitions.all()) {
+            registration.addCraftingStation(
+                    RECIPE_TYPE,
+                    ModBlocks.controllerWithDefinition(definition.id()));
         }
     }
 
     @Override
     public void registerRecipeTransferHandlers(IRecipeTransferRegistration registration) {
         IRecipeTransferHandlerHelper helper = registration.getTransferHelper();
-        for (Map.Entry<Identifier, IRecipeType<MultiblockJeiRecipe>> entry : this.recipeTypes.entrySet()) {
-            MultiblockRecipeTransferInfo info = new MultiblockRecipeTransferInfo(
-                    helper, entry.getKey(), entry.getValue());
-            registration.addRecipeTransferHandler(
-                    new MultiblockRecipeTransferHandler(helper, info), entry.getValue());
-        }
+        MultiblockRecipeTransferInfo info = new MultiblockRecipeTransferInfo(helper, RECIPE_TYPE);
+        registration.addRecipeTransferHandler(new MultiblockRecipeTransferHandler(helper, info), RECIPE_TYPE);
     }
 
     @Override
@@ -156,16 +139,11 @@ public final class MultiblockJeiPlugin implements IModPlugin {
                 if (definition == null || definition.type() != MultiblockType.RECIPE) {
                     return List.of();
                 }
-                IRecipeType<MultiblockJeiRecipe> recipeType =
-                        MultiblockJeiPlugin.this.recipeTypes.get(definition.id());
-                if (recipeType == null) {
-                    return List.of();
-                }
                 List<IGuiClickableArea> areas = new ArrayList<>();
                 for (GuiElement element : menu.layout().elements()) {
                     if (element.type() == GuiElementType.ARROW
                             || element.type() == GuiElementType.PROGRESS_BAR) {
-                        areas.add(clickableArea(element, recipeType));
+                        areas.add(clickableArea(element, definition.id()));
                     }
                 }
                 return areas;
@@ -173,7 +151,7 @@ public final class MultiblockJeiPlugin implements IModPlugin {
         });
     }
 
-    private static IGuiClickableArea clickableArea(GuiElement element, IRecipeType<?> recipeType) {
+    private IGuiClickableArea clickableArea(GuiElement element, Identifier definitionId) {
         Rect2i area = new Rect2i(element.x(), element.y(), element.width(), element.height());
         return new IGuiClickableArea() {
             @Override
@@ -188,9 +166,82 @@ public final class MultiblockJeiPlugin implements IModPlugin {
 
             @Override
             public void onClick(IFocusFactory focusFactory, IRecipesGui recipesGui) {
-                recipesGui.showTypes(List.<IRecipeType<?>>of(recipeType));
+                MultiblockJeiCategory category = MultiblockJeiPlugin.this.recipeCategory;
+                List<MultiblockJeiRecipe> recipes = MultiblockJeiPlugin.this.recipesFor(definitionId);
+                if (category != null && !recipes.isEmpty()) {
+                    recipesGui.showRecipes(category, recipes, List.of());
+                }
             }
         };
+    }
+
+    private List<MultiblockJeiRecipe> recipesFor(Identifier definitionId) {
+        List<MultiblockJeiRecipe> registered = this.registeredRecipes.stream()
+                .filter(recipe -> recipe.definition().id().equals(definitionId))
+                .toList();
+        if (!registered.isEmpty()) {
+            return registered;
+        }
+        return collectRecipes().stream()
+                .filter(recipe -> recipe.definition().id().equals(definitionId))
+                .toList();
+    }
+
+    private final class ControllerRecipeLookupPlugin implements IRecipeManagerPlugin {
+        @Override
+        public <V> List<IRecipeType<?>> getRecipeTypes(IFocus<V> focus) {
+            Identifier definitionId = controllerDefinition(focus);
+            if (definitionId == null) {
+                return List.of();
+            }
+            List<IRecipeType<?>> recipeTypes = new ArrayList<>(2);
+            if (!recipesFor(definitionId).isEmpty()) {
+                recipeTypes.add(RECIPE_TYPE);
+            }
+            if (!structuresFor(definitionId).isEmpty()) {
+                recipeTypes.add(STRUCTURE_TYPE);
+            }
+            return List.copyOf(recipeTypes);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public <T, V> List<T> getRecipes(IRecipeType<T> recipeType, IFocus<V> focus) {
+            Identifier definitionId = controllerDefinition(focus);
+            if (definitionId == null) {
+                return List.of();
+            }
+            if (RECIPE_TYPE.equals(recipeType)) {
+                return (List<T>) recipesFor(definitionId);
+            }
+            if (STRUCTURE_TYPE.equals(recipeType)) {
+                return (List<T>) structuresFor(definitionId);
+            }
+            return List.of();
+        }
+
+        @Override
+        public <T> List<T> getRecipes(IRecipeType<T> recipeType) {
+            return List.of();
+        }
+    }
+
+    private List<MultiblockStructureData> structuresFor(Identifier definitionId) {
+        List<MultiblockStructureData> registered = this.registeredStructures.stream()
+                .filter(structure -> structure.definition().id().equals(definitionId))
+                .toList();
+        if (!registered.isEmpty()) {
+            return registered;
+        }
+        return collectStructures().stream()
+                .filter(structure -> structure.definition().id().equals(definitionId))
+                .toList();
+    }
+
+    private static @Nullable Identifier controllerDefinition(IFocus<?> focus) {
+        return focus.getTypedValue().getItemStack()
+                .map(stack -> stack.get(ModDataComponents.MULTIBLOCK_DEFINITION.get()))
+                .orElse(null);
     }
 
     private void scheduleRefreshRuntime() {
@@ -214,8 +265,8 @@ public final class MultiblockJeiPlugin implements IModPlugin {
             this.listeningForDefinitions = false;
         }
         this.runtime = null;
-        this.registeredRecipes = Map.of();
-        this.registeredStructures = Map.of();
+        this.registeredRecipes = List.of();
+        this.registeredStructures = List.of();
     }
 
     public static void onRecipesUpdated() {
@@ -230,122 +281,69 @@ public final class MultiblockJeiPlugin implements IModPlugin {
             return;
         }
         IRecipeManager manager = currentRuntime.getRecipeManager();
-        Map<Identifier, List<MultiblockJeiRecipe>> recipes = collectRecipes();
-        for (Map.Entry<Identifier, IRecipeType<MultiblockJeiRecipe>> entry : this.recipeTypes.entrySet()) {
-            Identifier definitionId = entry.getKey();
-            IRecipeType<MultiblockJeiRecipe> recipeType = entry.getValue();
-            List<MultiblockJeiRecipe> oldRecipes =
-                    this.registeredRecipes.getOrDefault(definitionId, List.of());
-            List<MultiblockJeiRecipe> newRecipes =
-                    recipes.getOrDefault(definitionId, List.of());
-            List<MultiblockJeiRecipe> toHide = oldRecipes.stream()
-                    .filter(recipe -> !newRecipes.contains(recipe))
-                    .toList();
-            if (!toHide.isEmpty()) {
-                manager.hideRecipes(recipeType, toHide);
-            }
-            List<MultiblockJeiRecipe> toAdd = newRecipes.stream()
-                    .filter(recipe -> !oldRecipes.contains(recipe))
-                    .toList();
-            if (!toAdd.isEmpty()) {
-                manager.unhideRecipes(recipeType, toAdd);
-                manager.addRecipes(recipeType, toAdd);
-            }
+        List<MultiblockJeiRecipe> recipes = collectRecipes();
+        List<MultiblockJeiRecipe> toHide = this.registeredRecipes.stream()
+                .filter(recipe -> !recipes.contains(recipe))
+                .toList();
+        if (!toHide.isEmpty()) {
+            manager.hideRecipes(RECIPE_TYPE, toHide);
+        }
+        List<MultiblockJeiRecipe> toAdd = recipes.stream()
+                .filter(recipe -> !this.registeredRecipes.contains(recipe))
+                .toList();
+        if (!toAdd.isEmpty()) {
+            manager.unhideRecipes(RECIPE_TYPE, toAdd);
+            manager.addRecipes(RECIPE_TYPE, toAdd);
         }
         this.registeredRecipes = recipes;
-        refreshStructures(manager);
-    }
 
-    private void refreshStructures(IRecipeManager manager) {
-        Map<Identifier, MultiblockStructureData> structures = collectStructures();
-        for (Map.Entry<Identifier, IRecipeType<MultiblockStructureData>> entry : this.structureTypes.entrySet()) {
-            Identifier definitionId = entry.getKey();
-            IRecipeType<MultiblockStructureData> structureType = entry.getValue();
-            MultiblockStructureData oldStructure = this.registeredStructures.get(definitionId);
-            MultiblockStructureData newStructure = structures.get(definitionId);
-            if (oldStructure != null && !oldStructure.equals(newStructure)) {
-                manager.hideRecipes(structureType, List.of(oldStructure));
-            }
-            if (newStructure != null && !newStructure.equals(oldStructure)) {
-                manager.unhideRecipes(structureType, List.of(newStructure));
-                manager.addRecipes(structureType, List.of(newStructure));
-            }
+        List<MultiblockStructureData> structures = collectStructures();
+        List<MultiblockStructureData> structuresToHide = this.registeredStructures.stream()
+                .filter(structure -> !structures.contains(structure))
+                .toList();
+        if (!structuresToHide.isEmpty()) {
+            manager.hideRecipes(STRUCTURE_TYPE, structuresToHide);
+        }
+        List<MultiblockStructureData> structuresToAdd = structures.stream()
+                .filter(structure -> !this.registeredStructures.contains(structure))
+                .toList();
+        if (!structuresToAdd.isEmpty()) {
+            manager.unhideRecipes(STRUCTURE_TYPE, structuresToAdd);
+            manager.addRecipes(STRUCTURE_TYPE, structuresToAdd);
         }
         this.registeredStructures = structures;
     }
 
-    private static Map<Identifier, MultiblockStructureData> collectStructures() {
-        Map<Identifier, DynamicControllerSpec> specs = new LinkedHashMap<>();
-        for (DynamicControllerSpec spec : ModBlocks.DYNAMIC_CONTROLLER_SPECS) {
-            specs.put(spec.definitionId(), spec);
-        }
-        Map<Identifier, MultiblockStructureData> structures = new LinkedHashMap<>();
+    private static List<MultiblockStructureData> collectStructures() {
+        List<MultiblockStructureData> structures = new ArrayList<>();
         for (MultiblockDefinition definition : MultiblockDefinitions.all()) {
-            DynamicControllerSpec spec = specs.get(definition.id());
-            if (spec == null) {
-                continue;
-            }
-            DeferredItem<BlockItem> item = ModBlocks.DYNAMIC_CONTROLLER_ITEMS.get(spec.blockId());
-            if (item == null) {
-                continue;
-            }
-            MultiblockStructureData structure =
-                    MultiblockStructureData.create(definition, item.get().getBlock());
+            MultiblockStructureData structure = MultiblockStructureData.create(definition);
             if (!structure.controller().isEmpty()) {
-                structures.put(definition.id(), structure);
+                structures.add(structure);
             }
         }
-        return Collections.unmodifiableMap(structures);
+        return List.copyOf(structures);
     }
 
-    private Map<Identifier, List<MultiblockJeiRecipe>> collectRecipes() {
-        if (this.recipeTypes.isEmpty()) {
-            return Map.of();
-        }
+    private static List<MultiblockJeiRecipe> collectRecipes() {
         RecipeMap recipeMap = ClientMultiblockEvents.recipes();
         if (recipeMap.values().isEmpty()) {
-            return Map.of();
+            return List.of();
         }
         Map<Identifier, List<MultiblockJeiRecipe>> recipes = new LinkedHashMap<>();
         for (RecipeHolder<?> holder : recipeMap.values()) {
             if (!(holder.value() instanceof MultiblockRecipe recipe)) {
                 continue;
             }
-            Identifier recipeType = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
-            if (recipeType == null) {
+            MultiblockDefinition definition = MultiblockDefinitions.get(recipe.definition());
+            if (definition == null || definition.type() != MultiblockType.RECIPE) {
                 continue;
             }
-            for (MultiblockDefinition definition : MultiblockDefinitions.all()) {
-                if (definition.type() != MultiblockType.RECIPE) {
-                    continue;
-                }
-                if (!this.recipeTypes.containsKey(definition.id())) {
-                    continue;
-                }
-                if (definition.recipeType().filter(recipeType::equals).isEmpty()) {
-                    continue;
-                }
-                recipes.computeIfAbsent(definition.id(), key -> new ArrayList<>())
-                        .add(new MultiblockJeiRecipe(definition, recipe, holder.id().identifier()));
-            }
+            recipes.computeIfAbsent(definition.id(), key -> new ArrayList<>())
+                    .add(new MultiblockJeiRecipe(definition, recipe, holder.id().identifier()));
         }
-        Map<Identifier, List<MultiblockJeiRecipe>> immutable = new LinkedHashMap<>();
-        recipes.forEach((id, list) -> immutable.put(id, List.copyOf(list)));
-        return Collections.unmodifiableMap(immutable);
-    }
-
-    private static IRecipeType<MultiblockJeiRecipe> recipeType(Identifier definitionId) {
-        return IRecipeType.create(
-                Identifier.fromNamespaceAndPath(
-                        InfinityNexusMultiblock.MOD_ID, "controller/" + definitionId.getPath()),
-                MultiblockJeiRecipe.class);
-    }
-
-    private static IRecipeType<MultiblockStructureData> structureType(Identifier definitionId) {
-        return IRecipeType.create(
-                Identifier.fromNamespaceAndPath(
-                        InfinityNexusMultiblock.MOD_ID,
-                        "structure/" + definitionId.getNamespace() + "/" + definitionId.getPath()),
-                MultiblockStructureData.class);
+        List<MultiblockJeiRecipe> result = new ArrayList<>();
+        recipes.values().forEach(result::addAll);
+        return List.copyOf(result);
     }
 }

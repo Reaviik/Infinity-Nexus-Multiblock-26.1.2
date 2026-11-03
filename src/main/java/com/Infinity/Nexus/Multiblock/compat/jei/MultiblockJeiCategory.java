@@ -19,15 +19,19 @@ import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.client.MultiblockGuiRender;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
+import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import mezz.jei.api.gui.ITickTimer;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.builder.IRecipeSlotBuilder;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.drawable.IDrawable;
+import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
+import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
 import mezz.jei.api.gui.placement.HorizontalAlignment;
 import mezz.jei.api.gui.widgets.IRecipeExtrasBuilder;
 import mezz.jei.api.gui.widgets.IRecipeWidget;
+import mezz.jei.api.gui.widgets.ISlottedRecipeWidget;
 import mezz.jei.api.helpers.IGuiHelper;
 import mezz.jei.api.neoforge.NeoForgeTypes;
 import mezz.jei.api.recipe.IFocusGroup;
@@ -51,10 +55,16 @@ import org.jspecify.annotations.Nullable;
 
 public final class MultiblockJeiCategory extends AbstractRecipeCategory<MultiblockJeiRecipe> {
     private static final int WIDTH = 176;
-    private static final int HEIGHT = 86;
+    private static final int HEADER = 18;
+    private static final int HEIGHT = 86 + HEADER;
     private static final int SLOT_SIZE = 18;
-    private static final Identifier TEXTURE =
-            Identifier.fromNamespaceAndPath(InfinityNexusMultiblock.MOD_ID, "textures/gui/jei_base.png");
+    private static final int CONTROLLER_X = 3;
+    private static final int CONTROLLER_Y = 3;
+    private static final String CONTROLLER_SLOT = "controller";
+    private static final int TITLE_X = 20;
+    private static final int TITLE_Y = 4;
+    private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(InfinityNexusMultiblock.MOD_ID,
+            "textures/gui/jei_base.png");
 
     private final IDrawable fallbackBackground;
     private final IGuiHelper guiHelper;
@@ -63,11 +73,10 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
     public MultiblockJeiCategory(
             IGuiHelper guiHelper,
             IRecipeType<MultiblockJeiRecipe> recipeType,
-            Identifier definitionId,
             ItemLike catalyst) {
         super(
                 recipeType,
-                title(definitionId),
+                Component.translatable("gui.infinity_nexus_multiblock.jei.category"),
                 guiHelper.createDrawableItemLike(catalyst),
                 WIDTH,
                 HEIGHT);
@@ -93,12 +102,19 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         MultiblockRecipe recipe = jeiRecipe.recipe();
         MultiblockMenuLayout layout = layout(definition);
 
+        builder.addSlot(RecipeIngredientRole.CRAFTING_STATION, CONTROLLER_X, CONTROLLER_Y)
+                .setSlotName(CONTROLLER_SLOT)
+                .setStandardSlotBackground()
+                .addItemStacks(List.of(ModBlocks.controllerWithDefinition(definition.id())))
+                .addRichTooltipCallback((view, tooltip) -> tooltip.add(definition.displayName()));
+
         int inputIndex = 0;
         int outputIndex = 0;
         for (SlotPlacement placement : layout.slots()) {
             boolean input = isInputRole(placement.role());
             boolean output = placement.role() == ItemSlotRole.OUTPUT;
-            if (!fits(placement.x(), placement.y(), SLOT_SIZE, SLOT_SIZE)) {
+            int slotY = placement.y() + HEADER;
+            if (!fits(placement.x(), slotY, SLOT_SIZE, SLOT_SIZE)) {
                 if (input && inputIndex < recipe.ingredients().size()) {
                     builder.addInvisibleIngredients(RecipeIngredientRole.INPUT)
                             .add(recipe.ingredients().get(inputIndex));
@@ -115,7 +131,7 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                 IRecipeSlotBuilder slot = builder.addSlot(
                         hasIngredient ? RecipeIngredientRole.INPUT : RecipeIngredientRole.RENDER_ONLY,
                         placement.x(),
-                        placement.y());
+                        slotY);
                 slot.setStandardSlotBackground();
                 if (hasIngredient) {
                     slot.add(recipe.ingredients().get(inputIndex));
@@ -126,14 +142,14 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                 IRecipeSlotBuilder slot = builder.addSlot(
                         hasResult ? RecipeIngredientRole.OUTPUT : RecipeIngredientRole.RENDER_ONLY,
                         placement.x(),
-                        placement.y());
+                        slotY);
                 slot.setStandardSlotBackground();
                 if (hasResult) {
                     addOutputIngredient(slot, recipe.output());
                 }
                 outputIndex++;
             } else {
-                builder.addSlot(RecipeIngredientRole.RENDER_ONLY, placement.x(), placement.y())
+                builder.addSlot(RecipeIngredientRole.RENDER_ONLY, placement.x(), slotY)
                         .setStandardSlotBackground();
             }
         }
@@ -142,7 +158,7 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
             for (int index = 0; index < recipe.ingredients().size(); index++) {
                 SlotPosition position = new SlotPosition(
                         8 + (index % 3) * SLOT_SIZE,
-                        17 + (index / 3) * SLOT_SIZE);
+                        17 + HEADER + (index / 3) * SLOT_SIZE);
                 if (!fits(position.x(), position.y(), SLOT_SIZE, SLOT_SIZE)) {
                     builder.addInvisibleIngredients(RecipeIngredientRole.INPUT)
                             .add(recipe.ingredients().get(index));
@@ -160,7 +176,7 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         }
 
         if (outputIndex == 0 && hasIngredientOutput(recipe.output())) {
-            SlotPosition output = new SlotPosition(120, 35);
+            SlotPosition output = new SlotPosition(120, 35 + HEADER);
             if (fits(output.x(), output.y(), SLOT_SIZE, SLOT_SIZE)) {
                 IRecipeSlotBuilder slot = builder.addOutputSlot(output.x(), output.y())
                         .setStandardSlotBackground();
@@ -181,21 +197,22 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
             int width;
             int height;
             if (fluidBar.isPresent()
-                    && fits(fluidBar.get().x(), fluidBar.get().y(), fluidBar.get().width(), fluidBar.get().height())) {
+                    && fits(fluidBar.get().x(), fluidBar.get().y() + HEADER,
+                            fluidBar.get().width(), fluidBar.get().height())) {
                 GuiElement element = fluidBar.get();
                 x = element.x();
-                y = element.y();
+                y = element.y() + HEADER;
                 width = element.width();
                 height = element.height();
             } else {
                 SlotPosition position = itemPosition(fluidSlots, index, 64, index == 0 ? 17 : 53);
-                if (!fits(position.x(), position.y(), 16, 16)) {
+                if (!fits(position.x(), position.y() + HEADER, 16, 16)) {
                     builder.addInvisibleIngredients(RecipeIngredientRole.INPUT)
                             .addIngredients(NeoForgeTypes.FLUID_STACK, fluidStacks(fluidIngredient));
                     continue;
                 }
                 x = position.x();
-                y = position.y();
+                y = position.y() + HEADER;
                 width = 16;
                 height = 16;
             }
@@ -218,10 +235,15 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         int time = recipe.time();
         int animationTicks = Math.max(1, time);
 
+        builder.getRecipeSlots().findSlotByName(CONTROLLER_SLOT).ifPresent(slot -> {
+            slot.setPosition(0, 0);
+            builder.addSlottedWidget(new ControllerWidget(slot), List.of(slot));
+        });
+
         boolean progressAdded = false;
         for (GuiElement element : layout.elements()) {
             if (element.type() == GuiElementType.PROGRESS_BAR
-                    && fits(element.x(), element.y(), element.width(), element.height())) {
+                    && fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
                 builder.addWidget(new ProgressBarWidget(layout, element, animationTicks, this.guiHelper));
                 progressAdded = true;
             }
@@ -239,7 +261,7 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         if (recipe.output() instanceof MultiblockRecipeOutput.Entity entityOutput) {
             for (GuiElement element : layout.elements()) {
                 if (element.type() == GuiElementType.ENTITY
-                        && fits(element.x(), element.y(), element.width(), element.height())) {
+                        && fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
                     builder.addWidget(new EntityWidget(entityOutput.entityType(), element));
                 }
             }
@@ -260,8 +282,12 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                 .append(Component.translatable(
                         "gui.infinity_nexus_multiblock.jei.tier",
                         definition.tier()));
+        builder.addText(definition.displayName(), WIDTH - TITLE_X, 10)
+                .setPosition(TITLE_X, TITLE_Y)
+                .setColor(0xFF404040)
+                .setShadow(false);
         builder.addText(stats, WIDTH, 10)
-                .setPosition(0, 74)
+                .setPosition(0, 74 + HEADER)
                 .setTextAlignment(HorizontalAlignment.CENTER)
                 .setColor(0xFF404040)
                 .setShadow(false);
@@ -292,11 +318,6 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         return layout;
     }
 
-    private static Component title(Identifier definitionId) {
-        String key = "gui." + definitionId.getNamespace() + "." + definitionId.getPath();
-        return Component.translatableWithFallback(key, definitionId.getPath());
-    }
-
     private static Optional<GuiElement> fluidBar(
             MultiblockDefinition definition,
             MultiblockMenuLayout layout,
@@ -316,10 +337,10 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
     }
 
     private static SlotPosition arrowPosition(GuiElement arrow) {
-        if (arrow != null && fits(arrow.x(), arrow.y(), arrow.width(), arrow.height())) {
-            return new SlotPosition(arrow.x(), arrow.y());
+        if (arrow != null && fits(arrow.x(), arrow.y() + HEADER, arrow.width(), arrow.height())) {
+            return new SlotPosition(arrow.x(), arrow.y() + HEADER);
         }
-        return new SlotPosition(64, 35);
+        return new SlotPosition(64, 35 + HEADER);
     }
 
     private static Optional<GuiElement> findElement(
@@ -402,12 +423,12 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
 
         @Override
         public ScreenPosition getPosition() {
-            return new ScreenPosition(this.element.x(), this.element.y());
+            return new ScreenPosition(this.element.x(), this.element.y() + HEADER);
         }
 
         @Override
         public ScreenRectangle getScreenRectangle() {
-            return new ScreenRectangle(this.element.x(), this.element.y(),
+            return new ScreenRectangle(this.element.x(), this.element.y() + HEADER,
                     this.element.width(), this.element.height());
         }
 
@@ -454,12 +475,12 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
 
         @Override
         public ScreenPosition getPosition() {
-            return new ScreenPosition(element.x(), element.y());
+            return new ScreenPosition(element.x(), element.y() + HEADER);
         }
 
         @Override
         public ScreenRectangle getScreenRectangle() {
-            return new ScreenRectangle(element.x(), element.y(), element.width(), element.height());
+            return new ScreenRectangle(element.x(), element.y() + HEADER, element.width(), element.height());
         }
 
         @Override
@@ -538,5 +559,32 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         }
     }
 
-    private record LayoutCache(MultiblockDefinition definition, MultiblockMenuLayout layout) {}
+    private record ControllerWidget(IRecipeSlotDrawable slot) implements ISlottedRecipeWidget {
+        @Override
+        public ScreenPosition getPosition() {
+            return new ScreenPosition(CONTROLLER_X, CONTROLLER_Y);
+        }
+
+        @Override
+        public ScreenRectangle getScreenRectangle() {
+            return new ScreenRectangle(CONTROLLER_X, CONTROLLER_Y, 18, 18);
+        }
+
+        @Override
+        public void drawWidget(GuiGraphicsExtractor graphics, double mouseX, double mouseY) {
+            boolean hovered = mouseX >= 0 && mouseX < 18 && mouseY >= 0 && mouseY < 18;
+            this.slot.draw(graphics, hovered);
+        }
+
+        @Override
+        public Optional<RecipeSlotUnderMouse> getSlotUnderMouse(double mouseX, double mouseY) {
+            if (mouseX >= 0 && mouseX < 18 && mouseY >= 0 && mouseY < 18) {
+                return Optional.of(new RecipeSlotUnderMouse(this.slot, getPosition()));
+            }
+            return Optional.empty();
+        }
+    }
+
+    private record LayoutCache(MultiblockDefinition definition, MultiblockMenuLayout layout) {
+    }
 }

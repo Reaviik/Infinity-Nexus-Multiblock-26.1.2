@@ -3,10 +3,8 @@ package com.Infinity.Nexus.Multiblock.block;
 import java.util.List;
 import java.util.function.Supplier;
 
-import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
-import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.serialization.MapCodec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -14,10 +12,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
@@ -25,7 +25,6 @@ import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -33,6 +32,7 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.redstone.Orientation;
 import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jspecify.annotations.Nullable;
 
@@ -41,12 +41,10 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     public static final BooleanProperty FORMED = BooleanProperty.create("formed");
     public static final BooleanProperty PROCESSING = BooleanProperty.create("processing");
 
-    private final Identifier definitionId;
     private final Supplier<BlockEntityType<?>> blockEntityType;
 
-    public MultiblockControllerBlock(Identifier definitionId, Supplier<BlockEntityType<?>> blockEntityType, Properties properties) {
+    public MultiblockControllerBlock(Supplier<BlockEntityType<?>> blockEntityType, Properties properties) {
         super(properties);
-        this.definitionId = definitionId;
         this.blockEntityType = blockEntityType;
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(FACING, Direction.NORTH)
@@ -56,10 +54,7 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
 
     @Override
     protected MapCodec<? extends BaseEntityBlock> codec() {
-        return RecordCodecBuilder.<MultiblockControllerBlock>mapCodec(instance -> instance.group(
-                Identifier.CODEC.fieldOf("definition").forGetter(MultiblockControllerBlock::definitionId),
-                BlockBehaviour.<MultiblockControllerBlock>propertiesCodec())
-                .apply(instance, (definition, properties) -> new MultiblockControllerBlock(definition, this.blockEntityType, properties)));
+        return simpleCodec(properties -> new MultiblockControllerBlock(this.blockEntityType, properties));
     }
 
     @Override
@@ -69,10 +64,24 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
 
     @Override
     public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
+        if (!context.getItemInHand().has(ModDataComponents.MULTIBLOCK_DEFINITION.get())) {
+            return null;
+        }
         return this.defaultBlockState()
                 .setValue(FACING, context.getHorizontalDirection().getOpposite())
                 .setValue(FORMED, false)
                 .setValue(PROCESSING, false);
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer,
+            ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        Identifier definitionId = stack.get(ModDataComponents.MULTIBLOCK_DEFINITION.get());
+        if (definitionId != null
+                && level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller) {
+            controller.setDefinitionId(definitionId);
+        }
     }
 
     @Override
@@ -91,7 +100,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     }
 
     @Override
-    public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+    public <T extends BlockEntity> @Nullable BlockEntityTicker<T> getTicker(Level level, BlockState state,
+            BlockEntityType<T> type) {
         if (level.isClientSide()) {
             return (tickLevel, tickPos, tickState, blockEntity) -> {
                 if (blockEntity instanceof MultiblockControllerBlockEntity controller) {
@@ -107,7 +117,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+            BlockHitResult hitResult) {
         if (tryExport(level, pos, player)) {
             return InteractionResult.SUCCESS;
         }
@@ -131,7 +142,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player,
+            InteractionHand hand, BlockHitResult hitResult) {
         if (tryExport(level, pos, player)) {
             return InteractionResult.SUCCESS;
         }
@@ -155,7 +167,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected void neighborChanged(BlockState state, Level level, BlockPos pos, Block neighborBlock, @Nullable Orientation orientation, boolean movedByPiston) {
+    protected void neighborChanged(BlockState state, Level level, BlockPos pos, Block neighborBlock,
+            @Nullable Orientation orientation, boolean movedByPiston) {
         super.neighborChanged(state, level, pos, neighborBlock, orientation, movedByPiston);
         if (!level.isClientSide() && level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller) {
             controller.onNeighborChanged();
@@ -167,17 +180,27 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
         return oldState.is(this);
     }
 
+    @SuppressWarnings("deprecation")
+    @Override
+    protected ItemStack getCloneItemStack(LevelReader level, BlockPos pos, BlockState state, boolean includeData) {
+        ItemStack stack = new ItemStack(this);
+        if (level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller
+                && controller.definitionId() != null) {
+            stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), controller.definitionId());
+        }
+        return stack;
+    }
+
     @Override
     protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        BlockEntity blockEntity = params.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (blockEntity instanceof MultiblockControllerBlockEntity controller
+                && controller.definitionId() != null) {
+            ItemStack stack = new ItemStack(this);
+            stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), controller.definitionId());
+            return List.of(stack);
+        }
         return List.of(new ItemStack(this));
-    }
-
-    public Identifier definitionId() {
-        return this.definitionId;
-    }
-
-    public @Nullable MultiblockDefinition definition() {
-        return MultiblockDefinitions.get(this.definitionId);
     }
 
     public static Rotation rotationFromFacing(Direction facing) {
@@ -203,4 +226,3 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
         };
     }
 }
-

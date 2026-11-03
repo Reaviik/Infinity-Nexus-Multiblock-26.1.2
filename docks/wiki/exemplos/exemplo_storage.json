@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "id": "infinity_nexus_multiblock:exemplo_storage",
   "type": "storage",
   "priority": 0,

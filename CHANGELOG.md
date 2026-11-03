@@ -1,9 +1,20 @@
-## <span style="color:#2DC26B;">` V: 1.0.`</span>
+## <span style="color:#2DC26B;">` V: 1.0.1`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
+- Shared multiblock controller with the `infinity_nexus_multiblock:multiblock_definition` component.
+- `/inm hand`, `/inm look`, `/inm list`, and `/inm give` commands.
+- Controller recipe generation from the mod jar and `kubejs/data`.
+- JEI multiblock recipe GUI header with the exact controller slot and definition name.
 ### <span style="color:#F1C40F;"> **Fix**:</span>
+- JEI recipes are filtered by the multiblock definition.
+- JEI structure recipes are linked to the correct controller variant.
+- JEI multiblock recipes list their controller variants as crafting stations.
 ### <span style="color:#E67E23;"> **Change**:</span>
+- Multiblock JSON schema updated to version 2 with single-controller definitions.
+- Machine recipes now use `infinity_nexus_multiblock:multiblock` plus `definition`.
+- All multiblock creation and management chage to Schema version 2
 ### <span style="color:#BA372A;"> **Removed**:</span>
-/now
+- Dynamic controller registry, resource pack, and per-machine controller configuration.
+- `controller` and `recipe_type` fields from multiblock definitions.
 
 ## <span style="color:#2DC26B;">` V: 1.0.0`</span>
 ### <span style="color:#E67E23;"> **Change**:</span>

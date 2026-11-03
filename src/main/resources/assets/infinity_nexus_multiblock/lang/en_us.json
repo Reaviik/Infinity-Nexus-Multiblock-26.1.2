@@ -1,5 +1,6 @@
 {
   "itemGroup.infinity_nexus_multiblock": "Infinity Nexus Multiblock",
+  "block.infinity_nexus_multiblock.multiblock_controller": "Multiblock Controller",
   "message.infinity_nexus_multiblock.not_formed": "This multiblock is not formed",
   "message.infinity_nexus_multiblock.assembled": "Multiblock assembled",
   "message.infinity_nexus_multiblock.assembly_failed": "The structure could not be assembled",
@@ -41,5 +42,9 @@
   "command.infinity_nexus_multiblock.look.block": "Block for the builder block field (click to copy):",
   "command.infinity_nexus_multiblock.look.matcher": "Matcher (click to copy):",
   "command.infinity_nexus_multiblock.look.state": "State (click to copy):",
-  "command.infinity_nexus_multiblock.look.no_block": "You are not looking at a block"
+  "command.infinity_nexus_multiblock.look.no_block": "You are not looking at a block",
+  "command.infinity_nexus_multiblock.unknown_definition": "Unknown multiblock definition: %s",
+  "command.infinity_nexus_multiblock.give": "Gave a multiblock controller for %s",
+  "command.infinity_nexus_multiblock.list.empty": "No multiblock definitions are loaded",
+  "command.infinity_nexus_multiblock.list.give": "Click to receive this controller"
 }

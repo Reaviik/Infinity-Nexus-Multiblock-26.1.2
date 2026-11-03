@@ -1,7 +1,10 @@
 package com.Infinity.Nexus.Multiblock.command;
 
+import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
+import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.data.MultiblockStructureExporter;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
+import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -14,10 +17,12 @@ import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -47,7 +52,55 @@ public final class MultiblockCommands {
     private static void register(CommandDispatcher<CommandSourceStack> dispatcher, String name) {
         dispatcher.register(Commands.literal(name)
                 .then(Commands.literal("hand").executes(MultiblockCommands::hand))
-                .then(Commands.literal("look").executes(MultiblockCommands::look)));
+                .then(Commands.literal("look").executes(MultiblockCommands::look))
+                .then(Commands.literal("list").executes(MultiblockCommands::list))
+                .then(Commands.literal("give")
+                        .then(Commands.argument("definition", IdentifierArgument.id())
+                                .suggests((context, builder) -> {
+                                    for (MultiblockDefinition definition : MultiblockDefinitions.all()) {
+                                        builder.suggest(definition.id().toString());
+                                    }
+                                    return builder.buildFuture();
+                                })
+                                .executes(MultiblockCommands::give))));
+    }
+
+    private static int give(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = source.getPlayerOrException();
+        Identifier definitionId = IdentifierArgument.getId(context, "definition");
+        MultiblockDefinition definition = MultiblockDefinitions.get(definitionId);
+        if (definition == null) {
+            source.sendFailure(Component.translatable(
+                    "command.infinity_nexus_multiblock.unknown_definition", definitionId.toString()));
+            return 0;
+        }
+        ItemStack stack = ModBlocks.controllerWithDefinition(definitionId);
+        if (!player.getInventory().add(stack)) {
+            player.drop(stack, false);
+        }
+        source.sendSuccess(() -> Component.translatable(
+                "command.infinity_nexus_multiblock.give", definitionId.toString()), false);
+        return 1;
+    }
+
+    private static int list(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        if (MultiblockDefinitions.all().isEmpty()) {
+            source.sendSuccess(() -> Component.translatable("command.infinity_nexus_multiblock.list.empty"), false);
+            return 0;
+        }
+        for (MultiblockDefinition definition : MultiblockDefinitions.all()) {
+            String id = definition.id().toString();
+            Component entry = Component.literal(id).withStyle(style -> style
+                    .withColor(ChatFormatting.GREEN)
+                    .withUnderlined(true)
+                    .withClickEvent(new ClickEvent.RunCommand("/inm give " + id))
+                    .withHoverEvent(new HoverEvent.ShowText(
+                            Component.translatable("command.infinity_nexus_multiblock.list.give"))));
+            source.sendSuccess(() -> entry, false);
+        }
+        return 1;
     }
 
     private static int hand(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {

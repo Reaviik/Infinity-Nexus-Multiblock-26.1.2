@@ -4,15 +4,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
-import com.Infinity.Nexus.Multiblock.api.MultiblockControllerConfig;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.block.MultiblockAssemblyHelper;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
-import net.minecraft.core.registries.BuiltInRegistries;
+import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
+import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
@@ -64,7 +63,7 @@ public record MultiblockStructureData(
     }
 
     public static MultiblockStructureData create(MultiblockDefinition definition) {
-        return create(definition, controllerBlock(definition));
+        return create(definition, ModBlocks.CONTROLLER.get());
     }
 
     public static MultiblockStructureData create(
@@ -72,7 +71,7 @@ public record MultiblockStructureData(
             @Nullable Block controllerBlock) {
         List<Cell> cells = new ArrayList<>();
         Map<Object, MaterialBuilder> materials = new LinkedHashMap<>();
-        ItemStack controller = controllerStack(controllerBlock);
+        ItemStack controller = controllerStack(controllerBlock, definition.id());
         List<BlockState> controllerStates = controllerStates(controllerBlock);
 
         for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
@@ -130,14 +129,6 @@ public record MultiblockStructureData(
                 .toList();
     }
 
-    private static @Nullable Block controllerBlock(MultiblockDefinition definition) {
-        Optional<MultiblockControllerConfig> config = definition.controller();
-        if (config.isEmpty()) {
-            return null;
-        }
-        return BuiltInRegistries.BLOCK.getOptional(config.get().block()).orElse(null);
-    }
-
     private static List<BlockState> controllerStates(@Nullable Block block) {
         if (!(block instanceof MultiblockControllerBlock controller)) {
             return List.of();
@@ -152,12 +143,19 @@ public record MultiblockStructureData(
         return List.of(state);
     }
 
-    private static ItemStack controllerStack(@Nullable Block block) {
+    private static ItemStack controllerStack(@Nullable Block block, Identifier definitionId) {
         if (block == null) {
             return ItemStack.EMPTY;
         }
         Item item = block.asItem();
-        return item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
+        if (item == Items.AIR) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack stack = new ItemStack(item);
+        if (block == ModBlocks.CONTROLLER.get()) {
+            stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), definitionId);
+        }
+        return stack;
     }
 
     private static List<ItemStack> itemStacks(Block block) {

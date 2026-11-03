@@ -1,5 +1,6 @@
 {
   "itemGroup.infinity_nexus_multiblock": "Infinity Nexus Multiblock",
+  "block.infinity_nexus_multiblock.multiblock_controller": "Controlador de Multibloco",
   "block.infinity_nexus_multiblock.assembler": "Montadora",
   "gui.infinity_nexus_multiblock.assembler": "Montadora",
   "message.infinity_nexus_multiblock.not_formed": "Este multibloco não está formado",
@@ -43,5 +44,9 @@
   "command.infinity_nexus_multiblock.look.block": "Bloco para o campo block do builder (clique para copiar):",
   "command.infinity_nexus_multiblock.look.matcher": "Matcher (clique para copiar):",
   "command.infinity_nexus_multiblock.look.state": "State (clique para copiar):",
-  "command.infinity_nexus_multiblock.look.no_block": "Você não está olhando para um bloco"
+  "command.infinity_nexus_multiblock.look.no_block": "Você não está olhando para um bloco",
+  "command.infinity_nexus_multiblock.unknown_definition": "Definição de multibloco desconhecida: %s",
+  "command.infinity_nexus_multiblock.give": "Controlador de multibloco para %s entregue",
+  "command.infinity_nexus_multiblock.list.empty": "Nenhuma definição de multibloco carregada",
+  "command.infinity_nexus_multiblock.list.give": "Clique para receber este controlador"
 }
