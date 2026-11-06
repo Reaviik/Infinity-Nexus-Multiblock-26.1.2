@@ -31,7 +31,7 @@ public enum ItemSlotRole implements StringRepresentable {
 
     public Set<Direction> defaultInsertFaces() {
         return switch (this) {
-            case OUTPUT -> Set.of();
+            case OUTPUT, FLUID -> Set.of();
             default -> Set.copyOf(EnumSet.allOf(Direction.class));
         };
     }

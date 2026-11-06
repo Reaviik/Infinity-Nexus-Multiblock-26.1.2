@@ -35,6 +35,7 @@
   var GUI_DEFAULT_TEXTURE_SIZE = 256;
   var GUI_MAX_SIZE = 4096;
   var GUI_SLOT_SIZE = 18;
+  var GUI_ENTITY_CELL_SIZE = 18;
   var GUI_PLAYER_WIDTH = 162;
   var GUI_PLAYER_HEIGHT = 76;
   var KNOWN_ROOT_KEYS = [
@@ -368,18 +369,52 @@
       file: "",
       type: RECIPE_TYPE,
       definition: "",
-      outputType: "item",
-      ingredientsRaw: "",
-      fluidsRaw: "",
-      resultId: "",
-      resultCount: 1,
-      resultAmount: 1000,
-      resultSpawn: "",
-      componentsRaw: "",
-      energy: 0,
+      inputRows: [],
+      outputRows: [],
       time: 100,
       extras: {}
     };
+  }
+
+  function createRecipeInputRow(kind) {
+    if (kind === "fluid") {
+      return { kind: "fluid", resource: "", amount: "1000" };
+    }
+    if (kind === "entity") {
+      return { kind: "entity", resource: "", spawn: "", count: "1" };
+    }
+    if (kind === "energy") {
+      return { kind: "energy", amount: "0" };
+    }
+    return { kind: "item", resource: "", count: "1", componentsRaw: "" };
+  }
+
+  function createRecipeOutputRow(kind) {
+    if (kind === "fluid") {
+      return { kind: "fluid", resource: "", amount: "1000", chance: "1" };
+    }
+    if (kind === "entity") {
+      return { kind: "entity", resource: "", spawn: "", count: "1", chance: "1" };
+    }
+    if (kind === "energy") {
+      return { kind: "energy", amount: "0", chance: "1" };
+    }
+    return { kind: "item", resource: "", count: "1", componentsRaw: "", chance: "1" };
+  }
+
+  function parseRecipeResource(value) {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (value !== undefined && value !== null) {
+      return JSON.stringify(value);
+    }
+    return "";
+  }
+
+  function recipeRowKind(value) {
+    var kind = trimString(value) || "item";
+    return ["item", "fluid", "entity", "energy"].indexOf(kind) === -1 ? "item" : kind;
   }
 
   function parseRecipe(raw, notes) {
@@ -387,74 +422,140 @@
     if (!isPlainObject(raw)) {
       notes.push({
         severity: "warning",
-        message: "A receita não é um objeto e foi ignorada."
+        message: "A receita nao e um objeto e foi ignorada."
       });
       return recipe;
     }
     if (typeof raw.type === "string" && raw.type !== RECIPE_TYPE) {
-      notes.push({ severity: "warning", message: "recipe.type antigo foi substituído por " + RECIPE_TYPE + "." });
+      notes.push({ severity: "warning", message: "recipe.type antigo foi substituido por " + RECIPE_TYPE + "." });
     }
     if (typeof raw.definition === "string") {
       recipe.definition = raw.definition;
     } else if (raw.definition !== undefined) {
-      notes.push({ severity: "warning", message: "recipe.definition inválido foi ignorado." });
+      notes.push({ severity: "warning", message: "recipe.definition invalido foi ignorado." });
     }
-    if (Array.isArray(raw.ingredients)) {
-      recipe.ingredientsRaw = raw.ingredients.map(function (entry) {
-        return typeof entry === "string" ? entry : JSON.stringify(entry);
-      }).join("\n");
-    } else if (raw.ingredients !== undefined) {
-      notes.push({ severity: "warning", message: "recipe.ingredients inválido foi ignorado." });
-    }
-    if (Array.isArray(raw.fluid_ingredients)) {
-      recipe.fluidsRaw = raw.fluid_ingredients.map(function (entry) {
-        if (!isPlainObject(entry) || !trimString(entry.ingredient)) {
-          notes.push({ severity: "warning", message: "Uma entrada de fluid_ingredients inválida foi ignorada." });
-          return "";
+    if (Array.isArray(raw.inputs)) {
+      raw.inputs.forEach(function (entry) {
+        if (!isPlainObject(entry)) {
+          notes.push({ severity: "warning", message: "Uma entrada de inputs invalida foi ignorada." });
+          return;
         }
-        return trimString(entry.ingredient) + " " + String(toIntOr(entry.amount, 1000));
-      }).filter(function (line) {
-        return line !== "";
-      }).join("\n");
-    } else if (raw.fluid_ingredients !== undefined) {
-      notes.push({ severity: "warning", message: "recipe.fluid_ingredients inválido foi ignorado." });
-    }
-    if (isPlainObject(raw.output)) {
-      var outputType = trimString(raw.output.type) || "item";
-      if (["item", "fluid", "entity"].indexOf(outputType) === -1) {
-        notes.push({ severity: "warning", message: "recipe.output.type desconhecido foi tratado como item." });
-        outputType = "item";
+        var kind = recipeRowKind(entry.type);
+        var row = createRecipeInputRow(kind);
+        if (kind === "item") {
+          row.resource = parseRecipeResource(entry.ingredient);
+          row.count = entry.count === undefined ? "1" : String(entry.count);
+          if (entry.components !== undefined) {
+            row.componentsRaw = JSON.stringify(entry.components, null, 2);
+          }
+        } else if (kind === "fluid") {
+          row.resource = parseRecipeResource(entry.ingredient);
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+        } else if (kind === "entity") {
+          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.spawn = typeof entry.spawn === "string" ? entry.spawn : "";
+          row.count = entry.count === undefined ? "1" : String(entry.count);
+        } else {
+          row.amount = entry.amount === undefined ? "0" : String(entry.amount);
+        }
+        recipe.inputRows.push(row);
+      });
+    } else {
+      if (Array.isArray(raw.ingredients)) {
+        raw.ingredients.forEach(function (entry) {
+          var row = createRecipeInputRow("item");
+          row.resource = parseRecipeResource(entry);
+          recipe.inputRows.push(row);
+        });
+      } else if (raw.ingredients !== undefined) {
+        notes.push({ severity: "warning", message: "recipe.ingredients invalido foi ignorado." });
       }
-      recipe.outputType = outputType;
-      recipe.resultId = typeof raw.output.id === "string" ? raw.output.id : "";
-      if (outputType === "fluid") {
-        recipe.resultAmount = raw.output.amount === undefined ? 1000 : raw.output.amount;
-      } else if (outputType === "entity") {
-        recipe.resultSpawn = typeof raw.output.spawn === "string" ? raw.output.spawn : "";
+      if (Array.isArray(raw.fluid_ingredients)) {
+        raw.fluid_ingredients.forEach(function (entry) {
+          if (!isPlainObject(entry) || !trimString(entry.ingredient)) {
+            notes.push({ severity: "warning", message: "Uma entrada de fluid_ingredients invalida foi ignorada." });
+            return;
+          }
+          var row = createRecipeInputRow("fluid");
+          row.resource = trimString(entry.ingredient);
+          row.amount = String(toIntOr(entry.amount, 1000));
+          recipe.inputRows.push(row);
+        });
+      } else if (raw.fluid_ingredients !== undefined) {
+        notes.push({ severity: "warning", message: "recipe.fluid_ingredients invalido foi ignorado." });
+      }
+      if (raw.energy !== undefined && toInt(raw.energy) > 0) {
+        var energyRow = createRecipeInputRow("energy");
+        energyRow.amount = String(raw.energy);
+        recipe.inputRows.push(energyRow);
+      }
+    }
+    if (Array.isArray(raw.outputs)) {
+      raw.outputs.forEach(function (entry) {
+        if (!isPlainObject(entry)) {
+          notes.push({ severity: "warning", message: "Uma entrada de outputs invalida foi ignorada." });
+          return;
+        }
+        var kind = recipeRowKind(entry.type);
+        var row = createRecipeOutputRow(kind);
+        if (kind === "item") {
+          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.count = entry.count === undefined ? "1" : String(entry.count);
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+          if (entry.components !== undefined) {
+            row.componentsRaw = JSON.stringify(entry.components, null, 2);
+          }
+        } else if (kind === "fluid") {
+          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        } else if (kind === "entity") {
+          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.spawn = typeof entry.spawn === "string" ? entry.spawn : "";
+          row.count = entry.count === undefined ? "1" : String(entry.count);
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        } else {
+          row.amount = entry.amount === undefined ? "0" : String(entry.amount);
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        }
+        recipe.outputRows.push(row);
+      });
+    } else if (isPlainObject(raw.output)) {
+      var outputKind = recipeRowKind(raw.output.type);
+      var outputRow = createRecipeOutputRow(outputKind);
+      outputRow.resource = typeof raw.output.id === "string" ? raw.output.id : "";
+      if (outputKind === "fluid") {
+        outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
+      } else if (outputKind === "entity") {
+        outputRow.spawn = typeof raw.output.spawn === "string" ? raw.output.spawn : "";
+        outputRow.count = raw.output.count === undefined ? "1" : String(raw.output.count);
+      } else if (outputKind === "energy") {
+        outputRow.amount = raw.output.amount === undefined ? "0" : String(raw.output.amount);
       } else {
-        recipe.resultCount = raw.output.count === undefined ? 1 : raw.output.count;
+        outputRow.count = raw.output.count === undefined ? "1" : String(raw.output.count);
         if (raw.output.components !== undefined) {
-          recipe.componentsRaw = JSON.stringify(raw.output.components, null, 2);
+          outputRow.componentsRaw = JSON.stringify(raw.output.components, null, 2);
         }
       }
+      outputRow.chance = raw.output.chance === undefined ? "1" : String(raw.output.chance);
+      recipe.outputRows.push(outputRow);
     } else if (isPlainObject(raw.result)) {
-      recipe.outputType = "item";
-      recipe.resultId = typeof raw.result.id === "string" ? raw.result.id : "";
-      recipe.resultCount = raw.result.count === undefined ? 1 : raw.result.count;
+      var resultRow = createRecipeOutputRow("item");
+      resultRow.resource = typeof raw.result.id === "string" ? raw.result.id : "";
+      resultRow.count = raw.result.count === undefined ? "1" : String(raw.result.count);
       if (raw.result.components !== undefined) {
-        recipe.componentsRaw = JSON.stringify(raw.result.components, null, 2);
+        resultRow.componentsRaw = JSON.stringify(raw.result.components, null, 2);
       }
+      recipe.outputRows.push(resultRow);
     } else if (raw.output !== undefined || raw.result !== undefined) {
-      notes.push({ severity: "warning", message: "recipe.output/result inválido foi ignorado." });
-    }
-    if (raw.energy !== undefined) {
-      recipe.energy = raw.energy;
+      notes.push({ severity: "warning", message: "recipe.output/result invalido foi ignorado." });
     }
     if (raw.time !== undefined) {
       recipe.time = raw.time;
     }
     Object.keys(raw).forEach(function (key) {
-      if (["type", "definition", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
+      if (["type", "definition", "inputs", "outputs", "ingredients", "fluid_ingredients",
+        "output", "result", "energy", "time"].indexOf(key) === -1) {
         recipe.extras[key] = clone(raw[key]);
       }
     });
@@ -560,41 +661,35 @@
     var capabilities = isPlainObject(source.capabilities) ? source.capabilities : null;
     var fluids = capabilities && Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
     var slots = Array.isArray(source.itemSlots) ? source.itemSlots : [];
+    var inputSlots = slots.filter(function (slot) {
+      return isPlainObject(slot) && slot.role === "input";
+    }).map(function (slot) {
+      return toIntOr(slot.limit, 64);
+    });
+    var outputSlots = slots.filter(function (slot) {
+      return isPlainObject(slot) && slot.role === "output";
+    }).map(function (slot) {
+      return toIntOr(slot.limit, 64);
+    });
     return {
       energy: !!(capabilities && isPlainObject(capabilities.energy)),
       fluid: fluids.length > 0,
-      itemInput: slots.some(function (slot) {
-        return isPlainObject(slot) && slot.role === "input";
+      itemInput: inputSlots.length > 0,
+      itemOutput: outputSlots.length > 0,
+      symbols: recipePatternSymbols(source),
+      inputSlots: inputSlots,
+      outputSlots: outputSlots,
+      fluidCapacities: fluids.map(function (tank) {
+        return isPlainObject(tank) ? toIntOr(tank.capacity, 0) : 0;
       }),
-      itemOutput: slots.some(function (slot) {
-        return isPlainObject(slot) && slot.role === "output";
-      }),
-      symbols: recipePatternSymbols(source)
+      energyCapacity: capabilities && isPlainObject(capabilities.energy)
+        ? toIntOr(capabilities.energy.capacity, 0)
+        : 0
     };
   }
 
   function availabilityAllowed(options, key) {
     return !isPlainObject(options) || options[key] !== false;
-  }
-
-  function resolveRecipeOutputType(value, options) {
-    var type = trimString(value) || "item";
-    if (type === "entity") {
-      return "entity";
-    }
-    if (type === "fluid" && availabilityAllowed(options, "fluid")) {
-      return "fluid";
-    }
-    if (type === "item" && availabilityAllowed(options, "itemOutput")) {
-      return "item";
-    }
-    if (availabilityAllowed(options, "itemOutput")) {
-      return "item";
-    }
-    if (availabilityAllowed(options, "fluid")) {
-      return "fluid";
-    }
-    return "entity";
   }
 
   function validSpawnSelector(value, symbols) {
@@ -615,47 +710,179 @@
     return validSpawnSelector(value, symbols);
   }
 
+  function buildRecipeIngredientValue(resource, componentsRaw) {
+    var text = trimString(resource);
+    if (!text) {
+      return null;
+    }
+    var components = parseComponents(componentsRaw);
+    if (components.error) {
+      return null;
+    }
+    if (components.value !== null) {
+      return {
+        "neoforge:ingredient_type": "neoforge:components",
+        items: text,
+        components: clone(components.value)
+      };
+    }
+    if (text.charAt(0) === "{" || text.charAt(0) === "[") {
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return null;
+      }
+    }
+    return text;
+  }
+
+  function validRecipeIngredient(value) {
+    if (typeof value === "string") {
+      return isValidIdentifier(stripTagPrefix(value));
+    }
+    return isPlainObject(value);
+  }
+
+  function recipeChance(value) {
+    if (value === undefined || value === null || value === "") {
+      return 1;
+    }
+    var parsed = typeof value === "number" ? value : Number(String(value).trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   function buildRecipe(recipe, options) {
     var source = isPlainObject(recipe) ? recipe : createRecipe();
-    var ingredients = parseIngredientLines(source.ingredientsRaw).values;
-    var fluids = parseFluidLines(source.fluidsRaw).values;
-    var components = parseComponents(source.componentsRaw).value;
-    var outputType = resolveRecipeOutputType(source.outputType, options);
-    var output = {
-      type: outputType,
-      id: trimString(source.resultId)
-    };
-    if (outputType === "item") {
-      output.count = toIntOr(source.resultCount, 1);
-      if (components !== null) {
-        output.components = clone(components);
+    var inputs = [];
+    var outputs = [];
+    var inputRows = Array.isArray(source.inputRows) ? source.inputRows : [];
+    var outputRows = Array.isArray(source.outputRows) ? source.outputRows : [];
+    inputRows.forEach(function (row) {
+      if (!isPlainObject(row)) {
+        return;
       }
-    } else if (outputType === "fluid") {
-      output.amount = toIntOr(source.resultAmount, 1000);
-    } else {
-      output.spawn = trimString(source.resultSpawn);
-    }
+      var kind = recipeRowKind(row.kind);
+      if (kind === "item") {
+        var ingredient = buildRecipeIngredientValue(row.resource, row.componentsRaw);
+        if (ingredient === null) {
+          return;
+        }
+        var itemInput = { type: "item", ingredient: ingredient };
+        var count = toIntOr(row.count, 1);
+        if (count !== 1) {
+          itemInput.count = count;
+        }
+        inputs.push(itemInput);
+      } else if (kind === "fluid") {
+        var fluidId = trimString(row.resource);
+        var amount = toIntOr(row.amount, 1000);
+        if (!fluidId || amount < 1) {
+          return;
+        }
+        inputs.push({ type: "fluid", ingredient: fluidId, amount: amount });
+      } else if (kind === "entity") {
+        var entityId = trimString(row.resource);
+        if (!entityId) {
+          return;
+        }
+        var entityInput = { type: "entity", id: entityId };
+        var entityCount = toIntOr(row.count, 1);
+        if (entityCount !== 1) {
+          entityInput.count = entityCount;
+        }
+        var spawn = trimString(row.spawn);
+        if (spawn) {
+          entityInput.spawn = spawn;
+        }
+        inputs.push(entityInput);
+      } else {
+        var energyAmount = toIntOr(row.amount, 0);
+        if (energyAmount < 1) {
+          return;
+        }
+        inputs.push({ type: "energy", amount: energyAmount });
+      }
+    });
+    outputRows.forEach(function (row) {
+      if (!isPlainObject(row)) {
+        return;
+      }
+      var kind = recipeRowKind(row.kind);
+      var chance = recipeChance(row.chance);
+      if (chance === null) {
+        chance = 1;
+      }
+      if (kind === "item") {
+        var itemId = trimString(row.resource);
+        if (!itemId) {
+          return;
+        }
+        var itemOutput = { type: "item", id: itemId, count: toIntOr(row.count, 1) };
+        var components = parseComponents(row.componentsRaw).value;
+        if (components !== null) {
+          itemOutput.components = clone(components);
+        }
+        if (chance !== 1) {
+          itemOutput.chance = chance;
+        }
+        outputs.push(itemOutput);
+      } else if (kind === "fluid") {
+        var fluidId = trimString(row.resource);
+        var amount = toIntOr(row.amount, 1000);
+        if (!fluidId || amount < 1) {
+          return;
+        }
+        var fluidOutput = { type: "fluid", id: fluidId, amount: amount };
+        if (chance !== 1) {
+          fluidOutput.chance = chance;
+        }
+        outputs.push(fluidOutput);
+      } else if (kind === "entity") {
+        var entityId = trimString(row.resource);
+        var spawn = trimString(row.spawn);
+        if (!entityId) {
+          return;
+        }
+        var entityOutput = { type: "entity", id: entityId };
+        var entityCount = toIntOr(row.count, 1);
+        if (entityCount !== 1) {
+          entityOutput.count = entityCount;
+        }
+        if (spawn) {
+          entityOutput.spawn = spawn;
+        }
+        if (chance !== 1) {
+          entityOutput.chance = chance;
+        }
+        outputs.push(entityOutput);
+      } else {
+        var energyAmount = toIntOr(row.amount, 0);
+        if (energyAmount < 1) {
+          return;
+        }
+        var energyOutput = { type: "energy", amount: energyAmount };
+        if (chance !== 1) {
+          energyOutput.chance = chance;
+        }
+        outputs.push(energyOutput);
+      }
+    });
     var definitionId = trimString(options && options.definitionId) || trimString(source.definition);
-    var built = {
-      type: RECIPE_TYPE
-    };
+    var built = { type: RECIPE_TYPE };
     if (definitionId) {
       built.definition = definitionId;
     }
-    if (ingredients.length > 0) {
-      built.ingredients = ingredients;
+    if (inputs.length > 0) {
+      built.inputs = inputs;
     }
-    if (fluids.length > 0 && availabilityAllowed(options, "fluid")) {
-      built.fluid_ingredients = fluids;
-    }
-    built.output = output;
-    if (availabilityAllowed(options, "energy")) {
-      built.energy = toIntOr(source.energy, 0);
+    if (outputs.length > 0) {
+      built.outputs = outputs;
     }
     built.time = toIntOr(source.time, 100);
     var extras = isPlainObject(source.extras) ? source.extras : {};
     Object.keys(extras).forEach(function (key) {
-      if (["type", "definition", "ingredients", "fluid_ingredients", "output", "result", "energy", "time"].indexOf(key) === -1) {
+      if (["type", "definition", "inputs", "outputs", "ingredients", "fluid_ingredients",
+        "output", "result", "energy", "time"].indexOf(key) === -1) {
         built[key] = clone(extras[key]);
       }
     });
@@ -670,6 +897,10 @@
     var issues = [];
     var ok = true;
     var seenFiles = new Set();
+    var inputSlots = Array.isArray(settings.inputSlots) ? settings.inputSlots : null;
+    var outputSlots = Array.isArray(settings.outputSlots) ? settings.outputSlots : null;
+    var fluidCapacities = Array.isArray(settings.fluidCapacities) ? settings.fluidCapacities : null;
+    var energyCapacity = toInt(settings.energyCapacity);
 
     function addRecipeIssue(code, severity, index, field, message) {
       issues.push(issue(code, severity, "recipes", "recipe:" + index + ":" + field, message));
@@ -678,13 +909,19 @@
       }
     }
 
+    function sum(values) {
+      return values.reduce(function (total, value) {
+        return total + (toIntOr(value, 0) || 0);
+      }, 0);
+    }
+
     if (!Array.isArray(recipes)) {
       addRecipeIssue("recipes.invalid", "error", 0, "list", "recipes precisa ser uma lista.");
       return { issues: issues, ok: ok };
     }
     if (machineType !== "recipe" && list.length > 0) {
       addRecipeIssue("recipes.storage", "warning", 0, "list",
-        "Receitas só são processadas por uma definição type=recipe.");
+        "Receitas so sao processadas por uma definicao type=recipe.");
     }
 
     list.forEach(function (recipe, index) {
@@ -700,7 +937,7 @@
           "O arquivo aceita apenas a-z, 0-9, _, ., / e -.");
       } else if (seenFiles.has(file)) {
         addRecipeIssue("recipe.file.duplicate", "error", index, "file",
-          "Já existe outra receita com este arquivo.");
+          "Ja existe outra receita com este arquivo.");
       } else {
         seenFiles.add(file);
       }
@@ -708,80 +945,257 @@
       var definition = trimString(recipe.definition) || definitionId;
       if (!definition) {
         addRecipeIssue("recipe.definition.required", "error", index, "definition",
-          "A receita precisa apontar para uma definição.");
+          "A receita precisa apontar para uma definicao.");
       } else if (!isValidIdentifier(definition)) {
         addRecipeIssue("recipe.definition.invalid", "error", index, "definition",
-          "definition precisa ser um identifier válido.");
+          "definition precisa ser um identifier valido.");
       }
 
-      var ingredients = parseIngredientLines(recipe.ingredientsRaw);
-      var fluids = parseFluidLines(recipe.fluidsRaw);
-      ingredients.errors.forEach(function (message) {
-        addRecipeIssue("recipe.ingredient.invalid", "error", index, "ingredients", message);
-      });
-      fluids.errors.forEach(function (message) {
-        addRecipeIssue("recipe.fluid.invalid", "error", index, "fluids", message);
-      });
-      if (fluids.values.length > 0 && !availabilityAllowed(settings, "fluid")) {
-        addRecipeIssue("recipe.fluid.unavailable", "warning", index, "fluids",
-          "fluid_ingredients será omitido: esta máquina não tem tanque de fluido.");
+      var inputRows = Array.isArray(recipe.inputRows) ? recipe.inputRows : [];
+      var outputRows = Array.isArray(recipe.outputRows) ? recipe.outputRows : [];
+      if (inputRows.length === 0) {
+        addRecipeIssue("recipe.input.required", "error", index, "inputs",
+          "A receita precisa de pelo menos um input.");
       }
-      if (ingredients.values.length === 0 && fluids.values.length === 0) {
-        addRecipeIssue("recipe.input.required", "error", index, "ingredients",
-          "A receita precisa de pelo menos um item ou fluido.");
+      if (outputRows.length === 0) {
+        addRecipeIssue("recipe.output.required", "error", index, "outputs",
+          "A receita precisa de pelo menos um output.");
       }
 
-      var outputType = trimString(recipe.outputType) || "item";
-      if (["item", "fluid", "entity"].indexOf(outputType) === -1) {
-        addRecipeIssue("recipe.output.type.invalid", "error", index, "outputType",
-          "output.type precisa ser item, fluid ou entity.");
-        outputType = "item";
+      var itemInputRows = 0;
+      var itemInputTotal = 0;
+      var fluidInputRows = 0;
+      var fluidInputTotal = 0;
+      inputRows.forEach(function (row, rowIndex) {
+        var field = "input:" + rowIndex + ":";
+        if (!isPlainObject(row)) {
+          addRecipeIssue("recipe.input.invalid", "error", index, field + "row", "Input invalido.");
+          return;
+        }
+        var kind = trimString(row.kind) || "item";
+        if (["item", "fluid", "entity", "energy"].indexOf(kind) === -1) {
+          addRecipeIssue("recipe.input.type", "error", index, field + "kind",
+            "input.kind precisa ser item, fluid, entity ou energy.");
+          return;
+        }
+        if (kind === "item") {
+          if (!availabilityAllowed(settings, "itemInput")) {
+            addRecipeIssue("recipe.input.item_slot", "error", index, field + "kind",
+              "Esta maquina nao tem item_slot de input.");
+          }
+          var ingredientValue = buildRecipeIngredientValue(row.resource, row.componentsRaw);
+          if (ingredientValue === null || !validRecipeIngredient(ingredientValue)) {
+            addRecipeIssue("recipe.input.item_invalid", "error", index, field + "resource",
+              "O ingrediente precisa ser id, tag, JSON valido ou usar components.");
+          }
+          var components = parseComponents(row.componentsRaw);
+          if (components.error) {
+            addRecipeIssue("recipe.input.components", "error", index, field + "components", components.error);
+          }
+          var count = toInt(row.count);
+          if (count === null || count < 1 || count > 99) {
+            addRecipeIssue("recipe.input.count", "error", index, field + "count",
+              "A quantidade do input precisa ser um inteiro de 1 a 99.");
+          } else {
+            itemInputRows += 1;
+            itemInputTotal += count;
+            if (inputSlots !== null && count > Math.max.apply(null, inputSlots.concat([0]))) {
+              addRecipeIssue("recipe.input.stack_limit", "error", index, field + "count",
+                "A quantidade do input excede o limite de um unico slot de input.");
+            }
+          }
+        } else if (kind === "fluid") {
+          if (!availabilityAllowed(settings, "fluid")) {
+            addRecipeIssue("recipe.input.fluid_tank", "error", index, field + "kind",
+              "Esta maquina nao tem tanque de fluido.");
+          }
+          var fluidId = trimString(row.resource);
+          if (!fluidId || !isValidIdentifier(stripTagPrefix(fluidId))) {
+            addRecipeIssue("recipe.input.fluid_invalid", "error", index, field + "resource",
+              "O fluido precisa ser um id ou tag valido.");
+          }
+          var amount = toInt(row.amount);
+          if (amount === null || amount < 1 || amount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.input.amount", "error", index, field + "amount",
+              "A quantidade de fluido precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            fluidInputRows += 1;
+            fluidInputTotal += amount;
+            if (fluidCapacities !== null
+                && amount > Math.max.apply(null, fluidCapacities.concat([0]))) {
+              addRecipeIssue("recipe.input.fluid_tank_capacity", "error", index, field + "amount",
+                "A quantidade do input de fluido excede a capacidade de um unico tanque.");
+            }
+          }
+        } else if (kind === "entity") {
+          var entityId = trimString(row.resource);
+          if (!entityId || !isValidIdentifier(entityId)) {
+            addRecipeIssue("recipe.input.entity_invalid", "error", index, field + "resource",
+              "O id da entidade precisa ser um identifier valido.");
+          }
+          var entityCount = toInt(row.count);
+          if (entityCount === null || entityCount < 1 || entityCount > 99) {
+            addRecipeIssue("recipe.input.entity_count", "error", index, field + "count",
+              "A quantidade da entidade precisa ser um inteiro de 1 a 99.");
+          }
+          var spawn = trimString(row.spawn);
+          if (spawn && !validSpawnSelector(spawn, settings.symbols)) {
+            addRecipeIssue("recipe.input.spawn", "error", index, field + "spawn",
+              "spawn precisa ser vazio, um simbolo do pattern, um bloco ou uma tag valida.");
+          }
+        } else {
+          if (!availabilityAllowed(settings, "energy")) {
+            addRecipeIssue("recipe.input.energy_unavailable", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.energy.");
+          }
+          var energy = toInt(row.amount);
+          if (energy === null || energy < 1 || energy > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.input.energy_invalid", "error", index, field + "amount",
+              "energy precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else if (energyCapacity !== null && energy > energyCapacity) {
+            addRecipeIssue("recipe.input.energy_capacity", "error", index, field + "amount",
+              "energy do input excede a capacidade energetica da maquina.");
+          }
+        }
+      });
+
+      var itemOutputRows = 0;
+      var itemOutputTotal = 0;
+      var fluidOutputRows = 0;
+      var fluidOutputTotal = 0;
+      outputRows.forEach(function (row, rowIndex) {
+        var field = "output:" + rowIndex + ":";
+        if (!isPlainObject(row)) {
+          addRecipeIssue("recipe.output.invalid", "error", index, field + "row", "Output invalido.");
+          return;
+        }
+        var kind = trimString(row.kind) || "item";
+        if (["item", "fluid", "entity", "energy"].indexOf(kind) === -1) {
+          addRecipeIssue("recipe.output.type", "error", index, field + "kind",
+            "output.kind precisa ser item, fluid, entity ou energy.");
+          return;
+        }
+        var chance = recipeChance(row.chance);
+        if (chance === null || chance < 0 || chance > 1) {
+          addRecipeIssue("recipe.output.chance", "error", index, field + "chance",
+            "chance precisa ser um numero entre 0 e 1.");
+        }
+        if (kind === "item") {
+          if (!availabilityAllowed(settings, "itemOutput")) {
+            addRecipeIssue("recipe.output.item_slot", "error", index, field + "kind",
+              "Esta maquina nao tem item_slot de output.");
+          }
+          var outputId = trimString(row.resource);
+          if (!outputId || !isValidIdentifier(outputId)) {
+            addRecipeIssue("recipe.output.invalid", "error", index, field + "resource",
+              "O id do output precisa ser um identifier valido.");
+          }
+          var count = toInt(row.count);
+          if (count === null || count < 1 || count > 99) {
+            addRecipeIssue("recipe.output.count", "error", index, field + "count",
+              "A quantidade do output precisa ser um inteiro de 1 a 99.");
+          } else {
+            itemOutputRows += 1;
+            itemOutputTotal += count;
+          }
+          var components = parseComponents(row.componentsRaw);
+          if (components.error) {
+            addRecipeIssue("recipe.output.components", "error", index, field + "components", components.error);
+          }
+        } else if (kind === "fluid") {
+          if (!availabilityAllowed(settings, "fluid")) {
+            addRecipeIssue("recipe.output.fluid_tank", "error", index, field + "kind",
+              "Esta maquina nao tem tanque de fluido.");
+          }
+          var fluidId = trimString(row.resource);
+          if (!fluidId || !isValidIdentifier(stripTagPrefix(fluidId))) {
+            addRecipeIssue("recipe.output.fluid_invalid", "error", index, field + "resource",
+              "O fluido precisa ser um id ou tag valido.");
+          }
+          var amount = toInt(row.amount);
+          if (amount === null || amount < 1 || amount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.output.amount", "error", index, field + "amount",
+              "A quantidade de fluido precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            fluidOutputRows += 1;
+            fluidOutputTotal += amount;
+          }
+        } else if (kind === "entity") {
+          var entityId = trimString(row.resource);
+          if (!entityId || !isValidIdentifier(entityId)) {
+            addRecipeIssue("recipe.output.entity_invalid", "error", index, field + "resource",
+              "O id da entidade precisa ser um identifier valido.");
+          }
+          var entityCount = toInt(row.count);
+          if (entityCount === null || entityCount < 1 || entityCount > 99) {
+            addRecipeIssue("recipe.output.entity_count", "error", index, field + "count",
+              "A quantidade da entidade precisa ser um inteiro de 1 a 99.");
+          }
+          var spawn = trimString(row.spawn);
+          if (spawn && !validSpawnSelector(spawn, settings.symbols)) {
+            addRecipeIssue("recipe.output.spawn", "error", index, field + "spawn",
+              "spawn precisa ser vazio, um simbolo do pattern, um bloco ou uma tag valida.");
+          }
+        } else {
+          if (!availabilityAllowed(settings, "energy")) {
+            addRecipeIssue("recipe.output.energy_unavailable", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.energy.");
+          }
+          var energy = toInt(row.amount);
+          if (energy === null || energy < 1 || energy > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.output.energy_invalid", "error", index, field + "amount",
+              "energy precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else if (energyCapacity !== null && energy > energyCapacity) {
+            addRecipeIssue("recipe.output.energy_capacity", "error", index, field + "amount",
+              "energy do output excede a capacidade energetica da maquina.");
+          }
+        }
+      });
+
+      if (inputSlots !== null) {
+        if (itemInputRows > inputSlots.length) {
+          addRecipeIssue("recipe.input.slots", "error", index, "inputs",
+            "Ha mais inputs de item do que slots de input.");
+        }
+        if (itemInputTotal > sum(inputSlots)) {
+          addRecipeIssue("recipe.input.capacity", "error", index, "inputs",
+            "A quantidade total de inputs excede a capacidade dos slots de input.");
+        }
       }
-      var outputId = trimString(recipe.resultId);
-      if (!outputId) {
-        addRecipeIssue("recipe.output.required", "error", index, "resultId", "Informe o id da saída.");
-      } else if (!isValidIdentifier(outputId)) {
-        addRecipeIssue("recipe.output.invalid", "error", index, "resultId",
-          "O id da saída precisa ser um identifier válido.");
+      if (outputSlots !== null) {
+        if (itemOutputRows > outputSlots.length) {
+          addRecipeIssue("recipe.output.slots", "error", index, "outputs",
+            "Ha mais outputs de item do que slots de output.");
+        }
+        if (itemOutputTotal > sum(outputSlots)) {
+          addRecipeIssue("recipe.output.capacity", "error", index, "outputs",
+            "A quantidade total de outputs excede a capacidade dos slots de output.");
+        }
       }
-      if (outputType === "item") {
-        if (!availabilityAllowed(settings, "itemOutput")) {
-          addRecipeIssue("recipe.output.item_slot", "error", index, "outputType",
-            "Esta máquina não tem item_slot de saída.");
+      if (fluidCapacities !== null) {
+        var fluidCapacity = sum(fluidCapacities);
+        if (fluidInputRows > fluidCapacities.length) {
+          addRecipeIssue("recipe.input.fluid_slots", "error", index, "inputs",
+            "Ha mais inputs de fluido do que tanques.");
         }
-        var count = toInt(recipe.resultCount);
-        if (count === null || count < 1 || count > 99) {
-          addRecipeIssue("recipe.output.count", "error", index, "resultCount",
-            "A quantidade da saída precisa ser um inteiro de 1 a 99.");
+        if (fluidInputTotal > fluidCapacity) {
+          addRecipeIssue("recipe.input.fluid_capacity", "error", index, "inputs",
+            "A quantidade total de fluidos de input excede a capacidade dos tanques.");
         }
-        var components = parseComponents(recipe.componentsRaw);
-        if (components.error) {
-          addRecipeIssue("recipe.output.components", "error", index, "components", components.error);
+        if (fluidOutputRows > fluidCapacities.length) {
+          addRecipeIssue("recipe.output.fluid_slots", "error", index, "outputs",
+            "Ha mais outputs de fluido do que tanques.");
         }
-      } else if (outputType === "fluid") {
-        if (!availabilityAllowed(settings, "fluid")) {
-          addRecipeIssue("recipe.output.fluid_tank", "error", index, "outputType",
-            "Esta máquina não tem tanque para saída de fluido.");
+        if (fluidOutputTotal > fluidCapacity) {
+          addRecipeIssue("recipe.output.fluid_capacity", "error", index, "outputs",
+            "A quantidade total de fluidos de output excede a capacidade dos tanques.");
         }
-        var amount = toInt(recipe.resultAmount);
-        if (amount === null || amount < 1 || amount > CAPABILITY_MAX) {
-          addRecipeIssue("recipe.output.amount", "error", index, "resultAmount",
-            "A quantidade de fluido precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+        if (fluidInputRows + fluidOutputRows > fluidCapacities.length) {
+          addRecipeIssue("recipe.fluid_slots", "error", index, "inputs+outputs",
+            "A receita tem mais fluidos de entrada e saida do que tanques disponiveis.");
         }
-      } else if (!validSpawnSelector(recipe.resultSpawn, settings.symbols)) {
-        addRecipeIssue("recipe.output.spawn", "error", index, "resultSpawn",
-          "spawn precisa ser um símbolo do pattern, um bloco ou uma tag válida.");
       }
-      var energy = toInt(recipe.energy);
-      if (!availabilityAllowed(settings, "energy")) {
-        if (energy !== null && energy !== 0) {
-          addRecipeIssue("recipe.energy.unavailable", "warning", index, "energy",
-            "energy será omitido: esta máquina não tem capabilities.energy.");
-        }
-      } else if (energy === null || energy < 0 || energy > CAPABILITY_MAX) {
-        addRecipeIssue("recipe.energy.invalid", "error", index, "energy",
-          "energy precisa ser um inteiro de 0 a " + CAPABILITY_MAX + ".");
-      }
+
       var time = toInt(recipe.time);
       if (time === null || time < 1 || time > CAPABILITY_MAX) {
         addRecipeIssue("recipe.time.invalid", "error", index, "time",
@@ -1690,8 +2104,8 @@
     } else if (element.type === "entity") {
       element.x = 96;
       element.y = 18;
-      element.width = 32;
-      element.height = 32;
+      element.width = GUI_ENTITY_CELL_SIZE * 2;
+      element.height = GUI_ENTITY_CELL_SIZE * 2;
     }
     return element;
   }
@@ -2034,6 +2448,12 @@
         || type === "progress_bar" || type === "arrow" || type === "entity") {
       if (width <= 0 || height <= 0) {
         return "Elementos size-dependentes de GUI precisam de width e height positivos.";
+      }
+      if (type === "entity"
+          && (width < GUI_ENTITY_CELL_SIZE || height < GUI_ENTITY_CELL_SIZE
+            || width % GUI_ENTITY_CELL_SIZE !== 0 || height % GUI_ENTITY_CELL_SIZE !== 0)) {
+        return "O elemento entity precisa de width/height múltiplos de "
+          + GUI_ENTITY_CELL_SIZE + " (mínimo " + GUI_ENTITY_CELL_SIZE + ").";
       }
       if (!guiInside(gui, x, y, width, height)) {
         return "O elemento " + type + " excede os limites da GUI.";
@@ -3004,6 +3424,12 @@
               if (width === null || width <= 0 || height === null || height <= 0) {
                 add("gui.element.size.invalid", "error", "gui", field,
                   "Elementos size-dependentes de GUI precisam de width e height positivos.");
+              } else if (type === "entity"
+                  && (width < GUI_ENTITY_CELL_SIZE || height < GUI_ENTITY_CELL_SIZE
+                    || width % GUI_ENTITY_CELL_SIZE !== 0 || height % GUI_ENTITY_CELL_SIZE !== 0)) {
+                add("gui.element.size.invalid", "error", "gui", field,
+                  "O elemento entity precisa de width/height múltiplos de "
+                  + GUI_ENTITY_CELL_SIZE + " (mínimo " + GUI_ENTITY_CELL_SIZE + ").");
               } else if (x !== null && y !== null && guiWidth !== null && guiHeight !== null
                   && !guiInside(guiBounds, x, y, width, height)) {
                 add("gui.bounds.exceeded", "error", "gui", field,
@@ -3687,6 +4113,10 @@
     parseInheritance: parseInheritance,
     buildInheritance: buildInheritance,
     createRecipe: createRecipe,
+    createRecipeInputRow: createRecipeInputRow,
+    createRecipeOutputRow: createRecipeOutputRow,
+    parseRecipeResource: parseRecipeResource,
+    recipeRowKind: recipeRowKind,
     parseRecipe: parseRecipe,
     buildRecipe: buildRecipe,
     validateRecipes: validateRecipes,

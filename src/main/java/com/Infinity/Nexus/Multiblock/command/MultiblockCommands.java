@@ -33,11 +33,14 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.neoforge.common.crafting.DataComponentIngredient;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 
 public final class MultiblockCommands {
+    private static final Logger LOGGER = LogManager.getLogger();
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     private MultiblockCommands() {
@@ -46,11 +49,17 @@ public final class MultiblockCommands {
     public static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         register(dispatcher, "infinity_nexus_multiblock");
-        register(dispatcher, "inm");
+        if (dispatcher.getRoot().getChild("inmb") == null) {
+            register(dispatcher, "inmb");
+        } else {
+            LOGGER.warn("Skipping /inmb alias because another mod already registered it; use /infinity_nexus_multiblock instead.");
+        }
     }
 
     private static void register(CommandDispatcher<CommandSourceStack> dispatcher, String name) {
         dispatcher.register(Commands.literal(name)
+                .requires(source -> Commands.hasPermission(Commands.LEVEL_GAMEMASTERS).test(source)
+                        || isCreative(source))
                 .then(Commands.literal("hand").executes(MultiblockCommands::hand))
                 .then(Commands.literal("look").executes(MultiblockCommands::look))
                 .then(Commands.literal("list").executes(MultiblockCommands::list))
@@ -63,6 +72,11 @@ public final class MultiblockCommands {
                                     return builder.buildFuture();
                                 })
                                 .executes(MultiblockCommands::give))));
+    }
+
+    private static boolean isCreative(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        return player != null && player.isCreative();
     }
 
     private static int give(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -95,7 +109,7 @@ public final class MultiblockCommands {
             Component entry = Component.literal(id).withStyle(style -> style
                     .withColor(ChatFormatting.GREEN)
                     .withUnderlined(true)
-                    .withClickEvent(new ClickEvent.RunCommand("/inm give " + id))
+                    .withClickEvent(new ClickEvent.RunCommand("/inmb give " + id))
                     .withHoverEvent(new HoverEvent.ShowText(
                             Component.translatable("command.infinity_nexus_multiblock.list.give"))));
             source.sendSuccess(() -> entry, false);

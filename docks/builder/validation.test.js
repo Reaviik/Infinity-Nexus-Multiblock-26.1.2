@@ -59,7 +59,7 @@ function rawGui(extra) {
       { type: "fluid_bar", x: 160, y: 5, width: 3, height: 64, capability: "water_tank" },
       { type: "progress_bar", x: 63, y: 66, width: 57, height: 3, direction: "right" },
       { type: "arrow", x: 62, y: 35, width: 22, height: 16, u: 176, v: 0, direction: "right" },
-      { type: "entity", x: 120, y: 17, width: 32, height: 32 }
+      { type: "entity", x: 120, y: 17, width: 36, height: 36 }
     ]
   }, extra || {});
 }
@@ -191,9 +191,9 @@ test("gui customizada válida exporta elementos e passa no checklist", () => {
 test("gui entity exporta a area e exige type=recipe", () => {
   const state = withGuiState();
   const entity = V.buildDefinition(state).gui.elements.find((element) => element.type === "entity");
-  assert.deepEqual(entity, { type: "entity", x: 120, y: 17, width: 32, height: 32 });
-  assert.equal(V.createGuiElement("entity").width, 32);
-  assert.equal(V.createGuiElement("entity").height, 32);
+  assert.deepEqual(entity, { type: "entity", x: 120, y: 17, width: 36, height: 36 });
+  assert.equal(V.createGuiElement("entity").width, 36);
+  assert.equal(V.createGuiElement("entity").height, 36);
 
   const storage = withGuiState((value) => {
     value.type = "storage";
@@ -205,6 +205,11 @@ test("gui entity exporta a area e exige type=recipe", () => {
     value.gui.elements.find((element) => element.type === "entity").width = 0;
   });
   assert.ok(codes(V.validateState(noSize)).includes("gui.element.size.invalid"));
+
+  const notMultiple = withGuiState((value) => {
+    value.gui.elements.find((element) => element.type === "entity").width = 32;
+  });
+  assert.ok(codes(V.validateState(notMultiple)).includes("gui.element.size.invalid"));
 });
 
 test("player_inventory exporta shadow e color proprios", () => {
@@ -364,7 +369,7 @@ test("gui novos elementos começam com o layout do spawner", () => {
   const entity = V.createGuiElement("entity");
   assert.deepEqual(
     { x: entity.x, y: entity.y, width: entity.width, height: entity.height },
-    { x: 96, y: 18, width: 32, height: 32 }
+    { x: 96, y: 18, width: 36, height: 36 }
   );
 });
 
@@ -455,7 +460,7 @@ test("matcher com block + state é exportado como objeto", () => {
   });
 });
 
-test("campo bloco aceita o JSON do /inm look", () => {
+test("campo bloco aceita o JSON do /inmb look", () => {
   const matcher = V.parseMatcherInput(
     '{"block":"infinity_nexus_mod:generator","state":{"facing":"east","lit":"7"}}'
   );
@@ -1051,35 +1056,149 @@ test("importacao de heranca tira os campos de extras e avisa extends+family", ()
   assert.ok(imported.notes.some((note) => note.message.includes("extends e family vieram juntos")));
 });
 
-test("receita valida exporta ingredientes, fluidos e resultado", () => {
+test("receita valida exporta inputs e outputs variados", () => {
   const recipe = V.createRecipe();
   recipe.file = "gold_ingot_from_ore";
-  recipe.type = "infinity_nexus_multiblock:multiblock";
-  recipe.ingredientsRaw = "minecraft:iron_ore\n#minecraft:coals";
-  recipe.fluidsRaw = "minecraft:water 50";
-  recipe.resultId = "minecraft:gold_ingot";
-  recipe.resultCount = 2;
-  recipe.componentsRaw = '{"minecraft:custom_name":"ouro"}';
-  recipe.energy = 300;
   recipe.time = 120;
+  const itemInput = V.createRecipeInputRow("item");
+  itemInput.resource = "minecraft:iron_ore";
+  itemInput.count = "2";
+  itemInput.componentsRaw = '{"minecraft:custom_name":"minerio"}';
+  const tagInput = V.createRecipeInputRow("item");
+  tagInput.resource = "#minecraft:coals";
+  const fluidInput = V.createRecipeInputRow("fluid");
+  fluidInput.resource = "minecraft:water";
+  fluidInput.amount = "50";
+  const energyInput = V.createRecipeInputRow("energy");
+  energyInput.amount = "300";
+  recipe.inputRows = [itemInput, tagInput, fluidInput, energyInput];
+  const itemOutput = V.createRecipeOutputRow("item");
+  itemOutput.resource = "minecraft:gold_ingot";
+  itemOutput.count = "2";
+  itemOutput.componentsRaw = '{"minecraft:custom_name":"ouro"}';
+  itemOutput.chance = "0.5";
+  const fluidOutput = V.createRecipeOutputRow("fluid");
+  fluidOutput.resource = "minecraft:water";
+  fluidOutput.amount = "25";
+  fluidOutput.chance = "0.25";
+  const entityOutput = V.createRecipeOutputRow("entity");
+  entityOutput.resource = "minecraft:pig";
+  entityOutput.spawn = "minecraft:iron_block";
+  const energyOutput = V.createRecipeOutputRow("energy");
+  energyOutput.amount = "500";
+  energyOutput.chance = "0";
+  recipe.outputRows = [itemOutput, fluidOutput, entityOutput, energyOutput];
   const built = V.buildRecipe(recipe, { definitionId: "infinity_nexus_multiblock:minha_maquina" });
   assert.deepEqual(built, {
     type: "infinity_nexus_multiblock:multiblock",
     definition: "infinity_nexus_multiblock:minha_maquina",
-    ingredients: ["minecraft:iron_ore", "#minecraft:coals"],
-    fluid_ingredients: [{ ingredient: "minecraft:water", amount: 50 }],
-    output: {
-      type: "item",
-      id: "minecraft:gold_ingot",
-      count: 2,
-      components: { "minecraft:custom_name": "ouro" }
-    },
-    energy: 300,
+    inputs: [
+      {
+        type: "item",
+        ingredient: {
+          "neoforge:ingredient_type": "neoforge:components",
+          items: "minecraft:iron_ore",
+          components: { "minecraft:custom_name": "minerio" }
+        },
+        count: 2
+      },
+      { type: "item", ingredient: "#minecraft:coals" },
+      { type: "fluid", ingredient: "minecraft:water", amount: 50 },
+      { type: "energy", amount: 300 }
+    ],
+    outputs: [
+      {
+        type: "item",
+        id: "minecraft:gold_ingot",
+        count: 2,
+        components: { "minecraft:custom_name": "ouro" },
+        chance: 0.5
+      },
+      { type: "fluid", id: "minecraft:water", amount: 25, chance: 0.25 },
+      { type: "entity", id: "minecraft:pig", spawn: "minecraft:iron_block" },
+      { type: "energy", amount: 500, chance: 0 }
+    ],
     time: 120
   });
   const result = V.validateState(withState((value) => {
     value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
+    value.itemSlots = [V.createItemSlot(), V.createItemSlot(), V.createItemSlot()];
+    value.itemSlots[0].id = "input_0";
+    value.itemSlots[1].id = "input_1";
+    value.itemSlots[2].id = "output_0";
+    value.itemSlots[2].role = "output";
+    value.capabilities = V.createCapabilities();
+    value.capabilities.energy = V.createEnergy();
+    value.capabilities.energy.id = "energy";
+    value.capabilities.fluids = [V.createFluidTank(), V.createFluidTank()];
+    value.capabilities.fluids[0].id = "water_tank";
+    value.capabilities.fluids[1].id = "output_tank";
+    value.recipes = [recipe];
+  }));
+  assert.deepEqual(result.errors, []);
+});
+
+test("receita com mais fluidos de entrada e saida que tanques bloqueia", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "recipe_1";
+  const itemInput = V.createRecipeInputRow("item");
+  itemInput.resource = "minecraft:dirt";
+  itemInput.count = "12";
+  const fluidInput = V.createRecipeInputRow("fluid");
+  fluidInput.resource = "minecraft:water";
+  fluidInput.amount = "20";
+  const entityInput = V.createRecipeInputRow("entity");
+  entityInput.resource = "minecraft:pig";
+  const energyInput = V.createRecipeInputRow("energy");
+  energyInput.amount = "350";
+  recipe.inputRows = [itemInput, fluidInput, entityInput, energyInput];
+  const itemOutput = V.createRecipeOutputRow("item");
+  itemOutput.resource = "minecraft:sand";
+  itemOutput.count = "6";
+  const fluidOutput = V.createRecipeOutputRow("fluid");
+  fluidOutput.resource = "minecraft:lava";
+  fluidOutput.amount = "125";
+  const entityOutput = V.createRecipeOutputRow("entity");
+  entityOutput.resource = "minecraft:cow";
+  entityOutput.spawn = "C";
+  const energyOutput = V.createRecipeOutputRow("energy");
+  energyOutput.amount = "50";
+  recipe.outputRows = [itemOutput, fluidOutput, entityOutput, energyOutput];
+  const result = V.validateRecipes([recipe], {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:fabrica_de_voxel_cube",
+    itemInput: true,
+    itemOutput: true,
+    fluid: true,
+    energy: true,
+    symbols: ["C"],
+    inputSlots: [64],
+    outputSlots: [64],
+    fluidCapacities: [16000],
+    energyCapacity: 100000
+  });
+  assert.deepEqual(codes(result), ["recipe.fluid_slots"]);
+  assert.equal(result.ok, false);
+});
+
+test("receitas invalidas e duplicadas bloqueiam", () => {
+  const first = V.createRecipe();
+  first.file = "same";
+  first.time = 0;
+  const invalidInput = V.createRecipeInputRow("item");
+  invalidInput.resource = "id-invalido";
+  const invalidEnergy = V.createRecipeInputRow("energy");
+  invalidEnergy.amount = "-1";
+  first.inputRows = [invalidInput, invalidEnergy];
+  const invalidOutput = V.createRecipeOutputRow("item");
+  invalidOutput.resource = "minecraft:stone";
+  invalidOutput.count = "0";
+  invalidOutput.chance = "2";
+  first.outputRows = [invalidOutput];
+  const second = V.createRecipe();
+  second.file = "same.json";
+  const state = withState((value) => {
+    value.type = "recipe";
     value.itemSlots = [V.createItemSlot(), V.createItemSlot()];
     value.itemSlots[0].id = "input_0";
     value.itemSlots[1].id = "output_0";
@@ -1087,48 +1206,23 @@ test("receita valida exporta ingredientes, fluidos e resultado", () => {
     value.capabilities = V.createCapabilities();
     value.capabilities.energy = V.createEnergy();
     value.capabilities.energy.id = "energy";
-    value.capabilities.fluids = [V.createFluidTank()];
-    value.capabilities.fluids[0].id = "water_tank";
-    value.recipes = [recipe];
-  }));
-  assert.deepEqual(result.errors, []);
-});
-
-test("receitas invalidas e duplicadas bloqueiam", () => {
-  const first = V.createRecipe();
-  first.file = "same";
-  first.type = "infinity_nexus_multiblock:nexus_smelting";
-  first.ingredientsRaw = "id-invalido";
-  first.resultId = "minecraft:stone";
-  first.resultCount = 0;
-  first.energy = -1;
-  first.time = 0;
-  const second = V.createRecipe();
-  second.file = "same.json";
-  const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
-    value.itemSlots = [V.createItemSlot()];
-    value.itemSlots[0].id = "output_0";
-    value.itemSlots[0].role = "output";
-    value.capabilities = V.createCapabilities();
-    value.capabilities.energy = V.createEnergy();
-    value.capabilities.energy.id = "energy";
     value.recipes = [first, second];
   });
   const found = codes(V.validateState(state));
-  assert.ok(found.includes("recipe.ingredient.invalid"));
+  assert.ok(found.includes("recipe.input.item_invalid"));
   assert.ok(found.includes("recipe.file.duplicate"));
   assert.ok(found.includes("recipe.output.count"));
-  assert.ok(found.includes("recipe.energy.invalid"));
+  assert.ok(found.includes("recipe.output.chance"));
+  assert.ok(found.includes("recipe.input.energy_invalid"));
   assert.ok(found.includes("recipe.time.invalid"));
   assert.ok(found.includes("recipe.input.required"));
 });
 
-test("receita faz round-trip pelo parser e aceita somente fluidos", () => {
+test("receita faz round-trip do schema antigo para inputs e outputs", () => {
   const raw = {
     type: "infinity_nexus_multiblock:multiblock",
     definition: "infinity_nexus_multiblock:alloy_smelter",
+    ingredients: ["minecraft:iron_ore", "#minecraft:coals"],
     fluid_ingredients: [{ ingredient: "minecraft:water", amount: 100 }],
     output: { type: "item", id: "minecraft:ice", count: 1 },
     energy: 10,
@@ -1138,14 +1232,27 @@ test("receita faz round-trip pelo parser e aceita somente fluidos", () => {
   const notes = [];
   const parsed = V.parseRecipe(raw, notes);
   parsed.file = "water_to_ice";
-  assert.deepEqual(V.buildRecipe(parsed), raw);
+  assert.deepEqual(V.buildRecipe(parsed), {
+    type: "infinity_nexus_multiblock:multiblock",
+    definition: "infinity_nexus_multiblock:alloy_smelter",
+    inputs: [
+      { type: "item", ingredient: "minecraft:iron_ore" },
+      { type: "item", ingredient: "#minecraft:coals" },
+      { type: "fluid", ingredient: "minecraft:water", amount: 100 },
+      { type: "energy", amount: 10 }
+    ],
+    outputs: [{ type: "item", id: "minecraft:ice", count: 1 }],
+    time: 20,
+    custom: true
+  });
   assert.deepEqual(notes, []);
   const state = withState((value) => {
     value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
-    value.itemSlots = [V.createItemSlot()];
-    value.itemSlots[0].id = "output_0";
-    value.itemSlots[0].role = "output";
+    value.itemSlots = [V.createItemSlot(), V.createItemSlot(), V.createItemSlot()];
+    value.itemSlots[0].id = "input_0";
+    value.itemSlots[1].id = "input_1";
+    value.itemSlots[2].id = "output_0";
+    value.itemSlots[2].role = "output";
     value.capabilities = V.createCapabilities();
     value.capabilities.energy = V.createEnergy();
     value.capabilities.energy.id = "energy";
@@ -1156,27 +1263,27 @@ test("receita faz round-trip pelo parser e aceita somente fluidos", () => {
   assert.deepEqual(V.validateState(state).errors, []);
 });
 
-test("saida fluid omite energia e exige tanque", () => {
+test("saida fluid aceita energia no input e exige tanque", () => {
   const recipe = V.createRecipe();
   recipe.file = "water_out";
-  recipe.type = "infinity_nexus_multiblock:multiblock";
-  recipe.outputType = "fluid";
-  recipe.ingredientsRaw = "minecraft:stone";
-  recipe.resultId = "minecraft:water";
-  recipe.resultAmount = 500;
-  recipe.energy = 50;
-  const built = V.buildRecipe(recipe, {
-    energy: false,
-    fluid: true,
-    itemOutput: false,
-    symbols: ["C", "I"]
-  });
-  assert.deepEqual(built.output, { type: "fluid", id: "minecraft:water", amount: 500 });
-  assert.equal(built.energy, undefined);
+  const itemInput = V.createRecipeInputRow("item");
+  itemInput.resource = "minecraft:stone";
+  const energyInput = V.createRecipeInputRow("energy");
+  energyInput.amount = "50";
+  recipe.inputRows = [itemInput, energyInput];
+  const fluidOutput = V.createRecipeOutputRow("fluid");
+  fluidOutput.resource = "minecraft:water";
+  fluidOutput.amount = "500";
+  recipe.outputRows = [fluidOutput];
+  const built = V.buildRecipe(recipe);
+  assert.deepEqual(built.outputs, [{ type: "fluid", id: "minecraft:water", amount: 500 }]);
   const state = withState((value) => {
     value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
+    value.itemSlots = [V.createItemSlot()];
+    value.itemSlots[0].id = "input_0";
     value.capabilities = V.createCapabilities();
+    value.capabilities.energy = V.createEnergy();
+    value.capabilities.energy.id = "energy";
     value.capabilities.fluids = [V.createFluidTank()];
     value.capabilities.fluids[0].id = "water_tank";
     value.recipes = [recipe];
@@ -1187,56 +1294,192 @@ test("saida fluid omite energia e exige tanque", () => {
 test("saida entity usa seletor de bloco e valida o pattern", () => {
   const recipe = V.createRecipe();
   recipe.file = "pig_out";
-  recipe.type = "infinity_nexus_multiblock:multiblock";
-  recipe.outputType = "entity";
-  recipe.ingredientsRaw = "minecraft:carrot";
-  recipe.resultId = "minecraft:pig";
-  recipe.resultSpawn = "C";
-  const built = V.buildRecipe(recipe, { energy: false, fluid: false, itemOutput: false, symbols: ["C", "I"] });
-  assert.deepEqual(built.output, { type: "entity", id: "minecraft:pig", spawn: "C" });
-  const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
-    value.recipes = [recipe];
-  });
-  assert.deepEqual(V.validateState(state).errors, []);
-  recipe.resultSpawn = "Z";
-  assert.ok(codes(V.validateState(state)).includes("recipe.output.spawn"));
+  const input = V.createRecipeInputRow("item");
+  input.resource = "minecraft:carrot";
+  recipe.inputRows = [input];
+  const output = V.createRecipeOutputRow("entity");
+  output.resource = "minecraft:pig";
+  output.spawn = "C";
+  recipe.outputRows = [output];
+  const built = V.buildRecipe(recipe);
+  assert.deepEqual(built.outputs, [{ type: "entity", id: "minecraft:pig", spawn: "C" }]);
+  const options = {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:nexus_smelting",
+    itemInput: true,
+    itemOutput: false,
+    fluid: false,
+    energy: false,
+    symbols: ["C", "I"],
+    inputSlots: [64],
+    outputSlots: [],
+    fluidCapacities: [],
+    energyCapacity: 0
+  };
+  assert.deepEqual(V.validateRecipes([recipe], options).issues, []);
+  output.spawn = "Z";
+  assert.ok(codes({ issues: V.validateRecipes([recipe], options).issues }).includes("recipe.output.spawn"));
+  output.spawn = "";
+  assert.deepEqual(V.buildRecipe(recipe).outputs, [{ type: "entity", id: "minecraft:pig" }]);
+  assert.deepEqual(V.validateRecipes([recipe], options).issues, []);
 });
 
-test("saida item sem slot de saida bloqueia e buildRecipe troca para tipo permitido", () => {
+test("entity input e output exportam e validam quantidade", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "entity_count";
+  const input = V.createRecipeInputRow("entity");
+  input.resource = "minecraft:pig";
+  input.count = "2";
+  const output = V.createRecipeOutputRow("entity");
+  output.resource = "minecraft:cow";
+  output.count = "3";
+  output.spawn = "C";
+  recipe.inputRows = [input];
+  recipe.outputRows = [output];
+  assert.deepEqual(V.buildRecipe(recipe).inputs, [
+    { type: "entity", id: "minecraft:pig", count: 2 }
+  ]);
+  assert.deepEqual(V.buildRecipe(recipe).outputs, [
+    { type: "entity", id: "minecraft:cow", count: 3, spawn: "C" }
+  ]);
+  const options = {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:fabrica_de_voxel_cube",
+    itemInput: true,
+    itemOutput: true,
+    fluid: true,
+    energy: true,
+    symbols: ["C"],
+    inputSlots: [64],
+    outputSlots: [64],
+    fluidCapacities: [16000],
+    energyCapacity: 100000
+  };
+  assert.deepEqual(V.validateRecipes([recipe], options).issues, []);
+  input.count = "0";
+  output.count = "100";
+  const invalid = codes(V.validateRecipes([recipe], options));
+  assert.ok(invalid.includes("recipe.input.entity_count"));
+  assert.ok(invalid.includes("recipe.output.entity_count"));
+});
+
+test("saida item sem slot de saida bloqueia", () => {
   const recipe = V.createRecipe();
   recipe.file = "no_slot";
-  recipe.type = "infinity_nexus_multiblock:multiblock";
-  recipe.ingredientsRaw = "minecraft:stone";
-  recipe.resultId = "minecraft:stone";
-  const built = V.buildRecipe(recipe, { energy: false, fluid: true, itemOutput: false, symbols: ["C"] });
-  assert.equal(built.output.type, "fluid");
-  const state = withState((value) => {
-    value.type = "recipe";
-    value.recipeType = "infinity_nexus_multiblock:nexus_smelting";
-    value.recipes = [recipe];
+  const input = V.createRecipeInputRow("item");
+  input.resource = "minecraft:stone";
+  const output = V.createRecipeOutputRow("item");
+  output.resource = "minecraft:stone";
+  recipe.inputRows = [input];
+  recipe.outputRows = [output];
+  const built = V.buildRecipe(recipe);
+  assert.equal(built.outputs[0].type, "item");
+  const result = V.validateRecipes([recipe], {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:nexus_smelting",
+    itemInput: true,
+    itemOutput: false,
+    fluid: false,
+    energy: false,
+    symbols: [],
+    inputSlots: [64],
+    outputSlots: [],
+    fluidCapacities: [],
+    energyCapacity: 0
   });
-  assert.ok(codes(V.validateState(state)).includes("recipe.output.item_slot"));
+  assert.ok(codes(result).includes("recipe.output.item_slot"));
 });
 
 test("receita de maquina sempre usa type fixo e definition atual", () => {
   const recipe = V.createRecipe();
   recipe.file = "test";
   recipe.type = "infinity_nexus_multiblock:tipo_antigo";
-  recipe.ingredientsRaw = "minecraft:stone";
-  recipe.resultId = "minecraft:stone";
+  const input = V.createRecipeInputRow("item");
+  input.resource = "minecraft:stone";
+  const output = V.createRecipeOutputRow("item");
+  output.resource = "minecraft:stone";
+  recipe.inputRows = [input];
+  recipe.outputRows = [output];
   const state = withState((value) => {
     value.type = "recipe";
-    value.itemSlots = [V.createItemSlot()];
-    value.itemSlots[0].id = "output_0";
-    value.itemSlots[0].role = "output";
+    value.itemSlots = [V.createItemSlot(), V.createItemSlot()];
+    value.itemSlots[0].id = "input_0";
+    value.itemSlots[1].id = "output_0";
+    value.itemSlots[1].role = "output";
     value.recipes = [recipe];
   });
   assert.deepEqual(V.validateState(state).errors, []);
   const built = V.buildRecipe(recipe, { definitionId: "mymod:fornalha" });
   assert.equal(built.type, V.RECIPE_TYPE);
   assert.equal(built.definition, "mymod:fornalha");
+});
+
+test("receita valida capacidade de slots, tanques e energia", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "limits";
+  const itemInput = V.createRecipeInputRow("item");
+  itemInput.resource = "minecraft:stone";
+  itemInput.count = "5";
+  const fluidInput = V.createRecipeInputRow("fluid");
+  fluidInput.resource = "minecraft:water";
+  fluidInput.amount = "12000";
+  recipe.inputRows = [itemInput, fluidInput];
+  const itemOutput = V.createRecipeOutputRow("item");
+  itemOutput.resource = "minecraft:stone";
+  itemOutput.count = "5";
+  const fluidOutput = V.createRecipeOutputRow("fluid");
+  fluidOutput.resource = "minecraft:water";
+  fluidOutput.amount = "12000";
+  const energyOutput = V.createRecipeOutputRow("energy");
+  energyOutput.amount = "100001";
+  recipe.outputRows = [itemOutput, fluidOutput, energyOutput];
+  const result = V.validateRecipes([recipe], {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:nexus_smelting",
+    itemInput: true,
+    itemOutput: true,
+    fluid: true,
+    energy: true,
+    symbols: [],
+    inputSlots: [4],
+    outputSlots: [4],
+    fluidCapacities: [10000],
+    energyCapacity: 100000
+  });
+  const found = codes(result);
+  assert.ok(found.includes("recipe.input.capacity"));
+  assert.ok(found.includes("recipe.input.stack_limit"));
+  assert.ok(found.includes("recipe.output.capacity"));
+  assert.ok(found.includes("recipe.input.fluid_capacity"));
+  assert.ok(found.includes("recipe.input.fluid_tank_capacity"));
+  assert.ok(found.includes("recipe.output.fluid_capacity"));
+  assert.ok(found.includes("recipe.output.energy_capacity"));
+});
+
+test("receita aceita somente entidade e energia", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "entity_energy";
+  const entityInput = V.createRecipeInputRow("entity");
+  entityInput.resource = "minecraft:pig";
+  entityInput.spawn = "C";
+  recipe.inputRows = [entityInput];
+  const energyOutput = V.createRecipeOutputRow("energy");
+  energyOutput.amount = "500";
+  recipe.outputRows = [energyOutput];
+  const result = V.validateRecipes([recipe], {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:example_controller",
+    itemInput: false,
+    itemOutput: false,
+    fluid: false,
+    energy: true,
+    symbols: ["C"],
+    inputSlots: [],
+    outputSlots: [],
+    fluidCapacities: [],
+    energyCapacity: 100000
+  });
+  assert.deepEqual(codes(result), []);
 });
 
 test("receita do controller exporta shaped no root e faz round-trip", () => {

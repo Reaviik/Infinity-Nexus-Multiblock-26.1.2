@@ -5,13 +5,10 @@ import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
 import com.Infinity.Nexus.Multiblock.registry.ModMenus;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -26,7 +23,6 @@ public class MultiblockMenu extends AbstractContainerMenu {
 
     private final MultiblockControllerBlockEntity blockEntity;
     private final MultiblockMenuLayout layout;
-    private final @Nullable EntityType<?> outputEntityType;
     private int clientProgress;
     private int clientMaxProgress;
     private final ContainerData progressData = new ContainerData() {
@@ -58,23 +54,17 @@ public class MultiblockMenu extends AbstractContainerMenu {
     };
 
     public MultiblockMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf data) {
-        this(containerId, inventory, readBlockEntity(inventory, data), readLayout(data), readEntityType(data));
+        this(containerId, inventory, readBlockEntity(inventory, data), readLayout(data));
     }
 
     public MultiblockMenu(int containerId, Inventory inventory, MultiblockControllerBlockEntity blockEntity,
             MultiblockMenuLayout layout) {
-        this(containerId, inventory, blockEntity, layout, blockEntity.previewEntityOutputType());
-    }
-
-    private MultiblockMenu(int containerId, Inventory inventory, MultiblockControllerBlockEntity blockEntity,
-            MultiblockMenuLayout layout, @Nullable EntityType<?> outputEntityType) {
         super(ModMenus.CONTROLLER_MENU.get(), containerId);
         this.blockEntity = blockEntity;
         this.layout = layout;
-        this.outputEntityType = outputEntityType;
 
         for (MultiblockMenuLayout.SlotPlacement placement : layout.slots()) {
-            this.addSlot(new MultiblockSlot(blockEntity, placement.index(), placement.x(), placement.y(),
+            this.addSlot(new MultiblockSlot(blockEntity, placement.index(), placement.x(), placement.y() + 1,
                     placement.limit(), placement.role(), placement.filter()));
         }
 
@@ -111,15 +101,6 @@ public class MultiblockMenu extends AbstractContainerMenu {
                 .getOrThrow(message -> new IllegalStateException("Invalid multiblock gui layout: " + message));
     }
 
-    private static @Nullable EntityType<?> readEntityType(RegistryFriendlyByteBuf data) {
-        String rawId = data.readUtf();
-        if (rawId.isBlank()) {
-            return null;
-        }
-        Identifier id = Identifier.tryParse(rawId);
-        return id == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
-    }
-
     public MultiblockControllerBlockEntity blockEntity() {
         return this.blockEntity;
     }
@@ -130,10 +111,6 @@ public class MultiblockMenu extends AbstractContainerMenu {
 
     public @Nullable SlotLock slotLock(int slotIndex) {
         return this.blockEntity.slotLockAt(slotIndex);
-    }
-
-    public @Nullable EntityType<?> outputEntityType() {
-        return this.outputEntityType;
     }
 
     public int progress() {
@@ -156,9 +133,13 @@ public class MultiblockMenu extends AbstractContainerMenu {
             return ItemStack.EMPTY;
         }
 
+        int machineSlots = this.layout.slots().size();
+        if (slot instanceof MultiblockSlot multiblockSlot && multiblockSlot.isFluid()) {
+            return this.quickMoveFluidSlot(player, multiblockSlot);
+        }
+
         ItemStack stack = slot.getItem();
         ItemStack original = stack.copy();
-        int machineSlots = this.layout.slots().size();
 
         if (index < machineSlots) {
             if (!this.moveItemStackTo(stack, machineSlots, this.slots.size(), true)) {
@@ -179,5 +160,47 @@ public class MultiblockMenu extends AbstractContainerMenu {
         }
         slot.onTake(player, stack);
         return original;
+    }
+
+    private ItemStack quickMoveFluidSlot(Player player, MultiblockSlot slot) {
+        ItemStack original = slot.getItem().copy();
+        boolean moved = false;
+
+        while (slot.hasItem()) {
+            ItemStack current = slot.getItem();
+            ItemStack removed = slot.remove(1);
+            if (removed.isEmpty()) {
+                break;
+            }
+
+            ItemStack leftover = removed;
+            player.getInventory().add(leftover);
+            if (!leftover.isEmpty()) {
+                ItemStack remaining = slot.getItem();
+                if (remaining.isEmpty()) {
+                    slot.set(leftover);
+                } else if (ItemStack.isSameItemSameComponents(remaining, leftover)) {
+                    int room = Math.min(slot.getMaxStackSize(), remaining.getMaxStackSize())
+                            - remaining.getCount();
+                    if (room > 0) {
+                        remaining.grow(Math.min(room, leftover.getCount()));
+                        slot.set(remaining);
+                        leftover.shrink(Math.min(room, leftover.getCount()));
+                    }
+                }
+                if (!leftover.isEmpty()) {
+                    player.drop(leftover, false);
+                }
+                break;
+            }
+
+            moved = true;
+            if (slot.getItem().getCount() >= current.getCount()) {
+                break;
+            }
+        }
+
+        slot.setChanged();
+        return moved ? original : ItemStack.EMPTY;
     }
 }

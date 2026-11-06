@@ -2,7 +2,9 @@ package com.Infinity.Nexus.Multiblock.block;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.Infinity.Nexus.Core.itemStackHandler.RestrictedItemStackHandler;
+import com.mojang.serialization.Codec;
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
 import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
@@ -29,6 +32,7 @@ import com.Infinity.Nexus.Multiblock.data.MultiblockStructureExporter;
 import com.Infinity.Nexus.Multiblock.network.MultiblockExportPayload;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeInput;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
 import net.minecraft.core.BlockPos;
@@ -55,9 +59,12 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.MenuProvider;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.WorldlyContainer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -73,15 +80,23 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.phys.AABB;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.transfer.ResourceHandler;
+import net.neoforged.neoforge.transfer.ResourceHandlerUtil;
+import net.neoforged.neoforge.transfer.access.ItemAccess;
 import net.neoforged.neoforge.transfer.energy.EnergyHandler;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
+import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
+import net.neoforged.neoforge.transfer.transaction.Transaction;
 import org.jspecify.annotations.Nullable;
 
 public class MultiblockControllerBlockEntity extends BlockEntity implements WorldlyContainer, MenuProvider {
+    private static final long AREA_ENTITY_SCAN_INTERVAL = 10L;
+
     private RestrictedItemStackHandler inventory;
     private MultiblockMenuLayout menuLayout;
     private @Nullable MultiblockEnergyStorage energyStorage;
@@ -106,7 +121,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private int maxProgress;
     private @Nullable Identifier activeRecipeId;
     private @Nullable MultiblockRecipe activeRecipe;
+    private List<EntityType<?>> activeEntityTypes = List.of();
+    private List<AreaEntityCount> areaEntityCounts = List.of();
+    private long lastAreaEntityScan = -20L;
     private final Map<String, SlotLock> slotLocks = new LinkedHashMap<>();
+    private final Map<String, String> fluidSlotTanks = new LinkedHashMap<>();
+    private final Set<String> drainedFluidSlots = new HashSet<>();
 
     public MultiblockControllerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -165,6 +185,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         } else if (this.fluidHandler == null) {
             this.fluidHandler = new MultiblockFluidHandler(definition.fluidTanks(), this::onCapabilityChanged);
         }
+        this.sanitizeFluidSlotState();
 
         this.applyPendingCapabilities();
     }
@@ -322,7 +343,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         String key = lockKey(placement);
         if (!locked) {
             if (this.slotLocks.remove(key) != null) {
-                this.syncSlotLocks();
+                this.syncSlotState();
             }
             return true;
         }
@@ -337,7 +358,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             return true;
         }
         this.slotLocks.put(key, lock);
-        this.syncSlotLocks();
+        this.syncSlotState();
         return true;
     }
 
@@ -357,7 +378,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         return placement.id().isBlank() ? "#" + placement.index() : placement.id();
     }
 
-    private void syncSlotLocks() {
+    private void syncSlotState() {
         this.setChanged();
         if (this.level != null && !this.level.isClientSide()) {
             BlockState state = this.getBlockState();
@@ -407,6 +428,222 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
     }
 
+    public int fluidSlotTankIndex(int slotIndex) {
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        if (placement == null
+                || placement.role() != ItemSlotRole.FLUID
+                || this.fluidHandler == null
+                || this.fluidHandler.size() == 0) {
+            return -1;
+        }
+        String tankId = this.fluidSlotTanks.get(lockKey(placement));
+        if (tankId != null) {
+            int index = this.fluidHandler.indexOf(tankId);
+            if (index >= 0) {
+                return index;
+            }
+        }
+        return 0;
+    }
+
+    public boolean setFluidSlotTank(int slotIndex, int tankIndex) {
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        if (placement == null
+                || placement.role() != ItemSlotRole.FLUID
+                || this.fluidHandler == null
+                || tankIndex < 0
+                || tankIndex >= this.fluidHandler.size()) {
+            return false;
+        }
+        String key = lockKey(placement);
+        String tankId = this.fluidHandler.tank(tankIndex).id();
+        if (tankId.equals(this.fluidSlotTanks.get(key))) {
+            return true;
+        }
+        this.fluidSlotTanks.put(key, tankId);
+        this.syncSlotState();
+        return true;
+    }
+
+    public boolean cycleFluidSlotTank(int slotIndex) {
+        int tankIndex = this.fluidSlotTankIndex(slotIndex);
+        if (tankIndex < 0 || this.fluidHandler == null) {
+            return false;
+        }
+        return this.setFluidSlotTank(slotIndex, (tankIndex + 1) % this.fluidHandler.size());
+    }
+
+    public void onFluidSlotPlaced(int slotIndex) {
+        if (this.level == null || this.level.isClientSide()) {
+            return;
+        }
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        if (placement == null || placement.role() != ItemSlotRole.FLUID) {
+            return;
+        }
+        this.drainedFluidSlots.remove(lockKey(placement));
+        this.drainFluidSlot(slotIndex, placement);
+    }
+
+    public ItemStack onFluidSlotTaken(int slotIndex, ItemStack removed) {
+        if (this.level == null || this.level.isClientSide() || removed.isEmpty()) {
+            return removed;
+        }
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        if (placement == null || placement.role() != ItemSlotRole.FLUID) {
+            return removed;
+        }
+        String key = lockKey(placement);
+        if (this.drainedFluidSlots.remove(key)) {
+            if (slotIndex < this.inventory.getContainerSize() && !this.inventory.getItem(slotIndex).isEmpty()) {
+                this.drainedFluidSlots.add(key);
+            }
+            this.setChanged();
+            return removed;
+        }
+        int tankIndex = this.fluidSlotTankIndex(slotIndex);
+        if (tankIndex < 0) {
+            return removed;
+        }
+        ItemStack filled = this.fillFluidContainer(tankIndex, removed);
+        if (filled == null) {
+            return removed;
+        }
+        int remaining = removed.getCount() - 1;
+        if (remaining > 0) {
+            ItemStack remainder = removed.copyWithCount(remaining);
+            this.inventory.setItem(slotIndex, remainder);
+            if (!ItemStack.matches(this.inventory.getItem(slotIndex), remainder)) {
+                Block.popResource(this.level, this.worldPosition, remainder);
+            }
+        }
+        this.setChanged();
+        return filled;
+    }
+
+    private void drainFluidSlot(int slotIndex, MultiblockMenuLayout.SlotPlacement placement) {
+        if (this.fluidHandler == null) {
+            return;
+        }
+        int tankIndex = this.fluidSlotTankIndex(slotIndex);
+        if (tankIndex < 0) {
+            return;
+        }
+        ItemStack stack = this.inventory.getItem(slotIndex);
+        if (stack.isEmpty()) {
+            return;
+        }
+
+        SimpleContainer container = new SimpleContainer(1);
+        container.setItem(0, stack.copy());
+        ItemAccess access = ItemAccess.forHandlerIndexStrict(
+                VanillaContainerWrapper.ofUncached(container), 0);
+        ResourceHandler<FluidResource> itemFluids = access.getCapability(Capabilities.Fluid.ITEM);
+        if (itemFluids == null) {
+            return;
+        }
+
+        ItemStack before = container.getItem(0).copy();
+        int moved;
+        try (Transaction transaction = Transaction.open(null)) {
+            var result = ResourceHandlerUtil.moveFirst(
+                    itemFluids,
+                    this.fluidHandler.manualAccess(tankIndex),
+                    resource -> true,
+                    Integer.MAX_VALUE,
+                    transaction);
+            moved = result == null ? 0 : result.amount();
+            ItemStack after = container.getItem(0);
+            if (moved > 0
+                    && !ItemStack.matches(before, after)
+                    && this.fluidSlotAccepts(slotIndex, after)) {
+                transaction.commit();
+                this.inventory.setItem(slotIndex, after);
+                this.drainedFluidSlots.add(lockKey(placement));
+                this.setChanged();
+            }
+        }
+    }
+
+    private @Nullable ItemStack fillFluidContainer(int tankIndex, ItemStack stack) {
+        if (this.fluidHandler == null || stack.isEmpty()) {
+            return null;
+        }
+        SimpleContainer container = new SimpleContainer(1);
+        container.setItem(0, stack.copyWithCount(1));
+        ItemAccess access = ItemAccess.forHandlerIndexStrict(
+                VanillaContainerWrapper.ofUncached(container), 0);
+        ResourceHandler<FluidResource> itemFluids = access.getCapability(Capabilities.Fluid.ITEM);
+        if (itemFluids == null) {
+            return null;
+        }
+
+        ItemStack before = container.getItem(0).copy();
+        int moved;
+        try (Transaction transaction = Transaction.open(null)) {
+            var result = ResourceHandlerUtil.moveFirst(
+                    this.fluidHandler.manualAccess(tankIndex),
+                    itemFluids,
+                    resource -> true,
+                    Integer.MAX_VALUE,
+                    transaction);
+            moved = result == null ? 0 : result.amount();
+            if (moved > 0) {
+                transaction.commit();
+            }
+        }
+        ItemStack after = container.getItem(0);
+        return moved > 0 && !ItemStack.matches(before, after) ? after : null;
+    }
+
+    private boolean fluidSlotAccepts(int slotIndex, ItemStack stack) {
+        MultiblockDefinition definition = this.definition();
+        if (definition == null || slotIndex < 0 || slotIndex >= definition.itemSlots().size()) {
+            return false;
+        }
+        ItemSlot itemSlot = definition.itemSlots().get(slotIndex);
+        return itemSlot.accepts(stack)
+                && this.slotLockAllows(slotIndex, stack)
+                && stack.getCount() <= Math.min(itemSlot.limit(), stack.getMaxStackSize());
+    }
+
+    private void sanitizeFluidSlotState() {
+        if (this.menuLayout.slots().isEmpty()) {
+            this.fluidSlotTanks.clear();
+            this.drainedFluidSlots.clear();
+            return;
+        }
+
+        Map<String, String> tanks = new LinkedHashMap<>();
+        Set<String> drained = new HashSet<>();
+        for (MultiblockMenuLayout.SlotPlacement placement : this.menuLayout.slots()) {
+            if (placement.role() != ItemSlotRole.FLUID) {
+                continue;
+            }
+            String key = lockKey(placement);
+            String tankId = this.fluidSlotTanks.get(key);
+            if (tankId != null && this.fluidHandler != null && this.fluidHandler.indexOf(tankId) >= 0) {
+                tanks.put(key, tankId);
+            }
+            if (this.drainedFluidSlots.contains(key)) {
+                ItemStack current = placement.index() < this.inventory.getContainerSize()
+                        ? this.inventory.getItem(placement.index())
+                        : ItemStack.EMPTY;
+                if (!current.isEmpty()) {
+                    drained.add(key);
+                }
+            }
+        }
+        if (!tanks.equals(this.fluidSlotTanks)) {
+            this.fluidSlotTanks.clear();
+            this.fluidSlotTanks.putAll(tanks);
+        }
+        if (!drained.equals(this.drainedFluidSlots)) {
+            this.drainedFluidSlots.clear();
+            this.drainedFluidSlots.addAll(drained);
+        }
+    }
+
     public @Nullable MultiblockEnergyStorage energyStorage() {
         return this.energyStorage;
     }
@@ -423,37 +660,85 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         return this.maxProgress;
     }
 
-    public @Nullable EntityType<?> activeEntityOutputType() {
-        if (this.activeRecipe != null
-                && this.activeRecipe.output() instanceof MultiblockRecipeOutput.Entity entity) {
-            return entity.entityType();
-        }
-        return null;
+    public List<EntityType<?>> activeEntityTypes() {
+        return this.activeEntityTypes;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    public @Nullable EntityType<?> previewEntityOutputType() {
+    public List<AreaEntityCount> areaEntityCounts() {
+        long gameTime = this.level == null ? 0L : this.level.getGameTime();
+        if (this.lastAreaEntityScan < 0L
+                || gameTime - this.lastAreaEntityScan >= AREA_ENTITY_SCAN_INTERVAL) {
+            this.lastAreaEntityScan = gameTime;
+            this.areaEntityCounts = this.scanAreaEntities();
+        }
+        return this.areaEntityCounts;
+    }
+
+    private List<AreaEntityCount> scanAreaEntities() {
+        if (this.level == null) {
+            return List.of();
+        }
+        AABB area = this.multiblockBounds();
+        if (area == null) {
+            return List.of();
+        }
+        Map<EntityType<?>, Integer> counts = new LinkedHashMap<>();
+        for (Entity entity : this.level.getEntitiesOfClass(Entity.class, area,
+                entity -> entity.isAlive()
+                        && entity instanceof LivingEntity
+                        && !(entity instanceof Player))) {
+            counts.merge(entity.getType(), 1, Integer::sum);
+        }
+        List<AreaEntityCount> result = new ArrayList<>(counts.size());
+        for (Map.Entry<EntityType<?>, Integer> entry : counts.entrySet()) {
+            result.add(new AreaEntityCount(entry.getKey(), entry.getValue()));
+        }
+        result.sort((left, right) -> entityTypeId(left.type()).compareTo(entityTypeId(right.type())));
+        return List.copyOf(result);
+    }
+
+    private static String entityTypeId(EntityType<?> type) {
+        Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return id == null ? "" : id.toString();
+    }
+
+    public record AreaEntityCount(EntityType<?> type, int count) {
+    }
+
+    private void refreshActiveEntityTypes() {
+        List<EntityType<?>> types = new ArrayList<>();
         if (this.activeRecipe != null) {
-            return this.activeEntityOutputType();
-        }
-        if (!(this.level instanceof ServerLevel serverLevel)) {
-            return null;
-        }
-        RecipeType<?> recipeType = this.recipeType();
-        if (recipeType == null) {
-            return null;
-        }
-        Collection<RecipeHolder<?>> holders = (Collection) serverLevel.recipeAccess()
-                .recipeMap()
-                .byType((RecipeType) recipeType);
-        for (RecipeHolder<?> holder : holders) {
-            if (holder.value() instanceof MultiblockRecipe recipe
-                    && java.util.Objects.equals(recipe.definition(), this.definitionId)
-                    && recipe.output() instanceof MultiblockRecipeOutput.Entity entity) {
-                return entity.entityType();
+            for (MultiblockRecipeIngredient.Entity input : this.activeRecipe.entityInputs()) {
+                types.add(input.entityType());
+            }
+            for (MultiblockRecipeOutput output : this.activeRecipe.outputs()) {
+                if (output instanceof MultiblockRecipeOutput.Entity entity) {
+                    types.add(entity.entityType());
+                }
             }
         }
-        return null;
+        if (!types.equals(this.activeEntityTypes)) {
+            this.activeEntityTypes = List.copyOf(types);
+            this.syncClientState();
+        }
+    }
+
+    private void syncClientState() {
+        if (this.level != null && !this.level.isClientSide()) {
+            BlockState state = this.getBlockState();
+            this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
+        }
+    }
+
+    private List<Identifier> activeEntityTypeIds() {
+        List<Identifier> ids = new ArrayList<>(this.activeEntityTypes.size());
+        for (EntityType<?> type : this.activeEntityTypes) {
+            Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (id != null) {
+                ids.add(id);
+            }
+        }
+        return ids;
     }
 
     public @Nullable EnergyHandler getEnergyHandler(@Nullable Direction direction) {
@@ -534,24 +819,19 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
         MultiblockRecipeInput input = this.createRecipeInput();
         if (this.activeRecipe == null) {
-            if (this.progress != 0 || this.maxProgress != 0) {
+            if (this.progress != 0 || this.maxProgress != 0 || !this.activeEntityTypes.isEmpty()) {
                 this.resetRecipe();
-            }
-            if (input.isEmpty()) {
-                return;
             }
             Optional<RecipeHolder<MultiblockRecipe>> found = findRecipe(serverLevel, recipeType, input);
             if (found.isEmpty()) {
                 return;
             }
             MultiblockRecipe recipe = found.get().value();
-            if (!this.canCompleteRecipe(recipe)) {
-                return;
-            }
             this.activeRecipe = recipe;
             this.activeRecipeId = found.get().id().identifier();
             this.maxProgress = recipe.time();
             this.progress = 0;
+            this.refreshActiveEntityTypes();
             this.setChanged();
             return;
         }
@@ -561,8 +841,11 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 || this.progress < 0
                 || this.progress >= this.maxProgress
                 || !recipe.matches(input, serverLevel)
-                || !this.canCompleteRecipe(recipe)) {
+                || !this.matchesEntityInputs(recipe)) {
             this.resetRecipe();
+            return;
+        }
+        if (!this.canCompleteRecipe(recipe, input)) {
             return;
         }
 
@@ -581,6 +864,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             this.maxProgress = 0;
             this.activeRecipe = null;
             this.activeRecipeId = null;
+            this.refreshActiveEntityTypes();
         }
         this.setChanged();
     }
@@ -602,6 +886,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             if (this.maxProgress <= 0) {
                 this.maxProgress = recipe.time();
             }
+            this.refreshActiveEntityTypes();
         } else {
             this.resetRecipe();
         }
@@ -620,14 +905,23 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Collection<RecipeHolder<?>> holders = (Collection) serverLevel.recipeAccess()
                 .recipeMap()
                 .byType((RecipeType) recipeType);
+        RecipeHolder<MultiblockRecipe> fallback = null;
         for (RecipeHolder<?> holder : holders) {
             if (holder.value() instanceof MultiblockRecipe recipe
                     && java.util.Objects.equals(recipe.definition(), this.definitionId)
-                    && recipe.matches(input, serverLevel)) {
-                return Optional.of((RecipeHolder<MultiblockRecipe>) (RecipeHolder) holder);
+                    && this.hasEnergyStorageFor(recipe)
+                    && recipe.matches(input, serverLevel)
+                    && this.matchesEntityInputs(recipe)) {
+                RecipeHolder<MultiblockRecipe> matched = (RecipeHolder<MultiblockRecipe>) (RecipeHolder) holder;
+                if (this.canCompleteRecipe(recipe, input)) {
+                    return Optional.of(matched);
+                }
+                if (fallback == null) {
+                    fallback = matched;
+                }
             }
         }
-        return Optional.empty();
+        return Optional.ofNullable(fallback);
     }
 
     private MultiblockRecipeInput createRecipeInput() {
@@ -646,66 +940,181 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         return new MultiblockRecipeInput(items, fluids);
     }
 
-    private boolean canCompleteRecipe(MultiblockRecipe recipe) {
-        return switch (recipe.output()) {
-            case MultiblockRecipeOutput.Item item -> this.canInsertItemResult(item.stack().create());
-            case MultiblockRecipeOutput.Fluid fluid -> this.canInsertFluidResult(fluid.stack());
-            case MultiblockRecipeOutput.Entity entity -> this.resolveSpawnPos(entity).isPresent();
-        };
+    private boolean hasEnergyStorageFor(MultiblockRecipe recipe) {
+        return recipe.energy() <= 0 || this.energyStorage != null;
     }
 
-    private boolean canInsertItemResult(ItemStack result) {
-        if (result.isEmpty()) {
-            return false;
-        }
+    private boolean canCompleteRecipe(MultiblockRecipe recipe, MultiblockRecipeInput input) {
+        return this.planOutputs(recipe, false, input) != null;
+    }
+
+    private @Nullable OutputPlan planOutputs(
+            MultiblockRecipe recipe,
+            boolean rollChance,
+            MultiblockRecipeInput input) {
+        ServerLevel serverLevel = this.serverLevel();
         MultiblockDefinition definition = this.definition();
-        if (definition == null) {
-            return false;
+        if (serverLevel == null || definition == null) {
+            return null;
         }
-        List<ItemSlot> slots = definition.itemSlots();
-        for (int slot : this.outputSlots) {
-            ItemSlot itemSlot = slots.get(slot);
-            if (!itemSlot.accepts(result)) {
+        ItemStack[] items = new ItemStack[this.outputSlots.length];
+        for (int index = 0; index < this.outputSlots.length; index++) {
+            items[index] = this.inventory.getItem(this.outputSlots[index]).copy();
+        }
+        int tankCount = this.fluidHandler == null ? 0 : this.fluidHandler.size();
+        FluidResource[] resources = new FluidResource[tankCount];
+        int[] amounts = new int[tankCount];
+        for (int index = 0; index < tankCount; index++) {
+            resources[index] = this.fluidHandler.getResource(index);
+            amounts[index] = this.fluidHandler.getAmountAsInt(index);
+        }
+        long energy = this.energyStorage == null ? 0L : this.energyStorage.getAmountAsLong();
+        long energyCapacity = this.energyStorage == null ? 0L : this.energyStorage.getCapacityAsLong();
+        if (this.energyStorage != null) {
+            energy = Math.max(0L, energy - remainingEnergyCost(recipe, this.progress));
+        }
+        int[] matchedTanks = recipe.matchFluidTanks(input.fluids());
+        List<MultiblockRecipeIngredient.Fluid> fluidInputs = recipe.fluidInputs();
+        for (int index = 0; index < matchedTanks.length; index++) {
+            int tank = matchedTanks[index];
+            if (tank < 0) {
+                return null;
+            }
+            amounts[tank] -= fluidInputs.get(index).ingredient().amount();
+            if (amounts[tank] <= 0) {
+                amounts[tank] = 0;
+                resources[tank] = FluidResource.EMPTY;
+            }
+        }
+        List<PlannedEntity> entities = new ArrayList<>();
+        for (MultiblockRecipeOutput output : recipe.outputs()) {
+            if (rollChance && output.chance() < 1.0F
+                    && serverLevel.getRandom().nextFloat() >= output.chance()) {
                 continue;
             }
-            ItemStack current = this.inventory.getItem(slot);
-            int limit = Math.min(itemSlot.limit(), result.getMaxStackSize());
-            if (current.isEmpty()) {
-                return result.getCount() <= limit;
-            }
-            if (ItemStack.isSameItemSameComponents(current, result)) {
-                if (current.getCount() + result.getCount() <= limit) {
-                    return true;
+            switch (output) {
+                case MultiblockRecipeOutput.Item item -> {
+                    if (!this.insertItemPlan(definition, items, item.stack().create())) {
+                        return null;
+                    }
+                }
+                case MultiblockRecipeOutput.Fluid fluid -> {
+                    if (!this.insertFluidPlan(definition, resources, amounts, fluid.stack())) {
+                        return null;
+                    }
+                }
+                case MultiblockRecipeOutput.Energy energyOutput -> {
+                    if (this.energyStorage == null
+                            || energy + energyOutput.amount() > energyCapacity) {
+                        return null;
+                    }
+                    energy += energyOutput.amount();
+                }
+                case MultiblockRecipeOutput.Entity entityOutput -> {
+                    Optional<BlockPos> spawnPos = this.resolveSpawnPos(entityOutput);
+                    if (spawnPos.isEmpty()) {
+                        return null;
+                    }
+                    for (int index = 0; index < entityOutput.count(); index++) {
+                        entities.add(new PlannedEntity(entityOutput.entityType(), spawnPos.get().above()));
+                    }
                 }
             }
         }
-        return false;
+        return new OutputPlan(items, resources, amounts, (int) Math.min(Integer.MAX_VALUE, energy), entities);
     }
 
-    private boolean canInsertFluidResult(FluidStack result) {
-        if (result.isEmpty() || result.getAmount() < 1 || this.fluidHandler == null) {
+    private boolean insertItemPlan(
+            MultiblockDefinition definition,
+            ItemStack[] simulated,
+            ItemStack result) {
+        if (result.isEmpty()) {
             return false;
         }
-        MultiblockDefinition definition = this.definition();
-        if (definition == null) {
+        ItemStack remaining = result.copy();
+        for (int index = 0; index < this.outputSlots.length; index++) {
+            ItemSlot itemSlot = definition.itemSlots().get(this.outputSlots[index]);
+            if (!itemSlot.accepts(result)) {
+                continue;
+            }
+            ItemStack current = simulated[index];
+            int limit = Math.min(itemSlot.limit(), result.getMaxStackSize());
+            if (current.isEmpty()) {
+                int moved = Math.min(remaining.getCount(), limit);
+                if (moved <= 0) {
+                    continue;
+                }
+                ItemStack placed = remaining.copy();
+                placed.setCount(moved);
+                simulated[index] = placed;
+                remaining.shrink(moved);
+            } else if (ItemStack.isSameItemSameComponents(current, result)) {
+                int moved = Math.min(remaining.getCount(), limit - current.getCount());
+                if (moved <= 0) {
+                    continue;
+                }
+                ItemStack merged = current.copy();
+                merged.grow(moved);
+                simulated[index] = merged;
+                remaining.shrink(moved);
+            }
+            if (remaining.isEmpty()) {
+                return true;
+            }
+        }
+        return remaining.isEmpty();
+    }
+
+    private boolean insertFluidPlan(
+            MultiblockDefinition definition,
+            FluidResource[] resources,
+            int[] amounts,
+            FluidStack result) {
+        if (result.isEmpty() || resources.length != definition.fluidTanks().size()) {
             return false;
         }
         FluidResource resource = FluidResource.of(result);
-        for (int index = 0; index < this.fluidHandler.size(); index++) {
+        int remaining = result.getAmount();
+        for (int index = 0; index < resources.length; index++) {
             FluidTank tank = definition.fluidTanks().get(index);
             if (!tank.accepts(resource)) {
                 continue;
             }
-            FluidResource current = this.fluidHandler.getResource(index);
-            if (!current.isEmpty() && !current.matches(result)) {
+            if (!resources[index].isEmpty() && !resources[index].matches(result)) {
                 continue;
             }
-            int amount = this.fluidHandler.getAmountAsInt(index);
-            if ((long) amount + result.getAmount() <= tank.capacity()) {
+            int moved = Math.min(Math.max(0, tank.capacity() - amounts[index]), remaining);
+            if (moved <= 0) {
+                continue;
+            }
+            resources[index] = resource;
+            amounts[index] += moved;
+            remaining -= moved;
+            if (remaining <= 0) {
                 return true;
             }
         }
-        return false;
+        return remaining <= 0;
+    }
+
+    private void commitOutputPlan(OutputPlan plan, ServerLevel serverLevel) {
+        for (int index = 0; index < this.outputSlots.length; index++) {
+            this.inventory.setItem(this.outputSlots[index], plan.items()[index]);
+        }
+        if (this.fluidHandler != null) {
+            for (int index = 0; index < plan.amounts().length; index++) {
+                this.fluidHandler.set(index, plan.resources()[index], plan.amounts()[index]);
+            }
+        }
+        if (this.energyStorage != null) {
+            this.energyStorage.set(plan.energy());
+        }
+        for (PlannedEntity entity : plan.entities()) {
+            entity.entityType().spawn(
+                    serverLevel,
+                    entity.spawnPos(),
+                    EntitySpawnReason.SPAWNER);
+        }
     }
 
     private void completeRecipe(MultiblockRecipe recipe) {
@@ -713,125 +1122,160 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (serverLevel == null) {
             return;
         }
-        int[] matchedSlots = recipe.matchItemSlots(this.createRecipeInput().items());
-        for (int slot : matchedSlots) {
-            if (slot < 0) {
+        MultiblockRecipeInput input = this.createRecipeInput();
+        List<MultiblockRecipe.ItemAllocation> itemAllocations = recipe.findItemInputs(input.items());
+        if (itemAllocations == null) {
+            return;
+        }
+        int[] matchedTanks = recipe.matchFluidTanks(input.fluids());
+        for (int tank : matchedTanks) {
+            if (tank < 0) {
                 return;
             }
         }
-        boolean outputReady = switch (recipe.output()) {
-            case MultiblockRecipeOutput.Item item -> this.insertItemResult(item.stack().create());
-            case MultiblockRecipeOutput.Fluid fluid -> this.insertFluidResult(fluid.stack());
-            case MultiblockRecipeOutput.Entity entity -> this.spawnEntity(serverLevel, entity);
-        };
-        if (!outputReady) {
+        List<Entity> entityInputs = this.findEntityInputs(recipe);
+        if (entityInputs == null) {
             return;
         }
-        for (int slot : matchedSlots) {
-            this.inventory.removeItem(this.inputSlots[slot], 1);
-        }
-        this.consumeFluidIngredients(recipe);
-    }
-
-    private void consumeFluidIngredients(MultiblockRecipe recipe) {
-        if (this.fluidHandler == null || recipe.fluidIngredients().isEmpty()) {
+        OutputPlan plan = this.planOutputs(recipe, true, input);
+        if (plan == null) {
             return;
         }
-        boolean[] used = new boolean[this.fluidHandler.size()];
-        for (SizedFluidIngredient ingredient : recipe.fluidIngredients()) {
-            for (int index = 0; index < this.fluidHandler.size(); index++) {
-                if (used[index]) {
-                    continue;
-                }
-                FluidResource resource = this.fluidHandler.getResource(index);
-                int amount = this.fluidHandler.getAmountAsInt(index);
-                if (resource.isEmpty() || amount < ingredient.amount()
-                        || !ingredient.test(resource.toStack(amount))) {
-                    continue;
-                }
-                used[index] = true;
-                this.fluidHandler.set(index, resource, amount - ingredient.amount());
-                break;
-            }
+        for (MultiblockRecipe.ItemAllocation allocation : itemAllocations) {
+            this.inventory.removeItem(this.inputSlots[allocation.slot()], allocation.count());
+        }
+        this.commitOutputPlan(plan, serverLevel);
+        for (Entity entity : entityInputs) {
+            entity.discard();
         }
     }
 
-    private boolean insertItemResult(ItemStack result) {
-        MultiblockDefinition definition = this.definition();
-        if (definition == null) {
-            return false;
-        }
-        List<ItemSlot> slots = definition.itemSlots();
-        for (int slot : this.outputSlots) {
-            ItemSlot itemSlot = slots.get(slot);
-            if (!itemSlot.accepts(result)) {
-                continue;
-            }
-            ItemStack current = this.inventory.getItem(slot);
-            int limit = Math.min(itemSlot.limit(), result.getMaxStackSize());
-            if (current.isEmpty()) {
-                if (result.getCount() > limit) {
-                    continue;
-                }
-                this.inventory.setItem(slot, result.copy());
-                return true;
-            }
-            if (ItemStack.isSameItemSameComponents(current, result)) {
-                if (current.getCount() + result.getCount() <= limit) {
-                    ItemStack merged = current.copy();
-                    merged.grow(result.getCount());
-                    this.inventory.setItem(slot, merged);
-                    return true;
-                }
-            }
-        }
-        return false;
+    private boolean matchesEntityInputs(MultiblockRecipe recipe) {
+        return this.findEntityInputs(recipe) != null;
     }
 
-    private boolean insertFluidResult(FluidStack result) {
-        if (!this.canInsertFluidResult(result)) {
-            return false;
+    private @Nullable List<Entity> findEntityInputs(MultiblockRecipe recipe) {
+        List<MultiblockRecipeIngredient.Entity> required = recipe.entityInputs();
+        if (required.isEmpty()) {
+            return List.of();
         }
-        MultiblockDefinition definition = this.definition();
-        if (definition == null) {
-            return false;
+        ServerLevel serverLevel = this.serverLevel();
+        if (serverLevel == null) {
+            return null;
         }
-        FluidResource resource = FluidResource.of(result);
-        for (int index = 0; index < this.fluidHandler.size(); index++) {
-            FluidTank tank = definition.fluidTanks().get(index);
-            if (!tank.accepts(resource)) {
-                continue;
+        Set<Entity> used = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Entity> matched = new ArrayList<>();
+        for (MultiblockRecipeIngredient.Entity input : required) {
+            AABB area = this.entityInputArea(input);
+            if (area == null) {
+                return null;
             }
-            FluidResource current = this.fluidHandler.getResource(index);
-            if (!current.isEmpty() && !current.matches(result)) {
-                continue;
-            }
-            int amount = this.fluidHandler.getAmountAsInt(index);
-            if ((long) amount + result.getAmount() <= tank.capacity()) {
-                this.fluidHandler.set(index, resource, amount + result.getAmount());
-                return true;
+            for (int index = 0; index < input.count(); index++) {
+                Entity found = null;
+                for (Entity candidate : serverLevel.getEntitiesOfClass(
+                        Entity.class,
+                        area,
+                        entity -> entity.isAlive()
+                                && !used.contains(entity)
+                                && entity.getType() == input.entityType())) {
+                    found = candidate;
+                    break;
+                }
+                if (found == null) {
+                    return null;
+                }
+                used.add(found);
+                matched.add(found);
             }
         }
-        return false;
+        return matched;
     }
 
-    private boolean spawnEntity(ServerLevel serverLevel, MultiblockRecipeOutput.Entity output) {
-        Optional<BlockPos> spawnPos = this.resolveSpawnPos(output);
-        if (spawnPos.isEmpty()) {
-            return false;
+    private @Nullable AABB entityInputArea(MultiblockRecipeIngredient.Entity input) {
+        if (!input.spawn().isEmpty()) {
+            Optional<BlockPos> selected = this.resolveSelectorPos(input.spawn());
+            if (selected.isEmpty()) {
+                return null;
+            }
+            BlockPos pos = selected.get();
+            double x = pos.getX() + 0.5D;
+            double y = pos.getY();
+            double z = pos.getZ() + 0.5D;
+            return new AABB(x - 2.0D, y - 2.0D, z - 2.0D, x + 2.0D, y + 2.0D, z + 2.0D);
         }
-        return output.entityType().spawn(
-                serverLevel,
-                spawnPos.get().above(),
-                EntitySpawnReason.SPAWNER) != null;
+        return this.multiblockBounds();
+    }
+
+    private @Nullable AABB multiblockBounds() {
+        AABB volume = this.multiblockVolume();
+        return volume == null ? null : volume.inflate(1.0D);
+    }
+
+    private @Nullable AABB multiblockVolume() {
+        if (!this.formed) {
+            return null;
+        }
+        int minX = this.worldPosition.getX();
+        int minY = this.worldPosition.getY();
+        int minZ = this.worldPosition.getZ();
+        int maxX = minX;
+        int maxY = minY;
+        int maxZ = minZ;
+        for (BlockPos member : this.members) {
+            minX = Math.min(minX, member.getX());
+            minY = Math.min(minY, member.getY());
+            minZ = Math.min(minZ, member.getZ());
+            maxX = Math.max(maxX, member.getX());
+            maxY = Math.max(maxY, member.getY());
+            maxZ = Math.max(maxZ, member.getZ());
+        }
+        return new AABB(minX, minY, minZ, maxX + 1, maxY + 1, maxZ + 1);
     }
 
     private Optional<BlockPos> resolveSpawnPos(MultiblockRecipeOutput.Entity output) {
+        Optional<BlockPos> selected = this.resolveSelectorPos(output.spawn());
+        if (selected.isPresent() || !output.spawn().isEmpty()) {
+            return selected;
+        }
+        return this.defaultEntitySpawnPos();
+    }
+
+    private Optional<BlockPos> defaultEntitySpawnPos() {
+        ServerLevel serverLevel = this.serverLevel();
+        AABB volume = this.multiblockVolume();
+        if (serverLevel == null || volume == null) {
+            return Optional.empty();
+        }
+        BlockPos min = BlockPos.containing(volume.minX, volume.minY, volume.minZ);
+        BlockPos max = BlockPos.containing(volume.maxX - 1.0E-4D, volume.maxY - 1.0E-4D, volume.maxZ - 1.0E-4D);
+        for (int floorY = max.getY() - 2; floorY >= min.getY(); floorY--) {
+            for (int x = min.getX(); x <= max.getX(); x++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
+                    BlockPos floorPos = new BlockPos(x, floorY, z);
+                    if (canSpawnEntityAt(serverLevel, floorPos)) {
+                        return Optional.of(floorPos);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean canSpawnEntityAt(ServerLevel level, BlockPos floorPos) {
+        if (level.getBlockState(floorPos).isAir()) {
+            return false;
+        }
+        BlockPos spawnPos = floorPos.above();
+        return level.getBlockState(spawnPos).canBeReplaced()
+                && level.getBlockState(spawnPos.above()).canBeReplaced();
+    }
+
+    private Optional<BlockPos> resolveSelectorPos(String spawn) {
         MultiblockDefinition definition = this.definition();
         if (definition == null || !this.formed || this.level == null) {
             return Optional.empty();
         }
-        CapabilityPorts.PortSelector selector = output.selector().orElse(null);
+        CapabilityPorts.PortSelector selector = CapabilityPorts.PortSelector.parse(spawn).orElse(null);
         if (selector == null) {
             return Optional.empty();
         }
@@ -845,12 +1289,25 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         return Optional.empty();
     }
 
+    private record OutputPlan(
+            ItemStack[] items,
+            FluidResource[] resources,
+            int[] amounts,
+            int energy,
+            List<PlannedEntity> entities) {
+    }
+
+    private record PlannedEntity(EntityType<?> entityType, BlockPos spawnPos) {
+    }
+
     private void resetRecipe() {
-        if (this.progress != 0 || this.maxProgress != 0 || this.activeRecipe != null || this.activeRecipeId != null) {
+        if (this.progress != 0 || this.maxProgress != 0 || this.activeRecipe != null
+                || this.activeRecipeId != null || !this.activeEntityTypes.isEmpty()) {
             this.progress = 0;
             this.maxProgress = 0;
             this.activeRecipe = null;
             this.activeRecipeId = null;
+            this.refreshActiveEntityTypes();
             this.setChanged();
         }
     }
@@ -860,6 +1317,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         long consumedBefore = total * progress / recipe.time();
         long consumedAfter = total * (progress + 1L) / recipe.time();
         return (int) (consumedAfter - consumedBefore);
+    }
+
+    private static long remainingEnergyCost(MultiblockRecipe recipe, int progress) {
+        long total = recipe.energy();
+        long consumed = total * Math.min(progress, recipe.time()) / recipe.time();
+        return Math.max(0L, total - consumed);
     }
 
     public void onNeighborChanged() {
@@ -1286,8 +1749,11 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (this.activeRecipeId != null) {
             output.store("Recipe", Identifier.CODEC, this.activeRecipeId);
         }
+        output.store("ActiveEntities", Identifier.CODEC.listOf(), this.activeEntityTypeIds());
         output.store("MenuLayout", MultiblockMenuLayout.CODEC, this.menuLayout);
         output.store("SlotLocks", SlotLock.CODEC.listOf(), List.copyOf(this.slotLocks.values()));
+        output.store("FluidSlotTanks", Codec.unboundedMap(Codec.STRING, Codec.STRING), Map.copyOf(this.fluidSlotTanks));
+        output.store("DrainedFluidSlots", Codec.STRING.listOf(), List.copyOf(this.drainedFluidSlots));
         NonNullList<ItemStack> items = NonNullList.withSize(this.inventory.getContainerSize(), ItemStack.EMPTY);
         ItemStack[] stacks = this.inventory.getStacks();
         for (int i = 0; i < stacks.length; i++) {
@@ -1318,11 +1784,22 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.maxProgress = input.getIntOr("MaxProgress", 0);
         this.activeRecipeId = input.read("Recipe", Identifier.CODEC).orElse(null);
         this.activeRecipe = null;
+        this.activeEntityTypes = input.read("ActiveEntities", Identifier.CODEC.listOf())
+                .orElse(List.of())
+                .stream()
+                .flatMap(id -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).stream())
+                .toList();
         this.menuLayout = input.read("MenuLayout", MultiblockMenuLayout.CODEC).orElse(this.menuLayout);
         this.slotLocks.clear();
         for (SlotLock lock : input.read("SlotLocks", SlotLock.CODEC.listOf()).orElse(List.of())) {
             this.slotLocks.put(lock.key(), lock);
         }
+        this.fluidSlotTanks.clear();
+        this.fluidSlotTanks.putAll(input.read(
+                "FluidSlotTanks", Codec.unboundedMap(Codec.STRING, Codec.STRING)).orElse(Map.of()));
+        this.drainedFluidSlots.clear();
+        this.drainedFluidSlots.addAll(input.read(
+                "DrainedFluidSlots", Codec.STRING.listOf()).orElse(List.of()));
         MultiblockDefinition definition = this.definition();
         if (definition != null) {
             this.menuLayout = MultiblockMenuLayout.create(definition);
@@ -1335,6 +1812,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
         this.ensureConfigured();
         this.sanitizeSlotLocks();
+        this.sanitizeFluidSlotState();
         if (this.energyStorage != null) {
             input.child("energy").ifPresent(this.energyStorage::deserialize);
         } else {
@@ -1452,14 +1930,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Tag tag = MultiblockMenuLayout.CODEC.encodeStart(NbtOps.INSTANCE, layout)
                 .getOrThrow(message -> new IllegalStateException("Failed to encode multiblock gui layout: " + message));
         buffer.writeNbt(tag);
-        EntityType<?> outputEntityType = menu instanceof MultiblockMenu multiblockMenu
-                && multiblockMenu.outputEntityType() != null
-                ? multiblockMenu.outputEntityType()
-                : this.previewEntityOutputType();
-        Identifier outputEntityId = outputEntityType == null
-                ? null
-                : BuiltInRegistries.ENTITY_TYPE.getKey(outputEntityType);
-        buffer.writeUtf(outputEntityId == null ? "" : outputEntityId.toString());
     }
 
     private record AssemblyRequirement(BlockPos pos, BlockMatcher matcher) {}

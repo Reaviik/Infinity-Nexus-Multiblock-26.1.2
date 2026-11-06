@@ -30,6 +30,7 @@ public record GuiElement(
     public static final int DEFAULT_TEXT_COLOR = 0xFF404040;
     public static final int DEFAULT_ENERGY_COLOR = 0xFFFF0000;
     public static final int DEFAULT_PROGRESS_COLOR = 0xFF00AA00;
+    public static final int ENTITY_CELL_SIZE = 18;
 
     public static final Codec<GuiElement> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GuiElementType.CODEC.fieldOf("type").forGetter(GuiElement::type),

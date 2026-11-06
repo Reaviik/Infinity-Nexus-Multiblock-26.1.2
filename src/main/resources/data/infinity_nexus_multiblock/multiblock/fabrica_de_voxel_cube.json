@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "id": "infinity_nexus_multiblock:fabrica_de_voxel_cube",
-  "type": "recipe",
+  "type": "recipeexemple",
   "item_slots": [
     {
       "id": "slot_0",
@@ -60,14 +60,20 @@
     {
       "id": "slot_9",
       "role": "output",
-      "x": 80,
-      "y": 34
+      "x": 62,
+      "y": 16
     },
     {
       "id": "slot_10",
       "role": "component",
       "limit": 1,
-      "x": 98,
+      "x": 62,
+      "y": 52
+    },
+    {
+      "id": "slot_11",
+      "role": "fluid",
+      "x": 62,
       "y": 34
     }
   ],
@@ -100,6 +106,13 @@
   "gui": {
     "elements": [
       {
+        "type": "entity",
+        "x": 82,
+        "y": 16,
+        "width": 54,
+        "height": 54
+      },
+      {
         "type": "player_inventory",
         "x": 8,
         "y": 84,
@@ -123,26 +136,26 @@
       {
         "type": "energy_bar",
         "x": 158,
-        "y": 10,
+        "y": 16,
         "width": 8,
-        "height": 64,
+        "height": 54,
         "capability": "energy",
         "color": "0xFFFF0000"
       },
       {
         "type": "fluid_bar",
         "x": 148,
-        "y": 10,
+        "y": 16,
         "width": 8,
-        "height": 64,
+        "height": 54,
         "capability": "fluid_0"
       },
       {
         "type": "progress_bar",
         "x": 138,
-        "y": 10,
+        "y": 16,
         "width": 8,
-        "height": 64,
+        "height": 54,
         "color": "0xFF00AA00"
       }
     ]
@@ -386,7 +399,7 @@
     "matchers": {
       "A": "minecraft:waxed_copper_block",
       "B": "minecraft:smooth_stone",
-      "D": "minecraft:purple_concrete",
+      "D": "minecraft:green_concrete",
       "E": "minecraft:purple_stained_glass",
       "F": "minecraft:quartz_block",
       "G": "minecraft:waxed_copper_grate",

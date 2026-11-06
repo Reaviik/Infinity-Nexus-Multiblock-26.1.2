@@ -200,6 +200,7 @@
                 <label class="mini-field">Z<input id="sizeZ" type="number" min="1" max="64" step="1" value="3"></label>
                 <label class="mini-field">Y<input id="sizeY" type="number" min="1" max="32" step="1" value="1"></label>
                 <label class="mini-field mini-field-anchor">Âncora<input id="anchorSymbol" type="text" maxlength="1" value="C" spellcheck="false"></label>
+                <button type="button" class="btn btn-tiny" id="patternFullscreenBtn" aria-pressed="false" title="Tela cheia do pattern">tela cheia</button>
               </div>
             </div>
 
@@ -457,7 +458,7 @@
               <div class="gui-canvas" id="guiCanvas" aria-label="Prévia interativa da GUI"></div>
             </div>
             <p class="field-hint">Arraste energia, fluidos, progresso, entidade e demais elementos para ajustar <code>x/y</code>. Os campos numéricos continuam valendo para largura, altura e demais propriedades.</p>
-            <p class="field-hint">Novos elementos começam com o layout do <code>spawner</code>: título em <code>8,4</code>, texto em <code>8,75</code>, inventário em <code>8,84</code>, barras em <code>158/148/138,10</code> com <code>8x64</code> e entidade em <code>96,18</code> com <code>32x32</code>. Slots começam em <code>8,16</code> e avançam <code>18</code> px, com 9 por linha.</p>
+            <p class="field-hint">Novos elementos começam com o layout do <code>spawner</code>: título em <code>8,4</code>, texto em <code>8,75</code>, inventário em <code>8,84</code>, barras em <code>158/148/138,10</code> com <code>8x64</code> e entidade em <code>96,18</code> com <code>36x36</code>. Slots começam em <code>8,16</code> e avançam <code>18</code> px, com 9 por linha.</p>
 
             <h3 class="controller-section-title">Elementos <span class="controller-optional">opcional</span></h3>
             <div class="gui-add-row">
@@ -483,7 +484,7 @@
         </div>
 
         <div class="callout callout-info">
-          Uma GUI customizada exige exatamente um <code>player_inventory</code>. <code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x/y</code>; sem slots de item, a GUI pode ter só barras. Barras precisam apontar para a energia ou o tanque existente; <code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só valem em máquinas <code>type=recipe</code>. <code>entity</code> mostra a entidade do <code>output</code> da receita e usa apenas <code>x/y/width/height</code>. Elementos <code>slot</code> usam a referência de <code>item_slots</code>; slots com <code>x/y</code> não podem ser misturados com eles.
+          Uma GUI customizada exige exatamente um <code>player_inventory</code>. <code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x/y</code>; sem slots de item, a GUI pode ter só barras. Barras precisam apontar para a energia ou o tanque existente; <code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só valem em máquinas <code>type=recipe</code>. <code>entity</code> mostra as entidades de <code>inputs</code>/<code>outputs</code> da receita, usa <code>x/y/width/height</code> e exige <code>width/height</code> múltiplos de <code>18</code> (mínimo <code>18</code>), com paginação quando não couberem. Elementos <code>slot</code> usam a referência de <code>item_slots</code>; slots com <code>x/y</code> não podem ser misturados com eles.
         </div>
       </section>
 
@@ -511,17 +512,16 @@
           </div>
 
           <div class="empty-state" id="recipeEmpty">
-            Nenhuma receita. Cada receita vira um arquivo separado. Saídas de item exigem um slot <code>output</code>; saídas de fluido exigem tanque; entidades usam um seletor de spawn do pattern.
+            Nenhuma receita. Cada receita vira um arquivo separado. Inputs e outputs aceitam item, fluido, entidade e energia; outputs de item/fluido tem chance individual. Saidas de item exigem slots output, fluidos exigem tanque e entidades usam um seletor de spawn opcional (sem seletor, surgem dentro da area do multibloco).
           </div>
           <div class="recipe-list" id="recipeList"></div>
         </div>
 
         <div class="callout callout-info">
-          <code>ingredients</code>: um id ou tag por linha; também aceita JSON de ingrediente em uma linha. <code>fluid_ingredients</code>: use <code>fluido quantidade</code> por linha e só aparece quando a máquina tem tanque. <code>output.type</code> aceita <code>item</code>, <code>fluid</code> ou <code>entity</code>; o builder oculta energia, fluidos e saídas que a máquina não suporta. Toda receita usa <code>type: infinity_nexus_multiblock:multiblock</code> e recebe <code>definition</code> com o id desta máquina. O JEI mostra as receitas quando o controller está associado a uma definição <code>type=recipe</code>.
-        </div>
+          <code>inputs</code>: lista tipada com <code>item</code>, <code>fluid</code>, <code>entity</code> e <code>energy</code>. Itens usam <code>ingredient</code> e <code>count</code>; fluidos usam <code>ingredient</code> e <code>amount</code>; entidades usam <code>id</code> e <code>spawn</code> opcional (sem seletor, a entidade de saída surge dentro da área do multibloco); energia usa <code>amount</code>. <code>outputs</code>: cada entrada aceita <code>chance</code> de 0 a 1 (default 1) e itens podem ter <code>components</code>. Cole o JSON do <code>/inmb hand</code> no id/tag para separar os campos automaticamente. O builder valida slots, tanques e capacidade de energia e limita a soma dos outputs. Toda receita usa <code>type: infinity_nexus_multiblock:multiblock</code> e recebe <code>definition</code> com o id desta maquina. O JEI mostra multiplos outputs e a chance de cada um. </div>
 
         <div class="callout callout-info">
-          <strong>Gerar JSON no jogo.</strong> Use <code>/inm hand</code> para gerar o <code>input</code> de <code>ingredients</code> e o objeto de <code>output</code>. O input não serve como output e vice-versa; nos campos de saída do builder, use <code>id</code>, <code>count</code> e <code>components</code> separadamente. <code>/inm look</code> envia o ID puro, o matcher completo e o <code>state</code> separado. No campo <code>Bloco</code> dos matchers, cole o ID puro ou o matcher completo: o builder separa bloco e propriedades automaticamente. As linhas no chat são clicáveis e copiam o texto. O alias <code>/infinity_nexus_multiblock</code> faz o mesmo.
+          <strong>Gerar JSON no jogo.</strong> Use <code>/inmb hand</code> para gerar o <code>input</code> de <code>ingredients</code> e o objeto de <code>output</code>. O input não serve como output e vice-versa; no builder, cole o input no id/tag do ingrediente e o output no id da saída para separar os campos automaticamente. <code>/inmb look</code> envia o ID puro, o matcher completo e o <code>state</code> separado. No campo <code>Bloco</code> dos matchers, cole o ID puro ou o matcher completo: o builder separa bloco e propriedades automaticamente. As linhas no chat são clicáveis e copiam o texto. O alias <code>/infinity_nexus_multiblock</code> faz o mesmo.
         </div>
       </section>
 

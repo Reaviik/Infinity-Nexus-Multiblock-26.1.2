@@ -17,6 +17,8 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.serialization.MapCodec;
@@ -34,12 +36,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
+import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.server.loading.ServerModLoader;
 
 public final class MultiblockGameTests {
@@ -119,6 +123,7 @@ public final class MultiblockGameTests {
             assertFluidOnlyGui(helper);
             assertSlotLockBehavior(helper);
             assertControllerRecipe(helper);
+            assertMultiblockRecipeLoads(helper);
             helper.succeed();
         }
 
@@ -162,6 +167,55 @@ public final class MultiblockGameTests {
                 throw helper.assertionException(Component.literal(
                         "Generated controller recipe has definition " + componentDefinition
                                 + " instead of " + definitionId));
+            }
+        }
+
+        private static void assertMultiblockRecipeLoads(GameTestHelper helper) {
+            Identifier recipeId = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "recipe_1");
+            ResourceKey<net.minecraft.world.item.crafting.Recipe<?>> recipeKey =
+                    ResourceKey.create(Registries.RECIPE, recipeId);
+            RecipeHolder<?> holder = helper.getLevel().getServer().getRecipeManager()
+                    .byKey(recipeKey)
+                    .orElse(null);
+            if (!(holder != null && holder.value() instanceof MultiblockRecipe recipe)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock recipe failed to load: " + recipeId));
+            }
+            if (recipe.entityInputs().stream().noneMatch(input -> input.entityType() == EntityType.PIG)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock recipe is missing its pig input: " + recipeId));
+            }
+            if (recipe.itemInputs().stream().noneMatch(input -> input.count() == 12
+                    && input.ingredient().test(new ItemStack(Items.DIRT)))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock recipe is missing its 12 dirt input: " + recipeId));
+            }
+            List<ItemStack> splitDirt = List.of(
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 7),
+                    new ItemStack(Items.DIRT, 8));
+            List<MultiblockRecipe.ItemAllocation> dirtAllocations = recipe.findItemInputs(splitDirt);
+            if (dirtAllocations == null
+                    || dirtAllocations.size() < 2
+                    || dirtAllocations.stream().mapToInt(MultiblockRecipe.ItemAllocation::count).sum() != 12) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock recipe must accept dirt split across input slots: " + recipeId));
+            }
+            for (MultiblockRecipeOutput output : recipe.outputs()) {
+                if (output instanceof MultiblockRecipeOutput.Fluid fluidOutput) {
+                    FluidStack stack = fluidOutput.stack();
+                    if (stack.isEmpty()) {
+                        throw helper.assertionException(Component.literal(
+                                "Multiblock recipe fluid output decoded incorrectly: " + recipeId));
+                    }
+                }
             }
         }
 

@@ -280,7 +280,7 @@ public record MultiblockMenuLayout(
                     if (definition.type() != MultiblockType.RECIPE) {
                         throw new IllegalArgumentException("gui has an entity element but the multiblock is not a recipe multiblock");
                     }
-                    requireSizedElement(element, gui.width(), gui.height());
+                    requireEntityElement(element, gui.width(), gui.height());
                     elements.add(element);
                 }
                 case TITLE, TEXT -> elements.add(element);
@@ -339,6 +339,17 @@ public record MultiblockMenuLayout(
         if (element.width() <= 0 || element.height() <= 0) {
             throw new IllegalArgumentException("gui " + element.type().getSerializedName()
                     + " elements need positive width and height");
+        }
+        requireInside(element, width, height, element.width(), element.height());
+    }
+
+    private static void requireEntityElement(GuiElement element, int width, int height) {
+        if (element.width() < GuiElement.ENTITY_CELL_SIZE
+                || element.height() < GuiElement.ENTITY_CELL_SIZE
+                || element.width() % GuiElement.ENTITY_CELL_SIZE != 0
+                || element.height() % GuiElement.ENTITY_CELL_SIZE != 0) {
+            throw new IllegalArgumentException("gui entity elements need width and height as multiples of "
+                    + GuiElement.ENTITY_CELL_SIZE + " (minimum " + GuiElement.ENTITY_CELL_SIZE + ")");
         }
         requireInside(element, width, height, element.width(), element.height());
     }

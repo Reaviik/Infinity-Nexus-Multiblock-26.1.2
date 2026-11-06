@@ -502,7 +502,7 @@ Exemplo com fluidos:
 }
 ```
 
-A definição precisa de slots de entrada para ingredientes de item e de um slot `output` para saída de item. Receitas que só usam fluidos ou que geram fluido/entidade não exigem slot de saída de item, mas exigem o tanque ou seletor de spawn correspondente.
+A definição precisa de slots de entrada para ingredientes de item e de um slot `output` para saída de item. Receitas que só usam fluidos ou que geram fluido/entidade não exigem slot de saída de item, mas exigem o tanque correspondente; o seletor de spawn de entidade é opcional e, sem ele, a entidade surge dentro da área do multibloco.
 
 Mapeamento de slots:
 

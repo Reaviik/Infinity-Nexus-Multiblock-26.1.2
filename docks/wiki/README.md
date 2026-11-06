@@ -211,7 +211,7 @@ Esse JSON já carrega como definição em qualquer namespace. O item controller 
 3. Remova `recipe_type` da definição; toda receita de máquina usa `infinity_nexus_multiblock:multiblock`.
 4. Em cada receita, troque o tipo antigo por `"type": "infinity_nexus_multiblock:multiblock"` e adicione `"definition": "<id da definição>"`.
 5. Mantenha o campo top-level `recipe` apenas se quiser gerar a receita shaped do controller.
-6. Gere o controller com `/inm give <id>` ou pela aba criativa e rode `/reload`.
+6. Gere o controller com `/inmb give <id>` ou pela aba criativa e rode `/reload`.
 
 ## 4. Pattern
 
@@ -451,9 +451,11 @@ Exemplos:
 | `upgrade` | todas | nenhuma | Sem comportamento de receita embutido. |
 | `component` | todas | nenhuma | Sem comportamento de receita embutido. |
 | `storage` | todas | todas | Armazenamento/automação. |
-| `fluid` | todas | nenhuma | Slot de item; não é um tanque de fluido. |
+| `fluid` | nenhuma | nenhuma | Slot manual: drena o container inserido para o tanque selecionado e enche o container retirado a partir dele. |
 
 Apenas `input` e `output` têm comportamento automático no processamento de receitas. Os outros roles são úteis para automação, filtros, limites e GUIs; outros mods podem acessá-los pelo inventário.
+
+O role `fluid` tem comportamento manual: ao inserir um container com fluido ele é drenado para o tanque selecionado; ao retirar um container vazio, ele é preenchido a partir do tanque. O pino azul no slot, exibido quando há mais de um tanque, alterna o tanque usado. Sem faces de automação, o slot não participa de inserção/extração por hopper.
 
 ### 6.4 Filtro e limite
 
@@ -592,6 +594,8 @@ No layout padrão (sem `gui.elements`), slots com `x`/`y` que caibam em `176x166
 | `max_extract` | não | inteiro | `0` | mB liberados por extração. `0` desativa. |
 | `filter` | não | string | sem filtro | ID de fluido ou tag com `#`. |
 
+O slot `fluid` usa os tanques como origem/destino manual. Ele ignora `max_receive` e `max_extract` (limites de automação), mas respeita `capacity` e `filter`. A troca é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.
+
 ### 7.3 Portas de capability (`capability_ports`)
 
 `capability_ports` é opcional e fica no nível raiz, irmão de `capabilities`.
@@ -640,13 +644,13 @@ No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Cam
 
 ### 7.5 Energia em receitas
 
-Se a receita tem `energy > 0`, a máquina precisa ter `capabilities.energy`. Sem armazenamento de energia, o progresso não avança.
+Um input de energia usa `{ "type": "energy", "amount": 1000 }`. A maquina precisa ter `capabilities.energy`; sem armazenamento, a receita nem inicia.
 
-O custo é distribuído ao longo dos ticks. Uma receita com `energy: 1000` e `time: 100` consome aproximadamente 10 FE por tick. Se a energia acabar, o progresso pausa.
+O custo e distribuido ao longo dos ticks. Uma receita com `amount: 1000` e `time: 100` consome aproximadamente 10 FE por tick. Se a energia acabar, o progresso pausa. Um output de energia e inserido no storage ao completar.
 
 ### 7.6 Fluidos em receitas
 
-Se a receita tem `fluid_ingredients`, a máquina precisa ter tanques suficientes. Cada ingrediente de fluido procura um tanque que aceite o fluido e tenha a quantidade necessária. Cada tanque satisfaz no máximo um ingrediente por craft.
+Se a receita tem `inputs` do tipo `fluid`, a maquina precisa ter tanques suficientes. Cada ingrediente de fluido procura um tanque que aceite o fluido e tenha a quantidade necessaria. Cada tanque satisfaz no maximo um ingrediente por craft.
 
 ### 7.7 Reload
 
@@ -681,9 +685,10 @@ Com `gui.elements` não vazio:
 - `fluid_bar.capability` precisa ser igual a um `fluids[].id`;
 - `progress_bar`, `arrow` e `entity` só são aceitos em `type=recipe`;
 - slots, player inventory, barras e `entity` precisam caber em `width`/`height`;
+- `entity.width`/`entity.height` precisam ser múltiplos de `18` e no mínimo `18`;
 - `title` e `text` não têm validação de limites; cuidado para não desenhar fora da tela.
 - Em `title`/`text`, `x/y` representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.
-- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,10` com `8x64`, e `entity` em `96,18` com `32x32`.
+- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,10` com `8x64`, e `entity` em `96,18` com `36x36`.
 - Slots novos começam em `8,16` e avançam `18` px por coluna, com 9 colunas por linha (ou 8 quando há barras de energia/fluido ou barra de progresso) antes de descer para a próxima linha.
 
 ### 8.3 Campos de `gui`
@@ -704,8 +709,8 @@ Com `gui.elements` não vazio:
 | `type` | sim | string | — | Veja a tabela de tipos abaixo. |
 | `x` | não | inteiro | `0` | Posição horizontal. |
 | `y` | não | inteiro | `0` | Posição vertical. |
-| `width` | não | inteiro | `16` | De `0` a `4096`. Barras e `entity` precisam de valor positivo. |
-| `height` | não | inteiro | `16` | De `0` a `4096`. Barras e `entity` precisam de valor positivo. |
+| `width` | não | inteiro | `16` | De `0` a `4096`. Barras precisam de valor positivo; `entity` precisa de múltiplo de `18`, mínimo `18`. |
+| `height` | não | inteiro | `16` | De `0` a `4096`. Barras precisam de valor positivo; `entity` precisa de múltiplo de `18`, mínimo `18`. |
 | `text` | não | string | `""` | Chave de tradução ou texto literal. |
 | `slot` | não | string | `""` | Só para o tipo `slot`; ID de `item_slots[]`. |
 | `capability` | não | string | `""` | ID de energia ou tanque para barras. |
@@ -729,7 +734,7 @@ O campo `color` é ARGB e aceita inteiro decimal ou string hexadecimal. Exemplos
 | `fluid_bar` | Barra de fluido. | `capability`, `x`, `y`, `width`, `height` |
 | `progress_bar` | Barra de progresso da receita. | `x`, `y`, `width`, `height`, `direction`, `color`, `u`, `v` |
 | `arrow` | Seta de progresso, como a da fornalha. | `x`, `y`, `width`, `height`, `direction`, `u`, `v` |
-| `entity` | Área que renderiza a entidade do `output` da receita. | `x`, `y`, `width`, `height` |
+| `entity` | Área que renderiza as entidades de `inputs` e `outputs` da receita, com quantidade no tooltip do JEI, e no controller os mobs vivos da área, com paginação automática. | `x`, `y`, `width`, `height` |
 
 ### 8.6 Detalhes por tipo
 
@@ -794,11 +799,16 @@ O campo `color` é ARGB e aceita inteiro decimal ou string hexadecimal. Exemplos
 **`entity`**
 
 - Só em `type=recipe`.
-- `width`/`height` precisam ser positivos e caber na GUI.
-- A entidade vem de `output.id` da receita exibida; o elemento não tem campo de ID.
+- `width`/`height` precisam ser múltiplos de `18`, no mínimo `18`, e caber na GUI.
+- A área é dividida em células de `18x18`: com uma entidade, ela ocupa a área inteira; com duas ou mais, cada célula mostra uma entidade em ordem de linha.
+- A capacidade é `(width / 18) * (height / 18)` entidades por página; quando não couberem, surgem páginas com indicador `atual/total`.
+- No controller, a roda do mouse sobre o elemento troca de página. No JEI, as páginas alternam automaticamente a cada 2 segundos.
+- No JEI, as entidades vêm dos `inputs` e `outputs` do tipo `entity` da receita exibida, incluindo a quantidade pedida/gerada (`count`); o elemento não tem campo de ID.
+- No controller, entidades vivas dentro da área do multibloco são exibidas mesmo sem receita ativa; entidades de input/output da receita ativa completam a lista.
 - O fundo é preto e a borda é cinza, no mesmo estilo das barras.
-- Renderiza no JEI e no controller; no controller, a entidade é a do `activeRecipe` sincronizado.
-- Entidades vivas usam o renderer de inventário; entidades não-vivas usam o render state genérico.
+- O tooltip do JEI identifica entrada/saída, a quantidade e a chance da entidade na página exibida; no controller, mostra o nome e a contagem da entidade.
+- Renderiza no JEI e no controller.
+- Entidades vivas usam o renderer de inventário; entidades não-vivas usam o render state genérico. A escala é ajustada ao tamanho da entidade para caber na célula.
 
 ### 8.7 Exemplo de GUI customizada
 
@@ -887,10 +897,10 @@ A aba criativa gera uma variante do controller para cada definição carregada. 
 Para obter uma variante:
 
 ```text
-/inm give minhamod:minha_maquina
+/inmb give minhamod:minha_maquina
 ```
 
-`/inm list` lista as definições e cria links clicáveis para o comando `give`.
+`/inmb list` lista as definições e cria links clicáveis para o comando `give`.
 
 ### 9.2 Como o vínculo é aplicado
 
@@ -980,14 +990,6 @@ Não é necessário registrar um `MultiblockControllerItem`, bloco ou block enti
 data/<namespace>/recipe/<arquivo>.json
 ```
 
-A definição da máquina precisa ter:
-
-```json
-"type": "recipe"
-```
-
-A receita deve apontar para o `id` da definição:
-
 ```json
 {
   "type": "infinity_nexus_multiblock:multiblock",
@@ -995,184 +997,100 @@ A receita deve apontar para o `id` da definição:
 }
 ```
 
-O tipo `infinity_nexus_multiblock:multiblock` é único e registrado pelo mod. Não há mais um tipo por máquina, e a definição não declara `recipe_type`. A receita só é usada pela máquina cuja definição tem o mesmo `id` indicado em `definition`.
+O tipo `infinity_nexus_multiblock:multiblock` e unico e registrado pelo mod. A receita so e usada pela maquina cuja definicao tem o mesmo `id` indicado em `definition`. O campo antigo `recipe_type` nao existe mais na definicao.
 
 ### 10.2 Campos da receita
 
-| Campo | Obrigatório | Tipo | Padrão | Regras |
+| Campo | Obrigatorio | Tipo | Padrao | Regras |
 |---|---:|---|---|---|
-| `type` | sim | string | — | Sempre `infinity_nexus_multiblock:multiblock`. |
-| `definition` | sim | identifier | — | `id` da definição que processa esta receita. |
-| `ingredients` | não | lista | `[]` | Lista de `Ingredient`. |
-| `fluid_ingredients` | não | lista | `[]` | Lista de `SizedFluidIngredient`. |
-| `output` | sim | objeto | — | Saída tipada `item`, `fluid` ou `entity`; `result` legado ainda é aceito para item. |
-| `energy` | não | inteiro | `0` | FE totais do craft, mínimo `0`. |
-| `time` | não | inteiro | `100` | Duração em ticks, mínimo `1`. |
+| `type` | sim | string | - | Sempre `infinity_nexus_multiblock:multiblock`. |
+| `definition` | sim | identifier | - | `id` da definicao que processa esta receita. |
+| `inputs` | sim | lista | `[]` | Lista tipada de itens, fluidos, entidades e energia. |
+| `outputs` | sim | lista | `[]` | Resultados; cada entrada tem `chance` opcional. |
+| `time` | sim | inteiro | `100` | Duracao em ticks, de 1 a 72000. |
 
-A receita precisa ter pelo menos um ingrediente de item ou de fluido. Uma receita sem ingredientes nunca combina.
+O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `output`, `energy` e `result` para migracao, mas o builder exporta somente `inputs` e `outputs`. Receitas novas devem usar o schema tipado.
 
-### 10.3 `ingredients`
-
-Formatos comuns:
+### 10.3 `inputs`
 
 ```json
-"ingredients": [
-  "minecraft:raw_iron"
+"inputs": [
+  { "type": "item", "ingredient": "minecraft:raw_iron", "count": 2 },
+  { "type": "item", "ingredient": "#c:raw_materials/copper" },
+  { "type": "fluid", "ingredient": "minecraft:water", "amount": 1000 },
+  { "type": "entity", "id": "minecraft:pig", "count": 2, "spawn": "C" },
+  { "type": "energy", "amount": 500 }
 ]
 ```
 
-```json
-"ingredients": [
-  "#c:raw_materials/iron"
-]
-```
+- `item`: `ingredient` aceita id, tag `#`, JSON de ingrediente ou objeto com `components`; `count` e opcional e vai de 1 a 99.
+- `fluid`: `ingredient` aceita id ou tag; `amount` e obrigatorio e limitado pela maior capacidade de tanque.
+- `entity`: `id` e o entity type; `count` e opcional (1 a 99, padrao 1) e indica quantas entidades desse tipo precisam existir na area; `spawn` e opcional e aceita simbolo do pattern, bloco ou tag. As entidades precisam estar dentro da area do multibloco ou perto do seletor e sao removidas ao completar.
+- `energy`: `amount` e o custo total em FE, consumido aos poucos durante o progresso.
+- Pelo menos um input e obrigatorio; a maquina tambem procura receitas que tenham somente energia ou entidade, sem item/fluido.
+
+### 10.4 `outputs`
 
 ```json
-"ingredients": [
-  ["minecraft:raw_iron", "minecraft:raw_copper"]
-]
-```
-
-A lista interna é uma alternativa: o ingrediente aceita qualquer item dela. Para exigir dois itens diferentes, use duas entradas separadas:
-
-```json
-"ingredients": [
-  "minecraft:raw_iron",
-  "minecraft:coal"
-]
-```
-
-Cada ingrediente consome **1 item** de um slot de input. Não existe campo de quantidade no ingrediente. Para exigir 2 itens iguais, repita o ingrediente e tenha slots de input suficientes.
-
-O codec também aceita ingredientes customizados do NeoForge com `neoforge:ingredient_type`; para a maioria das máquinas, IDs, tags e listas resolvem. Para itens com data components, use `/inm hand` para gerar a entrada exata (veja [10.11](#1011-gerar-json-com-o-comando)).
-
-### 10.4 `fluid_ingredients`
-
-```json
-"fluid_ingredients": [
+"outputs": [
   {
-    "ingredient": "minecraft:water",
-    "amount": 500
-  }
+    "type": "item",
+    "id": "minecraft:gold_ingot",
+    "count": 2,
+    "components": { "minecraft:custom_name": "Ouro" },
+    "chance": 0.5
+  },
+  { "type": "fluid", "id": "minecraft:water", "amount": 500, "chance": 1.0 },
+  { "type": "entity", "id": "minecraft:pig", "count": 2, "spawn": "C", "chance": 0.25 },
+  { "type": "energy", "amount": 1000, "chance": 1.0 }
 ]
 ```
 
-| Campo | Obrigatório | Tipo | Padrão | Regras |
-|---|---:|---|---|---|
-| `ingredient` | sim | string/objeto | — | ID de fluido, tag com `#` ou ingrediente de fluido do NeoForge. |
-| `amount` | não | inteiro | `1000` | Positivo, em mB. |
+- `chance` e um numero de 0 a 1; default 1.0. Cada output rola separadamente ao completar.
+- Chance 0 nunca gera o resultado, mas os inputs ainda sao consumidos.
+- Itens usam `count` de 1 a 99 e podem ter `components`; fluidos usam `amount`; entidades usam `count` de 1 a 99 (padrão 1) e `spawn` opcional (sem seletor, as entidades de saída surgem dentro da área do multibloco); energia vai para o storage do controller.
+- O runtime valida todos os outputs antes de iniciar o craft, mesmo os que tem chance menor que 1.
 
-Cada ingrediente de fluido procura um tanque que aceite o fluido e tenha a quantidade. Cada tanque satisfaz no máximo um ingrediente por craft.
+### 10.5 Matching e validacao
 
-### 10.5 `output`
+- Itens de input sao distribuidos por slots `input` com busca em profundidade; um slot so pode satisfazer uma entrada por craft.
+- Fluidos seguem a mesma regra nos tanques, respeitando capacidade e filtro.
+- Entidades de input sao procuradas no AABB do multibloco inflado em 1 bloco; com `spawn` baseado em simbolo/bloco/tag, a busca fica perto da key correspondente.
+- Entidades de output usam o seletor `spawn` quando informado; sem seletor, o controller procura um piso com dois blocos livres dentro da area do multibloco.
+- Energia de input e consumida aos poucos durante o progresso; sem energia no storage o craft pausa.
+- Antes de completar, o controller simula o consumo dos inputs de fluido e depois encaixa todos os outputs em copias do inventario e dos tanques. Se nao houver espaco para todos, o progresso fica parado.
+- Itens e fluidos gerados sao distribuidos entre slots/tanks disponiveis; tanques usados por inputs podem ser reaproveitados para outputs depois do consumo. Energia gerada fica no storage interno do controller e pode ser extraida pelas portas de energia.
 
-Saída de item:
+### 10.6 Execucao e chance
 
-```json
-"output": {
-  "type": "item",
-  "id": "minecraft:iron_ingot",
-  "count": 2
-}
-```
-
-Saída de fluido:
-
-```json
-"output": {
-  "type": "fluid",
-  "id": "minecraft:water",
-  "amount": 1000
-}
-```
-
-Saída de entidade:
-
-```json
-"output": {
-  "type": "entity",
-  "id": "minecraft:pig",
-  "spawn": "C"
-}
-```
-
-| Campo | Obrigatório | Tipo | Padrão | Regras |
-|---|---:|---|---|---|
-| `type` | sim | string | — | `item`, `fluid` ou `entity`. |
-| `id` | sim | identifier | — | Item, fluido ou tipo de entidade de saída. |
-| `count` | não | inteiro | `1` | Apenas `item`; de `1` a `99`. Na prática, o slot de saída limita a `64`, então valores acima disso não cabem. |
-| `components` | não | objeto | vazio | Apenas `item`; patch de data components. |
-| `amount` | sim | inteiro | — | Apenas `fluid`; positivo, em mB. |
-| `spawn` | sim | string | — | Apenas `entity`; símbolo do pattern, ID de bloco ou `#tag`. |
-
-A saída de item usa o primeiro slot `output` que aceite o item e tenha espaço. A saída de fluido usa o primeiro tanque que aceite o fluido e tenha capacidade. A entidade spawna acima do bloco indicado por `spawn`. O campo legado `result` continua aceito como saída de item. Para gerar o objeto `output` a partir do item na mão, use `/inm hand` (veja [10.11](#1011-gerar-json-com-o-comando)).
-
-### 10.6 Matching
-
-O matching de itens é **shapeless**:
-
-- cada ingrediente procura qualquer slot com role `input`;
-- a ordem de `item_slots` não importa;
-- cada slot de input satisfaz no máximo um ingrediente por craft;
-- filtros de slot continuam valendo;
-- a saída de item é inserida no primeiro `output` compatível com espaço;
-- a saída de fluido usa o primeiro tanque compatível com capacidade;
-- a saída de entidade spawna acima do bloco indicado por `spawn`.
-
-Consequências:
-
-- uma receita com 3 ingredientes precisa de 3 slots de input com os itens certos;
-- dois ingredientes iguais precisam de dois slots de input;
-- um slot de input com 64 itens ainda fornece apenas 1 item por craft.
+Ao completar, os inputs sao consumidos e cada output rola sua `chance` de forma independente. Uma falha de chance nao devolve os inputs. Se o estado da maquina mudou e os outputs nao cabem mais, o craft nao completa e os inputs nao sao consumidos (a energia ja gasta nao volta); o planner revalida o espaco antes de cada avanco.
 
 ### 10.7 Energia e tempo
 
-O custo total de energia é dividido ao longo dos ticks. A cada tick, a máquina consome a diferença inteira da fração acumulada. Se não houver energia suficiente, o progresso pausa.
+Um input `energy` com `amount: 1000` e `time: 100` consome cerca de 10 FE por tick. Se a energia acabar, o progresso pausa. Um output `energy` e adicionado ao storage ao completar e respeita a capacidade maxima.
 
-Exemplo:
+### 10.8 Limites
 
-```json
-"energy": 1000,
-"time": 100
-```
+- Numero de inputs de item nao pode passar do numero de slots `input`.
+- Soma dos `count` de inputs nao pode passar da soma dos `limit` dos slots.
+- Cada input de item precisa caber em um unico slot, e cada input de fluido precisa caber em um unico tanque.
+- O mesmo vale para outputs e para a quantidade/capacidade dos tanques.
+- `amount` de energia nao pode passar da capacidade de `capabilities.energy`.
+- O builder bloqueia exportacao quando qualquer limite e violado; o runtime apenas nao inicia/completa o craft.
 
-Isso consome cerca de 10 FE por tick. O craft termina após 100 ticks (5 segundos).
+### 10.9 Exemplo completo
 
-### 10.8 Quando o craft reinicia
-
-O progresso é resetado quando:
-
-- a estrutura deixa de estar formada;
-- um ingrediente necessário some;
-- a saída deixa de caber (slot cheio, tanque sem capacidade ou `spawn` inválido);
-- a receita ativa deixa de existir;
-- a definição muda de forma incompatível.
-
-O progresso é persistido no NBT do controller e continua após recarregar o chunk/servidor.
-
-### 10.9 Limitações de receita
-
-- existe apenas uma saída por receita: item, fluido ou entidade;
-- não há subprodutos, chance, energia como saída ou múltiplas saídas simultâneas;
-- não há prioridade de receita; o recipe manager escolhe a primeira receita compatível;
-- receitas vanilla ainda não são suportadas.
-
-### 10.10 Exemplo completo
-
-Definição: [`exemplos/exemplo_recipe.json`](exemplos/exemplo_recipe.json)
+Definicao: [`exemplos/exemplo_recipe.json`](exemplos/exemplo_recipe.json)
 
 Receita: [`exemplos/exemplo_recipe_iron.json`](exemplos/exemplo_recipe_iron.json)
 
-A máquina tem dois slots de input (`raw_iron` e `coal`), um output (`iron_ingot`), energia e um tanque de água. A receita consome 1 raw iron, 1 coal, 500 mB de água, 1000 FE e leva 100 ticks.
+A maquina tem dois slots de input, um output, energia e um tanque de agua. A receita consome raw iron, coal, 500 mB de agua e 1000 FE, e leva 100 ticks.
 
-### 10.11 Gerar JSON com o comando
+### 10.10 Gerar JSON com o comando
 
-O mod registra `/inm` (alias `/infinity_nexus_multiblock`) com os subcomandos `hand`, `look`, `list` e `give`. Os comandos são exclusivos para jogadores; as linhas de JSON enviadas no chat são clicáveis e copiam o texto.
+O mod registra `/infinity_nexus_multiblock` (alias `/inmb`) com os subcomandos `hand`, `look`, `list` e `give`. Os comandos exigem nivel de permissao de gamemaster ou modo criativo; as linhas de JSON enviadas no chat sao clicaveis e copiam o texto.
 
-**`/inm hand`** lê o item na mão principal e envia:
-
-- **Input**: uma entrada pronta para `ingredients`;
-- **Output**: um objeto pronto para `output`.
+`/inmb hand` le o item na mao principal e envia uma entrada pronta para `inputs` e um objeto pronto para `outputs`. No builder, cole o JSON no campo id/tag: o parser separa `id`/`items`, `count`, `components` e `chance`.
 
 Item sem data components:
 
@@ -1181,7 +1099,7 @@ Item sem data components:
 ```
 
 ```json
-{"type":"item","id":"minecraft:iron_ingot","count":1}
+{"type":"item","id":"minecraft:iron_ingot","count":1,"chance":1.0}
 ```
 
 Item com data components:
@@ -1190,9 +1108,7 @@ Item com data components:
 {
   "neoforge:ingredient_type": "neoforge:components",
   "items": "minecraft:diamond_sword",
-  "components": {
-    "minecraft:damage": 10
-  }
+  "components": { "minecraft:damage": 10 }
 }
 ```
 
@@ -1201,41 +1117,12 @@ Item com data components:
   "type": "item",
   "id": "minecraft:diamond_sword",
   "count": 1,
-  "components": {
-    "minecraft:damage": 10
-  }
+  "components": { "minecraft:damage": 10 },
+  "chance": 1.0
 }
 ```
 
-O input não inclui `count`: cada ingrediente consome 1 item. O output usa o `count` atual da stack. O ingrediente de componentes é não estrito (`strict: false`); ele exige os componentes listados, mas aceita componentes extras. Para exigir a stack exata, adicione `"strict": true`.
-
-O **Input** serve apenas para `ingredients`; o **Output** serve apenas para `output`. No builder, os campos de saída são separados: preencha `id`, `count` e `components` em vez de colar o objeto inteiro em um único campo. O objeto de output também pode ser colado diretamente no JSON da receita.
-
-**`/inm look`** faz um raycast de até 20 blocos e envia três linhas quando o bloco tem propriedades:
-
-1. o ID puro do bloco, para o campo `block` do builder;
-2. o matcher completo, para o JSON;
-3. o objeto `state` separado.
-
-ID puro:
-
-```text
-minecraft:oak_stairs
-```
-
-Matcher completo:
-
-```json
-{"block":"minecraft:oak_stairs","state":{"facing":"east","half":"bottom","shape":"straight","waterlogged":"false"}}
-```
-
-State:
-
-```json
-{"facing":"east","half":"bottom","shape":"straight","waterlogged":"false"}
-```
-
-Se o bloco não tiver propriedades, a linha de `state` não é enviada. Os valores refletem o state atual do bloco. No builder, o campo `Bloco` aceita tanto o ID puro quanto o matcher completo; ao colar o matcher, o campo e as propriedades de `state` são preenchidos automaticamente. Em uma definição, o state é relativo à orientação canônica `SOUTH`; se necessário, ajuste `facing`/`axis` para a orientação em que a máquina será construída.
+`/inmb look` faz um raycast de ate 20 blocos e envia o ID puro, o matcher completo e o objeto `state` separado.
 
 ## 11. Herança e templates
 
@@ -1448,9 +1335,9 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 2. Os `id` já batem com os nomes dos arquivos.
 3. Coloque o datapack em `world/datapacks`.
 4. Rode `/reload`.
-5. Obtenha o controller com `/inm give infinity_nexus_multiblock:exemplo_recipe` ou `/inm give infinity_nexus_multiblock:exemplo_storage`.
+5. Obtenha o controller com `/inmb give infinity_nexus_multiblock:exemplo_recipe` ou `/inmb give infinity_nexus_multiblock:exemplo_storage`.
 
-O controller é compartilhado. Os exemplos não precisam declarar `controller`, `recipe_type` nem texturas. A receita de crafting do controller só é gerada automaticamente quando a definição está no jar do mod ou em `kubejs/data`; em um datapack comum, use `/inm give`.
+O controller é compartilhado. Os exemplos não precisam declarar `controller`, `recipe_type` nem texturas. A receita de crafting do controller só é gerada automaticamente quando a definição está no jar do mod ou em `kubejs/data`; em um datapack comum, use `/inmb give`.
 
 ### 15.2 Sobrescrever uma definição existente
 
@@ -1534,11 +1421,11 @@ A receita gerada produz o controller com o componente `infinity_nexus_multiblock
 | Receita não carrega | Caminho, `type` ou IDs errados. | Confira `data/<namespace>/recipe`, `type` e ingredientes. |
 | Receita não aparece na máquina | `definition` diferente do `id` da definição. | Use exatamente o mesmo identifier. |
 | Definição não carrega | Caminho/ID/schema errados. | Confira o log do servidor. |
-| Controller não pode ser colocado | Item sem o componente `infinity_nexus_multiblock:multiblock_definition`. | Use `/inm give <definition>` ou a aba criativa. |
+| Controller não pode ser colocado | Item sem o componente `infinity_nexus_multiblock:multiblock_definition`. | Use `/inmb give <definition>` ou a aba criativa. |
 
 O log fica em `logs/latest.log`.
 
-Se o controller não puder ser colocado, confira se o item tem o componente de definição. Use `/inm give <definition>` para obter a variante correta.
+Se o controller não puder ser colocado, confira se o item tem o componente de definição. Use `/inmb give <definition>` para obter a variante correta.
 
 ## 17. Checklist final
 
@@ -1554,7 +1441,7 @@ Antes de testar, confirme:
 - [ ] Todo símbolo não-âncora tem matcher.
 - [ ] A receita de máquina usa `type: infinity_nexus_multiblock:multiblock`.
 - [ ] O campo `definition` da receita é igual ao `id` da definição.
-- [ ] O controller é obtido por `/inm give <definition>` ou pela aba criativa.
+- [ ] O controller é obtido por `/inmb give <definition>` ou pela aba criativa.
 - [ ] `item_slots` tem IDs únicos e filtros válidos.
 - [ ] `x`/`y` aparecem juntos.
 - [ ] `capabilities` tem IDs únicos e `energy.id` diferente dos tanques.
@@ -1564,7 +1451,7 @@ Antes de testar, confirme:
 - [ ] `progress_bar`/`arrow`/`entity` só existem em `recipe`.
 - [ ] A receita está em `data/<namespace>/recipe/<arquivo>.json`.
 - [ ] A receita tem pelo menos um ingrediente.
-- [ ] A máquina tem slot `output` para saída de item, tanque para saída de fluido e um `spawn` válido para entidade.
+- [ ] A máquina tem slot `output` para saída de item, tanque para saída de fluido e `spawn` válido para entidade quando o seletor for informado.
 - [ ] Se a receita usa energia/fluido, a máquina tem as capabilities.
 - [ ] Você rodou `/reload` e conferiu `logs/latest.log`.
 

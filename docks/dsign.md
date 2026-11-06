@@ -6,8 +6,8 @@
 - Local: `data/<namespace>/multiblock/<arquivo>.json`.
 - Matchers aceitam ID de bloco (`minecraft:iron_block`), tag (`#namespace:tag`) ou objeto com `block`/`tag` e `state` para blockstates específicos.
 - No criativo, `shift+click` em um controller exporta a estrutura conectada (limite configurável em `export.pattern_scan_limit`, padrão 256 blocos) como JSON no clipboard, contendo apenas `schema_version`, `id`, `type` e `pattern` com blockstates normalizados para a orientação canônica (controller virado para `south`).
-- `schema_version`, `id`, `type`, `recipe_type` e `tier` já são lidos e validados.
-- `type=recipe` processa receitas próprias de qualquer `recipe_type` registrado pelo mod, com duração, energia e progresso persistido. O mod registra um `RecipeType` + serializer por `recipe_type` único dos controllers empacotados no namespace `infinity_nexus_multiblock`; esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão. Tipos não registrados são ignorados.
+- `schema_version`, `id`, `type` e `tier` já são lidos e validados.
+- `type=recipe` processa receitas do tipo `infinity_nexus_multiblock:multiblock`, filtradas pelo `definition`, com duração, energia e progresso persistido.
 - GUI data-driven e menu customizado já estão implementados, incluindo `progress_bar` e `arrow`; o `controller` e as seis texturas por face são carregados do JSON e usados no modelo gerado dos controllers dinâmicos; controllers manuais usam assets próprios.
 - Receitas vanilla estão adiadas; veja “Receitas vanilla (adiado)”.
 - O inventário usa `RestrictedItemStackHandler` e a capability de item é exposta no controller e nos blocos membros formados, sujeita a `capability_ports`.
@@ -204,8 +204,10 @@ Com `gui.elements` não vazio:
 - é obrigatório exatamente um elemento `player_inventory`;
 - `energy_bar` exige capability de energia e `capability` igual a `energy.id`;
 - `fluid_bar` exige `capability` igual a um `fluids[].id`;
-- `progress_bar` e `arrow` só são aceitos em `type=recipe`;
-- slots com `x`/`y`, inventário do jogador e barras precisam caber em `width`/`height`;
+- `progress_bar`, `arrow` e `entity` só são aceitos em `type=recipe`;
+- slots com `x`/`y`, inventário do jogador, barras e `entity` precisam caber em `width`/`height`;
+- `entity.width`/`entity.height` precisam ser múltiplos de `18`, no mínimo `18`; a área é dividida em células de `18x18`, uma entidade por célula, com paginação quando exceder a capacidade; uma única entidade ocupa a área inteira;
+- a paginação do elemento `entity` é controlada pela roda do mouse no controller e alterna automaticamente no JEI; no controller, entidades vivas da área aparecem mesmo sem receita ativa, com nome e contagem no tooltip, complementadas pelas entidades da receita ativa; no JEI, o tooltip mostra entrada/saída, quantidade (`count`) e chance;
 - slots sem coordenadas não são reposicionados automaticamente: ficam ocultos e disponíveis apenas para automação.
 
 `/reload` atualiza a definição; o layout da GUI é recalculado e capabilities ausentes podem ser criadas, mas armazenamentos de energia/fluidos já existentes não são reconfigurados.
@@ -555,6 +557,8 @@ Planejado:
 
 ## Tipos de máquina, tiers e receitas compartilhadas
 
+> Nota: esta seção descreve o planejamento de tiers e ainda usa exemplos do schema antigo de receita. Para o schema atual, veja "Receitas próprias".
+
 Nesta build, `tier` é apenas metadado e não altera estatísticas nem capacidades; o restante desta seção descreve o comportamento planejado.
 
 ### Decisão de arquitetura
@@ -604,7 +608,7 @@ Os três IDs são diferentes, mas o `recipe_type` é o mesmo. O mod registra ess
 
 ```json
 {
-  "type": "infinity_nexus_multiblock:exemplo_smelting",
+  "type": "infinity_nexus_multiblock:multiblock",
   "ingredients": [
     "minecraft:iron_ingot",
     "minecraft:copper_ingot"
@@ -640,63 +644,45 @@ Todos os tiers consultam o mesmo `RecipeType`; o `tier` só altera:
 
 Se uma receita for exclusiva de tier, isso deve ser uma condição da receita, por exemplo `min_tier`/`max_tier`, ou um filtro na definição. Não criar um `recipe_type` diferente para cada tier só por causa de estatísticas.
 
-### Receitas próprias (tipos registrados dinamicamente)
+### Receitas próprias
 
-Implementado para receitas em `data/<namespace>/recipe/<arquivo>.json` com `type` igual a um `recipe_type` registrado pelo mod. No startup, cada `recipe_type` único declarado por um controller empacotado no namespace `infinity_nexus_multiblock` gera um `RecipeType` e um `RecipeSerializer` com o mesmo ID. Esta build não inclui controllers empacotados, então nenhum tipo é registrado por padrão; os exemplos abaixo usam `exemplo_smelting` apenas como nome ilustrativo:
-
-```json
-{
-  "type": "infinity_nexus_multiblock:exemplo_smelting",
-  "ingredients": [
-    "minecraft:iron_ore"
-  ],
-  "output": {
-    "type": "item",
-    "id": "minecraft:iron_ingot",
-    "count": 1
-  },
-  "energy": 100,
-  "time": 100
-}
-```
-
-- `ingredients`: lista de `Ingredient`; use IDs de item, tags ou listas aceitas pelo codec vanilla.
-- `fluid_ingredients`: opcional; lista de `SizedFluidIngredient` (`ingredient` e `amount` em mB). Cada fluido é procurado nos tanques da definição e consumido no fim do craft.
-- `output`: saída tipada `item` (`id`, `count`, `components`), `fluid` (`id`, `amount`) ou `entity` (`id`, `spawn`). `spawn` aceita símbolo do pattern, ID de bloco ou `#tag`. O campo legado `result` continua aceito como saída de item.
-- `energy`: total de FE do craft; opcional, padrão `0`.
-- `time`: duração em ticks; opcional, padrão `100`, mínimo `1`.
-
-Exemplo com fluidos:
+Receitas ficam em `data/<namespace>/recipe/<arquivo>.json` e usam `type` igual a `infinity_nexus_multiblock:multiblock`; o campo `definition` filtra a definição do controller. O schema atual usa listas tipadas de inputs e outputs:
 
 ```json
 {
   "type": "infinity_nexus_multiblock:exemplo_smelting",
-  "ingredients": [
-    "minecraft:iron_ore",
-    "minecraft:gold_ore",
-    "minecraft:coal"
+  "definition": "infinity_nexus_multiblock:example_controller",
+  "time": 100,
+  "inputs": [
+    { "type": "item", "ingredient": "minecraft:iron_ore", "count": 2 },
+    { "type": "fluid", "ingredient": "minecraft:water", "amount": 500 },
+    { "type": "entity", "id": "minecraft:cow", "spawn": "S" },
+    { "type": "energy", "amount": 1000 }
   ],
-  "fluid_ingredients": [
-    { "ingredient": "minecraft:water", "amount": 500 },
-    { "ingredient": "minecraft:lava", "amount": 500 }
-  ],
-  "output": {
-    "type": "item",
-    "id": "minecraft:gold_ingot",
-    "count": 2
-  },
-  "energy": 300,
-  "time": 120
+  "outputs": [
+    { "type": "item", "id": "minecraft:iron_ingot", "count": 2, "components": {}, "chance": 1.0 },
+    { "type": "fluid", "id": "minecraft:lava", "amount": 250, "chance": 0.5 },
+    { "type": "entity", "id": "minecraft:chicken", "spawn": "S", "chance": 0.25 },
+    { "type": "energy", "amount": 500, "chance": 1.0 }
+  ]
 }
 ```
 
-Não há receita embutida nesta build; use um tipo registrado por um controller empacotado.
+- `inputs`: `item` (`ingredient`, `count` opcional, padrão 1), `fluid` (`ingredient`, `amount`), `entity` (`id`, `spawn` opcional) e `energy` (`amount`).
+- `outputs`: `item` (`id`, `count`, `components` opcional), `fluid` (`id`, `amount`), `entity` (`id`, `spawn` opcional) e `energy` (`amount`).
+- `chance` é opcional em todo output, de `0.0` a `1.0`, padrão `1.0`. Cada output rola individualmente; se falhar, os inputs ainda são consumidos.
+- `definition` é o ID da definição do controller. `time` é a duração em ticks, padrão `100`, mínimo `1`.
+- O schema antigo (`ingredients`, `fluid_ingredients`, `output`, `result`, `energy`) continua aceito como fallback quando `inputs`/`outputs` não estão presentes. `result` vira um output de item.
+- Matching de item/fluido é shapeless: cada input procura qualquer slot/tanque compatível sem ordem fixa, e cada slot/tanque satisfaz no máximo um input por craft. Filtros de `item_slots` continuam limitando o que pode entrar.
+- Entity input com `spawn` procura a entidade perto do bloco/seletor indicado; sem `spawn`, procura dentro dos bounds do multibloco inflados em 1 bloco. A entidade é removida ao completar o craft.
+- Energy input mantém o custo total distribuído pelo progresso; sem energia suficiente o craft pausa. Energy output é adicionado ao storage ao completar.
+- Antes de completar, os outputs são simulados. Item/fluido só entram se houver slot/tanque compatível e espaço; energia só entra se couber no storage. Entity output spawna acima do seletor/bloco indicado ou, sem seletor, sobre um piso livre dentro do multibloco.
+- Os limites de item, fluido e energia são validados pelo builder: quantidade de inputs/outputs de item limitada pelos slots, capacidade total limitada pela soma dos slots, fluidos pelos tanques e energia pela capacidade do storage. Para entidades o limite fica em aberto.
+- Saídas de item exigem slot `output`; saídas de fluido exigem tanque; saídas de entidade usam um `spawn` opcional válido no pattern (símbolo, ID de bloco ou `#tag`); sem seletor, a entidade surge dentro da área do multibloco.
 
-A definição precisa de slots `input` para ingredientes de item e de um slot `output` para saída de item. Saídas de fluido exigem tanque e saídas de entidade exigem um `spawn` válido no pattern; esses casos não exigem slot de saída de item. O matching é shapeless: cada ingrediente procura qualquer slot de role `input` que contenha um item aceito, sem ordem fixa, e cada slot satisfaz no máximo um ingrediente por craft. Filtros de `item_slots` continuam limitando o que pode entrar em cada slot. A saída de item vai para o primeiro slot `output` compatível, a de fluido para o primeiro tanque compatível e a entidade spawna acima do bloco indicado. Cada craft consome uma unidade de cada ingrediente. Se houver `fluid_ingredients`, a receita só inicia com todos os fluidos disponíveis e cada craft consome `amount` mB do tanque que contém o fluido. O custo de energia é distribuído por tick e o craft pausa sem energia suficiente.
+O progresso é persistido no NBT (`Progress`, `MaxProgress`, `Recipe`) e retomado após reload/restart. Quebrar a estrutura, alterar os inputs ou remover a receita reseta o craft; encher os outputs pausa o progresso ate abrir espaco. A receita ativa é resolvida pelo ID salvo em `RecipeManager.byKey`.
 
-O progresso é persistido no NBT (`Progress`, `MaxProgress`, `Recipe`) e retomado após reload/restart. Quebrar a estrutura, alterar os inputs, encher os outputs ou remover a receita reseta o craft. A receita ativa é resolvida pelo ID salvo em `RecipeManager.byKey`.
-
-Todos os `recipe_type` registrados pelo mod são processados pelo mesmo `MultiblockRecipe`. Tipos não registrados são ignorados (a máquina reseta) para não misturar `RecipeInput` próprio com tipos vanilla incompatíveis. Datapacks não podem registrar tipos novos; eles precisam reutilizar um tipo já criado por um controller empacotado.
+Todas as receitas usam o tipo `infinity_nexus_multiblock:multiblock` e são processadas pelo mesmo `MultiblockRecipe`; o campo `definition` filtra qual controller aceita a receita. Datapacks não podem registrar tipos novos de receita.
 
 ### Receitas vanilla (adiado)
 

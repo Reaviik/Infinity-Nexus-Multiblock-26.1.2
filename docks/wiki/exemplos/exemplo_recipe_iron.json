@@ -1,21 +1,32 @@
 {
   "type": "infinity_nexus_multiblock:multiblock",
   "definition": "infinity_nexus_multiblock:exemplo_recipe",
-  "ingredients": [
-    "minecraft:raw_iron",
-    "minecraft:coal"
-  ],
-  "fluid_ingredients": [
+  "inputs": [
     {
+      "type": "item",
+      "ingredient": "minecraft:raw_iron"
+    },
+    {
+      "type": "item",
+      "ingredient": "minecraft:coal"
+    },
+    {
+      "type": "fluid",
       "ingredient": "minecraft:water",
       "amount": 500
+    },
+    {
+      "type": "energy",
+      "amount": 1000
     }
   ],
-  "output": {
-    "type": "item",
-    "id": "minecraft:iron_ingot",
-    "count": 1
-  },
-  "energy": 1000,
+  "outputs": [
+    {
+      "type": "item",
+      "id": "minecraft:iron_ingot",
+      "count": 1,
+      "chance": 1.0
+    }
+  ],
   "time": 100
 }

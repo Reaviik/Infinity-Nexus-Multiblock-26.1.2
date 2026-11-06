@@ -29,6 +29,15 @@
     storage: "#94a3b8",
     fluid: "#38bdf8"
   };
+  var SLOT_ROLE_INFO = {
+    input: "Participa do matching da receita; aceita itens por qualquer face e não extrai.",
+    output: "Recebe os resultados da receita; não aceita inserção, mas permite extração.",
+    fuel: "Reservado para combustível e automação; não tem comportamento de receita embutido.",
+    upgrade: "Reservado para upgrades; não tem comportamento de receita embutido.",
+    component: "Reservado para componentes e peças; não tem comportamento de receita embutido.",
+    storage: "Armazenamento e automação; aceita inserção e extração por qualquer face.",
+    fluid: "Slot manual de container: drena o item para o tanque selecionado ao inserir e enche pelo tanque ao retirar; sem automação por faces."
+  };
   var SLOT_FACE_DIRECTIONS = ["north", "south", "east", "west", "up", "down"];
   var SLOT_FACE_LABELS = {
     north: "N",
@@ -735,6 +744,32 @@
     }
   }
 
+  function isPatternFullscreen() {
+    return document.body.classList.contains("pattern-fullscreen");
+  }
+
+  function setPatternFullscreen(enabled) {
+    var next = Boolean(enabled);
+    var wasFullscreen = isPatternFullscreen();
+    document.body.classList.toggle("pattern-fullscreen", next);
+    var button = $("patternFullscreenBtn");
+    if (button) {
+      button.setAttribute("aria-pressed", next ? "true" : "false");
+      button.textContent = next ? "sair da tela cheia" : "tela cheia";
+      button.title = next ? "Sair da tela cheia (Esc)" : "Tela cheia do pattern";
+    }
+    if (next) {
+      focusElement($("layerGrid"), false);
+    } else if (wasFullscreen && button) {
+      focusElement(button, false);
+    }
+    window.setTimeout(drawPreview, 40);
+  }
+
+  function togglePatternFullscreen() {
+    setPatternFullscreen(!isPatternFullscreen());
+  }
+
   function valueSummary(value) {
     if (Array.isArray(value)) {
       return "lista[" + value.length + "]";
@@ -894,27 +929,30 @@
     if (matcher.kind !== "block" && matcher.kind !== "state") {
       return "";
     }
-    var html = "<div class='field'><span class='field-label'>Bloco</span><input type='text' data-msymbol='" +
+    return "<div class='field'><span class='field-label'>Bloco</span><input type='text' data-msymbol='" +
       esc(symbol) + "' data-field='block' value='" + esc(matcher.block || "") +
-      "' placeholder='minecraft:iron_block' title='Aceita o ID do bloco ou o JSON do /inm look' " +
+      "' placeholder='minecraft:iron_block' title='Aceita o ID do bloco ou o JSON do /inmb look' " +
       "spellcheck='false' autocomplete='off' aria-label='Bloco" +
       esc(labelSymbol) + "'></div>";
-    if (matcher.kind === "state") {
-      var rows = Array.isArray(matcher.state) ? matcher.state : [];
-      html += "<div class='state-list'>";
-      rows.forEach(function (row, index) {
-        html += "<div class='state-row'><input type='text' data-msymbol='" + esc(symbol) +
-          "' data-field='state-key' data-index='" + index + "' value='" + esc(row.key || "") +
-          "' placeholder='facing' spellcheck='false' autocomplete='off' aria-label='Propriedade " +
-          (index + 1) + "'><input type='text' data-msymbol='" + esc(symbol) +
-          "' data-field='state-value' data-index='" + index + "' value='" + esc(row.value || "") +
-          "' placeholder='north' spellcheck='false' autocomplete='off' aria-label='Valor da propriedade " +
-          (index + 1) + "'><button type='button' class='icon-btn' data-action='remove-state' data-index='" +
-          index + "' title='Remover propriedade'>×</button></div>";
-      });
-      html += "</div><button type='button' class='btn btn-tiny' data-action='add-state'>+ propriedade</button>";
+  }
+
+  function matcherStateHtml(symbol, matcher) {
+    if (matcher.kind !== "state") {
+      return "";
     }
-    return html;
+    var rows = Array.isArray(matcher.state) ? matcher.state : [];
+    var html = "<div class='state-list'>";
+    rows.forEach(function (row, index) {
+      html += "<div class='state-row'><input type='text' data-msymbol='" + esc(symbol) +
+        "' data-field='state-key' data-index='" + index + "' value='" + esc(row.key || "") +
+        "' placeholder='facing' spellcheck='false' autocomplete='off' aria-label='Propriedade " +
+        (index + 1) + "'><input type='text' data-msymbol='" + esc(symbol) +
+        "' data-field='state-value' data-index='" + index + "' value='" + esc(row.value || "") +
+        "' placeholder='north' spellcheck='false' autocomplete='off' aria-label='Valor da propriedade " +
+        (index + 1) + "'><button type='button' class='icon-btn' data-action='remove-state' data-index='" +
+        index + "' title='Remover propriedade'>×</button></div>";
+    });
+    return html + "</div><button type='button' class='btn btn-tiny' data-action='add-state'>+ propriedade</button>";
   }
 
   function matcherCardHtml(symbol) {
@@ -955,9 +993,12 @@
       "\"</strong><small>" + esc(detail) + (V.isSingleSymbol(symbol) ? "" : " · chave inválida") +
       "</small></div>" + remove + "</div><div class='matcher-form'><div class='field'><span class='field-label'>Tipo</span>" +
       select + "</div><div class='matcher-fields'>" + matcherFieldHtml(symbol, matcher) +
-      "<code class='matcher-json'>" + esc(serialized) + "</code><p class='matcher-feedback" +
-      (feedback ? " " + feedback.tone : "") + "'" + (feedback ? "" : " hidden") + ">" +
-      (feedback ? esc(feedback.text) : "") + "</p></div></div></div>";
+      "</div></div><p class='matcher-feedback" + (feedback ? " " + feedback.tone : "") + "'" +
+      (feedback ? "" : " hidden") + ">" + (feedback ? esc(feedback.text) : "") +
+      "</p><details class='card-advanced'><summary>Estado e JSON<span class='card-advanced-hint'>" +
+      (matcher.kind === "state" ? "blockstate e exportação" : "exportação") +
+      "</span></summary><div class='card-advanced-body'>" + matcherStateHtml(symbol, matcher) +
+      "<code class='matcher-json'>" + esc(serialized) + "</code></div></details></div>";
   }
 
   function renderMatchers() {
@@ -1039,7 +1080,9 @@
   }
 
   function defaultSlotFaces(role) {
-    var insert = role === "output" ? [] : SLOT_FACE_DIRECTIONS.slice();
+    var insert = role === "output" || role === "fluid"
+      ? []
+      : SLOT_FACE_DIRECTIONS.slice();
     var extract = role === "output" || role === "storage" ? SLOT_FACE_DIRECTIONS.slice() : [];
     return { insert: insert, extract: extract };
   }
@@ -1139,9 +1182,25 @@
     }
     V.ITEM_SLOT_ROLES.forEach(function (value) {
       html += "<option value='" + esc(value) + "'" + (value === role ? " selected" : "") +
-        ">" + esc(value) + "</option>";
+        " title='" + esc(SLOT_ROLE_INFO[value] || "") + "'>" + esc(value) + "</option>";
     });
     return html;
+  }
+
+  function slotRoleGuideHtml(index) {
+    var items = V.ITEM_SLOT_ROLES.map(function (role) {
+      var color = SLOT_ROLE_COLORS[role] || "#94a3b8";
+      return "<li><span class='role-guide-badge' style='--role-color:" + color + "'>" +
+        esc(role) + "</span><span>" + esc(SLOT_ROLE_INFO[role] || "") + "</span></li>";
+    }).join("");
+    return "<div class='role-guide' id='slotRoleHelp" + (index + 1) + "' role='tooltip'>" +
+      "<strong>O que cada role faz</strong><ul>" + items + "</ul></div>";
+  }
+
+  function moveButtonHtml(action, label, dx, dy, disabled, title) {
+    return "<button type='button' class='move-btn' data-action='" + esc(action) + "' data-dx='" + dx +
+      "' data-dy='" + dy + "' title='" + esc(title) + "' aria-label='" + esc(title) + "'" +
+      (disabled ? " disabled" : "") + ">" + label + "</button>";
   }
 
   function slotCardHtml(slot, index) {
@@ -1159,31 +1218,42 @@
     var limit = slot.limit === null || slot.limit === undefined ? "" : String(slot.limit);
     var x = slot.x === null || slot.x === undefined ? "" : String(slot.x);
     var y = slot.y === null || slot.y === undefined ? "" : String(slot.y);
+    var hasPosition = x !== "" && y !== "";
     var filterField = trim(slot.role) === "output" ? "" :
       "<div class='field'><label>filter</label><input type='text' data-slot-index='" + index +
       "' data-field='filter' value='" + esc(slot.filter || "") +
       "' placeholder='minecraft:iron_ore ou #tag' spellcheck='false' autocomplete='off'></div>";
+    var limitField = "<div class='field'><label>limit</label><input type='number' data-slot-index='" + index +
+      "' data-field='limit' min='1' max='64' step='1' value='" + esc(limit) + "' placeholder='64'></div>";
+    var moveControls = "<div class='slot-move-controls' role='group' aria-label='Mover " + esc(slotName) + "'>" +
+      moveButtonHtml("move-slot", "↑", 0, -18, !hasPosition, "Mover slot para cima") +
+      moveButtonHtml("move-slot", "←", -18, 0, !hasPosition, "Mover slot para a esquerda") +
+      moveButtonHtml("move-slot", "→", 18, 0, !hasPosition, "Mover slot para a direita") +
+      moveButtonHtml("move-slot", "↓", 0, 18, !hasPosition, "Mover slot para baixo") +
+      "</div>";
     return "<div class='slot-card" + (problem ? " is-problem" : "") + "' data-slot-index='" + index + "'>" +
-      "<div class='matcher-head'><span class='slot-index'>" + (index + 1) + "</span>" +
+      "<div class='matcher-head slot-head'><span class='slot-index'>" + (index + 1) + "</span>" +
       "<div class='matcher-title'><strong>" + esc(slotName) + "</strong><small>" +
-      esc(slotSummary(slot)) + "</small></div>" +
+      esc(slotSummary(slot)) + "</small></div>" + moveControls +
       "<button type='button' class='btn btn-tiny btn-danger matcher-remove' data-action='remove-slot'>remover</button></div>" +
-      "<div class='slot-form'>" +
+      "<div class='slot-form slot-form-primary'>" +
       "<div class='field'><label>id</label><input type='text' data-slot-index='" + index +
       "' data-field='id' value='" + esc(slot.id || "") + "' placeholder='input_0' spellcheck='false' autocomplete='off'></div>" +
-      "<div class='field'><label>role</label><select data-slot-index='" + index +
-      "' data-field='role' aria-label='Role do slot " + (index + 1) + "'>" + slotRoleOptions(slot) + "</select></div>" +
-      filterField +
-      "<div class='field'><label>limit</label><input type='number' data-slot-index='" + index +
-      "' data-field='limit' min='1' max='64' step='1' value='" + esc(limit) + "' placeholder='64'></div>" +
+      "<div class='field role-field'><label>role <span class='role-help-mark' title='Passe o mouse para comparar os roles' aria-hidden='true'>?</span></label>" +
+      "<select data-slot-index='" + index + "' data-field='role' aria-label='Role do slot " + (index + 1) +
+      "' aria-describedby='slotRoleHelp" + (index + 1) + "'>" + slotRoleOptions(slot) + "</select>" +
+      slotRoleGuideHtml(index) + "</div>" +
       "<div class='field'><label>x</label><input type='number' data-slot-index='" + index +
       "' data-field='x' step='1' value='" + esc(x) + "' placeholder='opcional'></div>" +
       "<div class='field'><label>y</label><input type='number' data-slot-index='" + index +
       "' data-field='y' step='1' value='" + esc(y) + "' placeholder='opcional'></div>" +
-      "</div>" + slotFacesHtml(slot, index) +
+      "</div><p class='matcher-feedback slot-feedback" + (problem ? " is-error" : "") + "'" +
+      (problem ? "" : " hidden") + ">" + esc(problem || "") +
+      "</p><details class='card-advanced'><summary>Filtro, limite, faces e JSON" +
+      "<span class='card-advanced-hint'>automação</span></summary><div class='card-advanced-body'>" +
+      "<div class='slot-form'>" + filterField + limitField + "</div>" + slotFacesHtml(slot, index) +
       "<code class='matcher-json slot-json'>" + esc(serialized === undefined ? "null" : serialized) +
-      "</code><p class='matcher-feedback slot-feedback" + (problem ? " is-error" : "") + "'" +
-      (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
+      "</code></div></details></div>";
   }
 
   function layoutSlotGuiPreview(content, dimensions) {
@@ -1216,9 +1286,11 @@
       }
       var role = trim(slot.role);
       var color = SLOT_ROLE_COLORS[role] || "#94a3b8";
-      var outside = x < 0 || y < 0 || x + 18 > width || y + 18 > height;
+      var frameX = x - 1;
+      var frameY = y;
+      var outside = frameX < 0 || frameY < 0 || frameX + 18 > width || frameY + 18 > height;
       html.push("<div class='gui-slot-preview" + (outside ? " is-outside" : "") +
-        "' data-role='" + esc(role) + "' style='left:" + x + "px;top:" + y + "px;--slot-color:" +
+        "' data-role='" + esc(role) + "' style='left:" + frameX + "px;top:" + frameY + "px;--slot-color:" +
         color + "' title='" + esc(slotName + " · " + (role || "sem role") + " · x" + x + " y" + y) +
         "'><span>" + (index + 1) + "</span></div>");
       drawn++;
@@ -1266,13 +1338,13 @@
       items.push("<span class='gui-preview-caption'>Inventário</span>");
       for (var row = 0; row < 3; row++) {
         for (var column = 0; column < 9; column++) {
-          items.push("<i class='gui-preview-ghost' style='left:" + (8 + column * 18) +
-            "px;top:" + (84 + row * 18) + "px'></i>");
+          items.push("<i class='gui-preview-ghost' style='left:" + (7 + column * 18) +
+            "px;top:" + (83 + row * 18) + "px'></i>");
         }
       }
       for (var hotbar = 0; hotbar < 9; hotbar++) {
-        items.push("<i class='gui-preview-ghost' style='left:" + (8 + hotbar * 18) +
-          "px;top:142px'></i>");
+        items.push("<i class='gui-preview-ghost' style='left:" + (7 + hotbar * 18) +
+          "px;top:141px'></i>");
       }
 
       var barIndex = 0;
@@ -1486,6 +1558,33 @@
     refresh({ skipPattern: true, skipMatchers: true, skipSlots: true });
   }
 
+  function moveSlot(index, dx, dy) {
+    var slot = Array.isArray(state.itemSlots) ? state.itemSlots[index] : null;
+    if (!isPlainObject(slot)) {
+      return;
+    }
+    var x = parseIntStrict(slot.x);
+    var y = parseIntStrict(slot.y);
+    if (x === null || y === null) {
+      return;
+    }
+    slot.x = x + dx;
+    slot.y = y + dy;
+    var card = findSlotCard(index);
+    if (card) {
+      var xInput = card.querySelector("[data-field='x']");
+      var yInput = card.querySelector("[data-field='y']");
+      if (xInput) {
+        xInput.value = String(slot.x);
+      }
+      if (yInput) {
+        yInput.value = String(slot.y);
+      }
+    }
+    updateSlotCard(index);
+    refresh({ skipPattern: true, skipMatchers: true, skipSlots: true });
+  }
+
   function useInventoryRows() {
     if (!Array.isArray(state.itemSlots)) {
       return;
@@ -1551,6 +1650,16 @@
   }
 
   function onSlotListClick(event) {
+    var move = closest(event.target, "[data-action='move-slot']");
+    if (move) {
+      var moveCard = closest(move, ".slot-card");
+      var moveIndex = moveCard ? parseInt(moveCard.getAttribute("data-slot-index"), 10) : -1;
+      if (moveIndex >= 0) {
+        moveSlot(moveIndex, parseInt(move.getAttribute("data-dx"), 10) || 0,
+          parseInt(move.getAttribute("data-dy"), 10) || 0);
+      }
+      return;
+    }
     var reset = closest(event.target, "[data-action='reset-slot-faces']");
     if (reset) {
       var resetCard = closest(reset, ".slot-card");
@@ -2475,47 +2584,58 @@
       " spellcheck='false' autocomplete='off'></div>";
   }
 
-  function guiElementForm(element) {
+  function guiElementPrimaryForm(element) {
     var type = element.type;
     var html = "<div class='controller-form gui-element-form'>";
     html += "<div class='field'><label>type</label><select data-gui-element-field='type'>" +
       guiTypeOptions(type) + "</select></div>";
     html += guiInputField("x", "x", element.x, "number", "1");
     html += guiInputField("y", "y", element.y, "number", "1");
-    if (guiElementUsesSize(type)) {
-      html += guiInputField("width", "width", element.width, "number", "1");
-      html += guiInputField("height", "height", element.height, "number", "1");
-    }
-    if (guiElementUsesText(type)) {
-      html += guiInputField("text", "text", element.text, "text", undefined, "chave de tradução");
-    }
     if (type === "slot") {
       html += guiInputField("slot", "slot", element.slot, "text", undefined, "item_slots.id");
-    }
-    if (type === "energy_bar" || type === "fluid_bar") {
+    } else if (guiElementUsesText(type)) {
+      html += guiInputField("text", "text", element.text, "text", undefined, "chave de tradução");
+    } else if (type === "energy_bar" || type === "fluid_bar") {
       html += guiInputField("capability", "capability", element.capability, "text", undefined,
         type === "energy_bar" ? "energy.id" : "fluids[].id");
-    }
-    if (type === "title" || type === "text" || type === "player_inventory" ||
-        type === "energy_bar" || type === "progress_bar") {
-      html += guiInputField("color", "color", element.color, "text", undefined, "vazio = default");
-    }
-    if (type === "title" || type === "text" || type === "player_inventory") {
-      html += "<div class='field gui-check-field'><label><input type='checkbox' data-gui-element-field='shadow'" +
-        (element.shadow ? " checked" : "") + "> shadow</label></div>";
-    }
-    if (guiElementUsesDirection(type)) {
-      html += "<div class='field'><label>direction</label><select data-gui-element-field='direction'>" +
-        guiDirectionOptions(element.direction) + "</select></div>";
-    }
-    if (guiElementUsesTexture(type)) {
-      html += guiInputField("u", "u", element.u, "number", "1");
-      html += guiInputField("v", "v", element.v, "number", "1");
     }
     return html + "</div>";
   }
 
+  function guiElementAdvancedForm(element) {
+    var type = element.type;
+    var html = "<div class='controller-form gui-element-form'>";
+    var hasFields = false;
+    if (guiElementUsesSize(type)) {
+      html += guiInputField("width", "width", element.width, "number", "1");
+      html += guiInputField("height", "height", element.height, "number", "1");
+      hasFields = true;
+    }
+    if (type === "title" || type === "text" || type === "player_inventory" ||
+        type === "energy_bar" || type === "progress_bar") {
+      html += guiInputField("color", "color", element.color, "text", undefined, "vazio = default");
+      hasFields = true;
+    }
+    if (type === "title" || type === "text" || type === "player_inventory") {
+      html += "<div class='field gui-check-field'><label><input type='checkbox' data-gui-element-field='shadow'" +
+        (element.shadow ? " checked" : "") + "> shadow</label></div>";
+      hasFields = true;
+    }
+    if (guiElementUsesDirection(type)) {
+      html += "<div class='field'><label>direction</label><select data-gui-element-field='direction'>" +
+        guiDirectionOptions(element.direction) + "</select></div>";
+      hasFields = true;
+    }
+    if (guiElementUsesTexture(type)) {
+      html += guiInputField("u", "u", element.u, "number", "1");
+      html += guiInputField("v", "v", element.v, "number", "1");
+      hasFields = true;
+    }
+    return hasFields ? html + "</div>" : "";
+  }
+
   function guiElementMarkup(element, index) {
+    var type = trim(element.type) || "text";
     var meta = [];
     if (trim(element.slot)) {
       meta.push("slot " + trim(element.slot));
@@ -2526,11 +2646,23 @@
     if (trim(element.text)) {
       meta.push(trim(element.text));
     }
+    var moveControls = type === "slot"
+      ? "<div class='slot-move-controls' role='group' aria-label='Mover elemento'>" +
+        moveButtonHtml("move-gui-element", "↑", 0, -18, false, "Mover elemento para cima") +
+        moveButtonHtml("move-gui-element", "←", -18, 0, false, "Mover elemento para a esquerda") +
+        moveButtonHtml("move-gui-element", "→", 18, 0, false, "Mover elemento para a direita") +
+        moveButtonHtml("move-gui-element", "↓", 0, 18, false, "Mover elemento para baixo") +
+        "</div>"
+      : "";
+    var advanced = guiElementAdvancedForm(element);
     return "<div class='gui-element-card' data-gui-element-index='" + index + "'>" +
-      "<div class='gui-element-head'><div><strong>" + (index + 1) + ". " + esc(guiLabel(element.type)) +
-      "</strong><small>" + esc(meta.join(" - ") || element.type) + "</small></div>" +
+      "<div class='gui-element-head'><div><strong>" + (index + 1) + ". " + esc(guiLabel(type)) +
+      "</strong><small>" + esc(meta.join(" - ") || type) + "</small></div>" + moveControls +
       "<button type='button' class='btn btn-tiny btn-danger' data-action='remove-gui-element'>remover</button></div>" +
-      guiElementForm(element) + "</div>";
+      guiElementPrimaryForm(element) +
+      (advanced ? "<details class='card-advanced'><summary>Propriedades avançadas" +
+        "<span class='card-advanced-hint'>tamanho, cor e textura</span></summary>" +
+        "<div class='card-advanced-body'>" + advanced + "</div></details>" : "") + "</div>";
   }
 
   function guiCanvasSize(gui) {
@@ -2564,7 +2696,7 @@
       return { width: safeWidth || 22, height: safeHeight || 16 };
     }
     if (type === "entity") {
-      return { width: safeWidth || 32, height: safeHeight || 32 };
+      return { width: safeWidth || 36, height: safeHeight || 36 };
     }
     return { width: safeWidth || 16, height: safeHeight || 16 };
   }
@@ -2604,7 +2736,9 @@
     var width = parseIntStrict(element.width);
     var height = parseIntStrict(element.height);
     var size = guiCanvasDisplaySize(type, width, height);
-    var style = "left:" + (x === null ? 0 : x) + "px;top:" + (y === null ? 0 : y) +
+    var offsetX = type === "slot" || type === "player_inventory" ? -1 : 0;
+    var offsetY = type === "player_inventory" ? -1 : 0;
+    var style = "left:" + (x === null ? 0 : x + offsetX) + "px;top:" + (y === null ? 0 : y + offsetY) +
       "px;width:" + size.width + "px;height:" + size.height + "px;";
     var isBar = ["energy_bar", "fluid_bar", "progress_bar"].indexOf(type) !== -1;
     var textColor = guiPreviewColor(element.color);
@@ -2874,9 +3008,9 @@
     } else if (type === "slot" && firstSlot) {
       element.slot = trim(firstSlot.id);
     }
-    gui.elements.push(element);
+    gui.elements.unshift(element);
     refresh();
-    var card = guiElementCardElement(gui.elements.length - 1);
+    var card = guiElementCardElement(0);
     var input = card ? card.querySelector("input, select") : null;
     focusElement(input || card, false);
   }
@@ -2892,6 +3026,32 @@
     }
     gui.elements.splice(index, 1);
     refresh();
+  }
+
+  function moveGuiElement(index, dx, dy) {
+    var gui = isPlainObject(state.gui) ? state.gui : null;
+    var element = gui && Array.isArray(gui.elements) ? gui.elements[index] : null;
+    if (!isPlainObject(element)) {
+      return;
+    }
+    var dimensions = guiCanvasSize(gui);
+    var size = guiCanvasDisplaySize(trim(element.type), parseIntStrict(element.width),
+      parseIntStrict(element.height));
+    var x = parseIntStrict(element.x);
+    var y = parseIntStrict(element.y);
+    element.x = clamp((x === null ? 0 : x) + dx, 0, Math.max(0, dimensions.width - size.width));
+    element.y = clamp((y === null ? 0 : y) + dy, 0, Math.max(0, dimensions.height - size.height));
+    refresh({
+      skipPattern: true,
+      skipMatchers: true,
+      skipSlots: true,
+      skipCapabilities: true,
+      skipController: true,
+      skipGui: true
+    });
+    setGuiElementCoordinate(index, "x", element.x);
+    setGuiElementCoordinate(index, "y", element.y);
+    updateGuiCard();
   }
 
   function onGuiFormInput(event) {
@@ -2968,6 +3128,16 @@
   }
 
   function onGuiElementClick(event) {
+    var move = closest(event.target, "[data-action='move-gui-element']");
+    if (move) {
+      var moveCard = closest(move, ".gui-element-card[data-gui-element-index]");
+      var moveIndex = moveCard ? parseInt(moveCard.getAttribute("data-gui-element-index"), 10) : -1;
+      if (moveIndex >= 0) {
+        moveGuiElement(moveIndex, parseInt(move.getAttribute("data-dx"), 10) || 0,
+          parseInt(move.getAttribute("data-dy"), 10) || 0);
+      }
+      return;
+    }
     var action = closest(event.target, "[data-action='remove-gui-element']");
     if (!action) {
       return;
@@ -3008,6 +3178,8 @@
       height: size.height,
       guiWidth: dimensions.width,
       guiHeight: dimensions.height,
+      offsetX: trim(element.type) === "slot" || trim(element.type) === "player_inventory" ? -1 : 0,
+      offsetY: trim(element.type) === "player_inventory" ? -1 : 0,
       target: preview,
       moved: false
     };
@@ -3043,8 +3215,8 @@
     var y = clamp(Math.round(drag.startY + dy), 0, maxY);
     element.x = x;
     element.y = y;
-    drag.target.style.left = x + "px";
-    drag.target.style.top = y + "px";
+    drag.target.style.left = (x + drag.offsetX) + "px";
+    drag.target.style.top = (y + drag.offsetY) + "px";
     setGuiElementCoordinate(drag.index, "x", x);
     setGuiElementCoordinate(drag.index, "y", y);
     event.preventDefault();
@@ -3244,76 +3416,189 @@
     });
   }
 
+  function recipeInputRows(recipe) {
+    if (!isPlainObject(recipe)) {
+      return [];
+    }
+    if (!Array.isArray(recipe.inputRows)) {
+      recipe.inputRows = [];
+    }
+    return recipe.inputRows;
+  }
+
+  function recipeOutputRows(recipe) {
+    if (!isPlainObject(recipe)) {
+      return [];
+    }
+    if (!Array.isArray(recipe.outputRows)) {
+      recipe.outputRows = [];
+    }
+    return recipe.outputRows;
+  }
+
+  function recipeRowTypes(isOutput) {
+    return isOutput
+      ? ["item", "fluid", "entity", "energy"]
+      : ["item", "fluid", "entity", "energy"];
+  }
+
+  function recipeRowTypeAvailable(type, availability, isOutput) {
+    if (type === "item") {
+      return isOutput ? availability.itemOutput : availability.itemInput;
+    }
+    if (type === "fluid") {
+      return availability.fluid;
+    }
+    if (type === "energy") {
+      return availability.energy;
+    }
+    return true;
+  }
+
+  function recipeTypeOptions(current, availability, isOutput) {
+    return recipeRowTypes(isOutput).map(function (type) {
+      var available = recipeRowTypeAvailable(type, availability, isOutput);
+      return "<option value='" + esc(type) + "'" +
+        (type === current ? " selected" : "") +
+        (available ? "" : " disabled") + ">" + esc(type) +
+        (available ? "" : " (indisponivel)") + "</option>";
+    }).join("");
+  }
+
+  function recipeAddOptions(availability, isOutput) {
+    return recipeRowTypes(isOutput).filter(function (type) {
+      return recipeRowTypeAvailable(type, availability, isOutput);
+    }).map(function (type) {
+      return "<option value='" + esc(type) + "'>" + esc(type) + "</option>";
+    }).join("");
+  }
+
+  function recipeRowHtml(row, rowIndex, isOutput, availability) {
+    var kind = V.recipeRowKind(row && row.kind);
+    var section = isOutput ? "output" : "input";
+    var field = "data-recipe-" + section + "-field";
+    var typeField = "<label class='field'><span>tipo</span><select " + field + "='kind'>" +
+      recipeTypeOptions(kind, availability, isOutput) + "</select></label>";
+    var resourceField = "";
+    var amountField = "";
+    var componentsField = "";
+    var spawnField = "";
+    var chanceField = "";
+    if (kind === "item") {
+      resourceField = "<label class='field'><span>id / tag</span>" +
+        "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.resource) + "' placeholder='minecraft:iron_ore'></label>";
+      amountField = "<label class='field'><span>quantidade</span>" +
+        "<input " + field + "='count' type='number' min='1' max='99' step='1' value='" +
+        esc(row.count) + "'></label>";
+      componentsField = "<details class='card-advanced'><summary>components (JSON)" +
+        "<span class='card-advanced-hint'>opcional</span></summary>" +
+        "<div class='card-advanced-body'><label class='field'><span>components</span>" +
+        "<textarea " + field + "='componentsRaw' rows='3' spellcheck='false' placeholder='{}'>" +
+        esc(row.componentsRaw) + "</textarea></label></div></details>";
+    } else if (kind === "fluid") {
+      resourceField = "<label class='field'><span>fluido / tag</span>" +
+        "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.resource) + "' placeholder='minecraft:water'></label>";
+      amountField = "<label class='field'><span>quantidade (mB)</span>" +
+        "<input " + field + "='amount' type='number' min='1' step='1' value='" +
+        esc(row.amount) + "'></label>";
+    } else if (kind === "entity") {
+      resourceField = "<label class='field'><span>id</span>" +
+        "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.resource) + "' placeholder='minecraft:pig'></label>";
+      amountField = "<label class='field'><span>quantidade</span>" +
+        "<input " + field + "='count' type='number' min='1' max='99' step='1' value='" +
+        esc(row.count) + "'></label>";
+      spawnField = "<label class='field'><span>spawn (opcional)</span>" +
+        "<input " + field + "='spawn' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.spawn) + "' placeholder='C, minecraft:iron_block ou vazio'></label>";
+    } else {
+      amountField = "<label class='field'><span>energia</span>" +
+        "<input " + field + "='amount' type='number' min='1' step='1' value='" +
+        esc(row.amount) + "'></label>";
+    }
+    if (isOutput) {
+      chanceField = "<label class='field'><span>chance (0-1)</span>" +
+        "<input " + field + "='chance' type='number' min='0' max='1' step='0.01' value='" +
+        esc(row.chance) + "'></label>";
+    }
+    return "<div class='recipe-entry' data-recipe-" + section + "-index='" + rowIndex +
+      "' data-recipe-" + section + "-kind='" + kind + "'>" +
+      "<div class='recipe-entry-head'><div><strong>" + (rowIndex + 1) + ". " + esc(kind) +
+      "</strong><small>" + section + "</small></div>" +
+      "<button type='button' class='btn btn-tiny btn-danger' data-action='remove-" + section +
+      "'>remover</button></div>" +
+      "<div class='recipe-entry-grid'>" + typeField + resourceField + amountField +
+      spawnField + chanceField + "</div>" + componentsField + "</div>";
+  }
+
   function recipeCardElement(index) {
     return document.querySelector(".recipe-card[data-recipe-index='" + index + "']");
   }
 
   function recipeCardHtml(recipe, index) {
     var file = recipeFile(recipe);
+    var inputRows = recipeInputRows(recipe);
+    var outputRows = recipeOutputRows(recipe);
     var errors = recipeErrors(index);
     var feedback = errors.length > 0
       ? errors[0].message + (errors.length > 1 ? " (+" + (errors.length - 1) + ")" : "")
       : "";
     var disabled = errors.length > 0 ? " disabled" : "";
     var availability = recipeAvailability();
-    var currentType = trim(recipe.outputType) || "item";
-    var outputTypes = [];
-    if (availability.itemOutput) {
-      outputTypes.push("item");
-    }
-    if (availability.fluid) {
-      outputTypes.push("fluid");
-    }
-    outputTypes.push("entity");
-    if (outputTypes.indexOf(currentType) === -1) {
-      outputTypes.unshift(currentType);
-    }
-    var outputTypeOptions = outputTypes.map(function (type) {
-      var unavailable = (type === "item" && !availability.itemOutput) ||
-        (type === "fluid" && !availability.fluid);
-      return "<option value='" + esc(type) + "'" +
-        (type === currentType ? " selected" : "") +
-        (unavailable ? " disabled" : "") + ">" + esc(type) +
-        (unavailable ? " (indisponível)" : "") + "</option>";
-    }).join("");
-    var outputFields = "";
-    if (currentType === "fluid") {
-      outputFields = "<label class='field'><span>output.id</span><input data-recipe-field='resultId' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.resultId) + "' placeholder='minecraft:water'></label>" +
-        "<label class='field'><span>output.amount</span><input data-recipe-field='resultAmount' type='number' min='1' value='" + esc(recipe.resultAmount) + "'></label>";
-    } else if (currentType === "entity") {
-      outputFields = "<label class='field'><span>output.id</span><input data-recipe-field='resultId' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.resultId) + "' placeholder='minecraft:pig'></label>" +
-        "<label class='field'><span>output.spawn</span><input data-recipe-field='resultSpawn' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.resultSpawn) + "' placeholder='C ou minecraft:iron_block'></label>";
-    } else {
-      outputFields = "<label class='field'><span>output.id</span><input data-recipe-field='resultId' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.resultId) + "' placeholder='minecraft:gold_ingot'></label>" +
-        "<label class='field'><span>output.count</span><input data-recipe-field='resultCount' type='number' min='1' max='99' value='" + esc(recipe.resultCount) + "'></label>";
-    }
     var notices = [];
-    if (!availability.energy && (Number(recipe.energy) || 0) !== 0) {
-      notices.push("Energia ignorada: esta máquina não tem capabilities.energy.");
+    if (!availability.itemInput && inputRows.some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "item";
+    })) {
+      notices.push("Inputs de item ignorados: esta maquina nao tem item_slot de input.");
     }
-    if (!availability.fluid && trim(recipe.fluidsRaw)) {
-      notices.push("Fluidos ignorados: esta máquina não tem tanque.");
+    if (!availability.itemOutput && outputRows.some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "item";
+    })) {
+      notices.push("Outputs de item ignorados: esta maquina nao tem item_slot de output.");
     }
-    if (currentType === "item" && !availability.itemOutput) {
-      notices.push("Esta máquina não tem item_slot de saída.");
+    if (!availability.fluid && inputRows.concat(outputRows).some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "fluid";
+    })) {
+      notices.push("Fluidos ignorados: esta maquina nao tem tanque.");
     }
-    if (currentType === "fluid" && !availability.fluid) {
-      notices.push("Esta máquina não tem tanque para saída de fluido.");
+    if (!availability.energy && inputRows.concat(outputRows).some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "energy";
+    })) {
+      notices.push("Energia ignorada: esta maquina nao tem capabilities.energy.");
     }
     var noticesHtml = notices.length > 0
       ? "<div class='recipe-notes'>" + notices.map(function (message) {
         return "<p class='field-hint'>" + esc(message) + "</p>";
       }).join("") + "</div>"
       : "";
-    var fluidField = availability.fluid
-      ? "<label class='field'><span>fluid_ingredients</span><textarea data-recipe-field='fluidsRaw' rows='3' spellcheck='false' placeholder='minecraft:water 50'>" + esc(recipe.fluidsRaw) + "</textarea></label>"
-      : "";
-    var componentsField = currentType === "item"
-      ? "<label class='field'><span>output.components (JSON)</span><textarea data-recipe-field='componentsRaw' rows='3' spellcheck='false' placeholder='{}'>" + esc(recipe.componentsRaw) + "</textarea></label>"
-      : "";
-    var energyField = availability.energy
-      ? "<label class='field'><span>energy</span><input data-recipe-field='energy' type='number' min='0' value='" + esc(recipe.energy) + "'></label>"
-      : "";
+    var inputRowsHtml = inputRows.length > 0
+      ? inputRows.map(function (row, rowIndex) {
+        return recipeRowHtml(row, rowIndex, false, availability);
+      }).join("")
+      : "<div class='recipe-entry-empty'>Nenhum input. Adicione item, fluido, entidade ou energia.</div>";
+    var outputRowsHtml = outputRows.length > 0
+      ? outputRows.map(function (row, rowIndex) {
+        return recipeRowHtml(row, rowIndex, true, availability);
+      }).join("")
+      : "<div class='recipe-entry-empty'>Nenhum output. Adicione item, fluido, entidade ou energia.</div>";
+    var inputAddHtml = "<div class='recipe-add-row'>" +
+      "<select data-recipe-add-input aria-label='Tipo de input'>" +
+      recipeAddOptions(availability, false) + "</select>" +
+      "<button type='button' class='btn btn-tiny' data-action='add-input'>+ input</button></div>";
+    var outputAddHtml = "<div class='recipe-add-row'>" +
+      "<select data-recipe-add-output aria-label='Tipo de output'>" +
+      recipeAddOptions(availability, true) + "</select>" +
+      "<button type='button' class='btn btn-tiny' data-action='add-output'>+ output</button></div>";
+    var inputSection = "<div class='recipe-section'>" +
+      "<div class='recipe-section-head'><div><h4>Inputs</h4>" +
+      "<p class='field-hint'>Cole o JSON do /inmb hand no id/tag. Entidades sao consumidas ao completar.</p></div>" +
+      inputAddHtml + "</div><div class='recipe-entry-list'>" + inputRowsHtml + "</div></div>";
+    var outputSection = "<div class='recipe-section'>" +
+      "<div class='recipe-section-head'><div><h4>Outputs</h4>" +
+      "<p class='field-hint'>Cada output tem chance individual. 0 nunca gera, 1 sempre gera.</p></div>" +
+      outputAddHtml + "</div><div class='recipe-entry-list'>" + outputRowsHtml + "</div></div>";
     return "<article class='recipe-card" + (errors.length > 0 ? " is-invalid" : "") +
       "' data-recipe-index='" + index + "'>" +
       "<div class='recipe-card-head'><div><span class='recipe-kicker'>receita " + pad2(index + 1) +
@@ -3323,18 +3608,10 @@
       noticesHtml +
       "<div class='recipe-grid'>" +
       "<label class='field'><span>arquivo</span><input data-recipe-field='file' type='text' spellcheck='false' autocomplete='off' value='" + esc(recipe.file) + "' placeholder='gold_ingot_from_ore'></label>" +
-      "<label class='field'><span>type (fixo)</span><input type='text' value='" + esc(V.RECIPE_TYPE) + "' readonly></label>" +
-      "<label class='field'><span>definition (fixo)</span><input type='text' value='" + esc((trim(state.namespace) || "namespace") + ":" + (trim(state.path) || "path")) + "' readonly></label>" +
-      "<label class='field'><span>output.type</span><select data-recipe-field='outputType'>" + outputTypeOptions + "</select></label>" +
-      outputFields +
-      energyField +
       "<label class='field'><span>time</span><input data-recipe-field='time' type='number' min='1' value='" + esc(recipe.time) + "'></label>" +
       "</div>" +
-      "<div class='recipe-textareas'>" +
-      "<label class='field'><span>ingredients</span><textarea data-recipe-field='ingredientsRaw' rows='4' spellcheck='false' placeholder='minecraft:iron_ore&#10;#minecraft:coals'>" + esc(recipe.ingredientsRaw) + "</textarea></label>" +
-      fluidField +
-      componentsField +
-      "</div>" +
+      inputSection +
+      outputSection +
       "<div class='recipe-actions'><button type='button' class='btn btn-tiny' data-action='copy-recipe'" + disabled + ">Copiar JSON</button><button type='button' class='btn btn-tiny' data-action='download-recipe'" + disabled + ">Baixar .json</button></div>" +
       "<code class='matcher-json recipe-json' data-recipe-json>" + esc(recipeJson(recipe)) + "</code>" +
       "<p class='matcher-feedback recipe-feedback' data-recipe-feedback" + (feedback ? "" : " hidden") + ">" + esc(feedback) + "</p>" +
@@ -3406,16 +3683,7 @@
     updateRecipeCards();
   }
 
-  function onRecipeInput(event) {
-    var target = event.target;
-    var card = closest(target, ".recipe-card[data-recipe-index]");
-    var field = target ? target.getAttribute("data-recipe-field") : "";
-    var index = card ? parseInt(card.getAttribute("data-recipe-index"), 10) : -1;
-    var recipe = Array.isArray(state.recipes) ? state.recipes[index] : null;
-    if (!field || !isPlainObject(recipe)) {
-      return;
-    }
-    recipe[field] = target.value;
+  function refreshRecipeReport() {
     refresh({
       skipPattern: true,
       skipMatchers: true,
@@ -3426,12 +3694,197 @@
       skipRecipes: true,
       skipInheritance: true
     });
-    if (field === "outputType") {
-      renderRecipes();
-    } else {
-      updateRecipeSummary();
-      updateRecipeCards();
+    updateRecipeSummary();
+    updateRecipeCards();
+  }
+
+  function parseRecipePastedJson(text) {
+    var raw = trim(text);
+    if (!raw || raw.charAt(0) !== "{") {
+      return null;
     }
+    var parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+    if (!isPlainObject(parsed)) {
+      return null;
+    }
+    var type = trim(parsed.type).toLowerCase();
+    if (["item", "fluid", "entity", "energy"].indexOf(type) === -1) {
+      type = "";
+    }
+    var components = parsed.components;
+    var hasComponents = components !== undefined;
+    var componentsRaw = hasComponents ? JSON.stringify(components, null, 2) : "";
+    var resource = "";
+    var source = "";
+    if (parsed.ingredient !== undefined) {
+      source = "ingredient";
+      if (typeof parsed.ingredient === "string") {
+        resource = trim(parsed.ingredient);
+      } else if (isPlainObject(parsed.ingredient) &&
+          typeof parsed.ingredient.items === "string") {
+        resource = trim(parsed.ingredient.items);
+        if (parsed.ingredient.components !== undefined) {
+          hasComponents = true;
+          componentsRaw = JSON.stringify(parsed.ingredient.components, null, 2);
+        }
+      } else {
+        resource = V.parseRecipeResource(parsed.ingredient);
+      }
+    } else if (typeof parsed.items === "string" && trim(parsed.items)) {
+      source = "ingredient";
+      resource = trim(parsed.items);
+    } else if (typeof parsed.id === "string" && trim(parsed.id)) {
+      source = "entry";
+      resource = trim(parsed.id);
+    }
+    if (!resource) {
+      return null;
+    }
+    return {
+      source: source,
+      type: type || (source === "ingredient" ? "item" : "item"),
+      resource: resource,
+      componentsRaw: componentsRaw,
+      hasComponents: hasComponents,
+      count: parsed.count,
+      amount: parsed.amount,
+      spawn: typeof parsed.spawn === "string" ? trim(parsed.spawn) : "",
+      chance: parsed.chance
+    };
+  }
+
+  function applyParsedRecipeRow(row, parsed, isOutput) {
+    var kind = parsed.type || V.recipeRowKind(row.kind);
+    row.kind = kind;
+    row.resource = parsed.resource || "";
+    if (kind === "item") {
+      if (parsed.hasComponents) {
+        row.componentsRaw = parsed.componentsRaw;
+      } else if (row.componentsRaw === undefined) {
+        row.componentsRaw = "";
+      }
+      var count = parseIntStrict(parsed.count);
+      if (count !== null && count > 0) {
+        row.count = String(count);
+      } else if (!row.count) {
+        row.count = "1";
+      }
+    } else if (kind === "fluid") {
+      var amount = parseIntStrict(parsed.amount);
+      if (amount === null) {
+        amount = parseIntStrict(parsed.count);
+      }
+      if (amount !== null && amount > 0) {
+        row.amount = String(amount);
+      } else if (!row.amount) {
+        row.amount = "1000";
+      }
+    } else if (kind === "entity") {
+      row.spawn = parsed.spawn || row.spawn || "";
+      var entityCount = parseIntStrict(parsed.count);
+      if (entityCount !== null && entityCount > 0) {
+        row.count = String(entityCount);
+      } else if (!row.count) {
+        row.count = "1";
+      }
+    } else {
+      var energy = parseIntStrict(parsed.amount);
+      if (energy !== null && energy > 0) {
+        row.amount = String(energy);
+      } else if (!row.amount) {
+        row.amount = "1";
+      }
+    }
+    if (isOutput) {
+      var chance = parsed.chance;
+      if (chance === undefined || chance === null || chance === "") {
+        if (!row.chance) {
+          row.chance = "1";
+        }
+      } else {
+        row.chance = String(chance);
+      }
+    }
+  }
+
+  function onRecipeInput(event) {
+    var target = event.target;
+    var card = closest(target, ".recipe-card[data-recipe-index]");
+    var index = card ? parseInt(card.getAttribute("data-recipe-index"), 10) : -1;
+    var recipe = Array.isArray(state.recipes) ? state.recipes[index] : null;
+    if (!isPlainObject(recipe)) {
+      return;
+    }
+    var rowElement = closest(target, "[data-recipe-input-index], [data-recipe-output-index]");
+    if (rowElement) {
+      var isOutput = rowElement.hasAttribute("data-recipe-output-index");
+      var section = isOutput ? "output" : "input";
+      var field = target.getAttribute("data-recipe-" + section + "-field");
+      if (!field) {
+        return;
+      }
+      var rowIndex = parseInt(rowElement.getAttribute("data-recipe-" + section + "-index"), 10);
+      var rows = isOutput ? recipeOutputRows(recipe) : recipeInputRows(recipe);
+      var row = rows[rowIndex];
+      if (!isPlainObject(row)) {
+        return;
+      }
+      if (field === "kind") {
+        row.kind = V.recipeRowKind(target.value);
+        var fresh = isOutput ? V.createRecipeOutputRow(row.kind) : V.createRecipeInputRow(row.kind);
+        Object.keys(fresh).forEach(function (key) {
+          if (row[key] === undefined) {
+            row[key] = fresh[key];
+          }
+        });
+        refreshRecipeReport();
+        renderRecipes();
+        var updatedCard = recipeCardElement(index);
+        var changed = updatedCard
+          ? updatedCard.querySelector("[data-recipe-" + section + "-index='" + rowIndex +
+            "'] [data-recipe-" + section + "-field='resource'], [data-recipe-" + section +
+            "-index='" + rowIndex + "'] [data-recipe-" + section + "-field='amount']")
+          : null;
+        focusElement(changed || updatedCard, false);
+        return;
+      }
+      if (field === "resource") {
+        var parsed = parseRecipePastedJson(target.value);
+        if (parsed) {
+          var previousKind = row.kind;
+          applyParsedRecipeRow(row, parsed, isOutput);
+          refreshRecipeReport();
+          if (previousKind !== row.kind) {
+            renderRecipes();
+          }
+          var updated = recipeCardElement(index);
+          var focusTarget = updated
+            ? updated.querySelector("[data-recipe-" + section + "-index='" + rowIndex +
+              "'] [data-recipe-" + section + "-field='resource']")
+            : null;
+          focusElement(focusTarget || updated, false);
+          return;
+        }
+      }
+      row[field] = target.value;
+      var componentsInput = field === "componentsRaw" ? closest(target, "details.card-advanced") : null;
+      if (componentsInput && trim(target.value)) {
+        componentsInput.open = true;
+      }
+      refreshRecipeReport();
+      return;
+    }
+    var recipeField = target.getAttribute("data-recipe-field");
+    if (!recipeField) {
+      return;
+    }
+    recipe[recipeField] = target.value;
+    refreshRecipeReport();
   }
 
   function downloadRecipe(index) {
@@ -3495,6 +3948,43 @@
     refresh();
   }
 
+  function addRecipeRow(index, isOutput) {
+    var recipe = Array.isArray(state.recipes) ? state.recipes[index] : null;
+    if (!isPlainObject(recipe)) {
+      return;
+    }
+    var card = recipeCardElement(index);
+    var selector = isOutput ? "[data-recipe-add-output]" : "[data-recipe-add-input]";
+    var select = card ? card.querySelector(selector) : null;
+    var kind = V.recipeRowKind(select ? select.value : (isOutput ? "item" : "item"));
+    var rows = isOutput ? recipeOutputRows(recipe) : recipeInputRows(recipe);
+    var row = isOutput ? V.createRecipeOutputRow(kind) : V.createRecipeInputRow(kind);
+    rows.push(row);
+    refresh();
+    var newCard = recipeCardElement(index);
+    var section = isOutput ? "output" : "input";
+    var input = newCard
+      ? newCard.querySelector("[data-recipe-" + section + "-index='" + (rows.length - 1) +
+        "'] [data-recipe-" + section + "-field='resource'], " +
+        "[data-recipe-" + section + "-index='" + (rows.length - 1) +
+        "'] [data-recipe-" + section + "-field='amount']")
+      : null;
+    focusElement(input || newCard, false);
+  }
+
+  function removeRecipeRow(index, rowIndex, isOutput) {
+    var recipe = Array.isArray(state.recipes) ? state.recipes[index] : null;
+    if (!isPlainObject(recipe)) {
+      return;
+    }
+    var rows = isOutput ? recipeOutputRows(recipe) : recipeInputRows(recipe);
+    if (!isPlainObject(rows[rowIndex])) {
+      return;
+    }
+    rows.splice(rowIndex, 1);
+    refresh();
+  }
+
   function onRecipeAction(event) {
     var action = closest(event.target, "[data-action]");
     if (!action) {
@@ -3503,7 +3993,21 @@
     var holder = closest(action, "[data-recipe-index]");
     var index = holder ? parseInt(holder.getAttribute("data-recipe-index"), 10) : -1;
     var name = action.getAttribute("data-action");
-    if (name === "remove-recipe") {
+    if (name === "add-input") {
+      addRecipeRow(index, false);
+    } else if (name === "add-output") {
+      addRecipeRow(index, true);
+    } else if (name === "remove-input") {
+      var inputRow = closest(action, "[data-recipe-input-index]");
+      removeRecipeRow(index, inputRow
+        ? parseInt(inputRow.getAttribute("data-recipe-input-index"), 10)
+        : -1, false);
+    } else if (name === "remove-output") {
+      var outputRow = closest(action, "[data-recipe-output-index]");
+      removeRecipeRow(index, outputRow
+        ? parseInt(outputRow.getAttribute("data-recipe-output-index"), 10)
+        : -1, true);
+    } else if (name === "remove-recipe") {
       removeRecipe(index);
     } else if (name === "download-recipe") {
       downloadRecipe(index);
@@ -3834,6 +4338,9 @@
     if (STEP_IDS.indexOf(stepId) === -1) {
       return;
     }
+    if (stepId !== "pattern" && isPatternFullscreen()) {
+      setPatternFullscreen(false);
+    }
     activeStep = stepId;
     refresh();
     if (!options || !options.preserveScroll) {
@@ -3886,17 +4393,34 @@
       var recipeParts = field.slice("recipe:".length).split(":");
       var recipeIndex = parseInt(recipeParts[0], 10);
       var recipeField = recipeParts.slice(1).join(":");
-      var recipeTargets = {
-        ingredients: "ingredientsRaw",
-        fluids: "fluidsRaw",
-        components: "componentsRaw"
-      };
-      recipeField = recipeTargets[recipeField] || recipeField;
       var recipeCard = recipeCardElement(recipeIndex);
-      var recipeInput = recipeCard && recipeField
-        ? recipeCard.querySelector("[data-recipe-field='" + recipeField + "']")
-        : null;
-      focusElement(recipeInput || recipeCard || $("recipeList"), false);
+      var recipeInput = null;
+      if (recipeCard && (recipeParts[1] === "input" || recipeParts[1] === "output")) {
+        var recipeSection = recipeParts[1];
+        var recipeRowIndex = parseInt(recipeParts[2], 10);
+        var recipeRowField = recipeParts.slice(3).join(":") || "resource";
+        recipeInput = recipeCard.querySelector(
+          "[data-recipe-" + recipeSection + "-index='" + recipeRowIndex + "'] " +
+          "[data-recipe-" + recipeSection + "-field='" + recipeRowField + "']");
+        if (!recipeInput) {
+          recipeInput = recipeCard.querySelector(
+            "[data-recipe-" + recipeSection + "-index='" + recipeRowIndex + "']");
+        }
+      } else if (recipeField === "inputs") {
+        recipeInput = recipeCard ? recipeCard.querySelector("[data-recipe-add-input]") : null;
+      } else if (recipeField === "outputs") {
+        recipeInput = recipeCard ? recipeCard.querySelector("[data-recipe-add-output]") : null;
+      } else if (recipeCard && recipeField) {
+        recipeInput = recipeCard.querySelector("[data-recipe-field='" + recipeField + "']");
+      }
+      if (!recipeInput && recipeCard) {
+        recipeInput = recipeCard;
+      }
+      var recipeDetails = recipeInput ? closest(recipeInput, "details.card-advanced") : null;
+      if (recipeDetails) {
+        recipeDetails.open = true;
+      }
+      focusElement(recipeInput || $("recipeList"), false);
       return;
     }
     if (field === "controller") {
@@ -4352,6 +4876,10 @@
       matcher.state.push({ key: "", value: "" });
       refresh();
       var refreshed = findMatcherCard(symbol);
+      var details = refreshed ? refreshed.querySelector("details.card-advanced") : null;
+      if (details) {
+        details.open = true;
+      }
       var keys = refreshed ? refreshed.querySelectorAll("[data-field='state-key']") : [];
       if (keys.length > 0) {
         keys[keys.length - 1].focus();
@@ -4363,6 +4891,11 @@
       if (Array.isArray(matcher.state) && index >= 0 && index < matcher.state.length) {
         matcher.state.splice(index, 1);
         refresh();
+        var refreshed = findMatcherCard(symbol);
+        var details = refreshed ? refreshed.querySelector("details.card-advanced") : null;
+        if (details) {
+          details.open = true;
+        }
       }
     }
   }
@@ -4451,6 +4984,7 @@
       try {
         var raw = JSON.parse(String(reader.result));
         var imported = V.importDefinition(raw);
+        setPatternFullscreen(false);
         state = imported.state;
         state.recipes = [];
         importNotes = imported.notes || [];
@@ -4484,6 +5018,7 @@
   }
 
   function loadExample() {
+    setPatternFullscreen(false);
     state = V.createExampleState();
     importNotes = [];
     activeStep = "identity";
@@ -4500,6 +5035,7 @@
     if (!window.confirm("Começar um novo esqueleto? O estado atual será descartado.")) {
       return;
     }
+    setPatternFullscreen(false);
     state = V.createDefaultState();
     importNotes = [];
     activeStep = "identity";
@@ -4559,6 +5095,7 @@
     $("sizeX").addEventListener("change", function () { onSizeChange("X"); });
     $("sizeZ").addEventListener("change", function () { onSizeChange("Z"); });
     $("sizeY").addEventListener("change", function () { onSizeChange("Y"); });
+    $("patternFullscreenBtn").addEventListener("click", togglePatternFullscreen);
     $("anchorSymbol").addEventListener("change", onAnchorChange);
     $("addLayerBtn").addEventListener("click", addLayer);
     $("duplicateLayerBtn").addEventListener("click", duplicateLayer);
@@ -4639,6 +5176,12 @@
     });
     document.addEventListener("pointerup", endPaint);
     document.addEventListener("pointercancel", endPaint);
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && isPatternFullscreen()) {
+        event.preventDefault();
+        setPatternFullscreen(false);
+      }
+    });
     window.addEventListener("resize", function () {
       if (activeStep === "pattern") {
         window.setTimeout(drawPreview, 30);

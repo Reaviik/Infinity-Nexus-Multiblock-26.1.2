@@ -17,6 +17,7 @@ import com.Infinity.Nexus.Multiblock.block.MultiblockEnergyStorage;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockSlot;
+import com.Infinity.Nexus.Multiblock.network.SetFluidSlotTankPayload;
 import com.Infinity.Nexus.Multiblock.network.SetSlotLockPayload;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -51,11 +52,18 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
     private static final int PIN_LOCKED_HOVER_COLOR = 0xFFFFF3B0;
     private static final int PIN_UNLOCKED_COLOR = 0x88555555;
     private static final int PIN_UNLOCKED_HOVER_COLOR = 0xCCFFFFFF;
+    private static final int FLUID_PIN_COLOR = 0xFF29B6F6;
+    private static final int FLUID_PIN_HOVER_COLOR = 0xFF81D4FA;
+    private static final int FLUID_PIN_CENTER_COLOR = 0xFF0D47A1;
     private static final int GHOST_FADE_COLOR = 0xCC8B8B8B;
+    private static final int BAR_INSET = 1;
 
     private final Map<String, FluidTankRenderer> fluidRenderers = new HashMap<>();
-    private @Nullable EntityType<?> previewEntityType;
-    private @Nullable Entity previewEntity;
+    private final Map<GuiElement, Integer> entityPages = new HashMap<>();
+    private List<MultiblockControllerBlockEntity.AreaEntityCount> cachedAreaEntityCounts = List.of();
+    private List<EntityType<?>> cachedRecipeEntityTypes = List.of();
+    private List<EntityPreview> entityPreviews = List.of();
+    private List<Entity> previewEntities = List.of();
 
     public MultiblockScreen(MultiblockMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title, menu.layout().width(), menu.layout().height());
@@ -100,8 +108,47 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                         this.menu.blockEntity().getBlockPos(), pinSlot.getSlotIndex(), locked));
                 return true;
             }
+            MultiblockSlot fluidPinSlot = this.fluidPinSlotAt(event.x(), event.y());
+            if (fluidPinSlot != null) {
+                MultiblockFluidHandler fluids = this.menu.blockEntity().fluidHandler();
+                if (fluids == null || fluids.size() <= 1) {
+                    return true;
+                }
+                int tankIndex = this.menu.blockEntity().fluidSlotTankIndex(fluidPinSlot.getSlotIndex());
+                int nextTank = tankIndex < 0 ? 0 : (tankIndex + 1) % fluids.size();
+                ClientPacketDistributor.sendToServer(new SetFluidSlotTankPayload(
+                        this.menu.blockEntity().getBlockPos(), fluidPinSlot.getSlotIndex(), nextTank));
+                return true;
+            }
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (scrollY != 0) {
+            int count = entitiesForDisplay().size();
+            for (GuiElement element : this.menu.layout().elements()) {
+                if (element.type() != GuiElementType.ENTITY) {
+                    continue;
+                }
+                int x = this.leftPos + element.x();
+                int y = this.topPos + element.y();
+                if (!isMouseOver((int) mouseX, (int) mouseY, x, y, element.width(), element.height())) {
+                    continue;
+                }
+                int pageCount = MultiblockGuiRender.pageCount(element.width(), element.height(), count);
+                if (pageCount <= 1) {
+                    return false;
+                }
+                int page = Math.floorMod(
+                        this.entityPages.getOrDefault(element, 0) + (scrollY < 0 ? 1 : -1),
+                        pageCount);
+                this.entityPages.put(element, page);
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     private void extractSlotLockOverlays(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
@@ -123,12 +170,37 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             boolean hovered = this.isMouseOverPin(slot, mouseX, mouseY);
             drawPin(graphics, slot.x + PIN_OFFSET_X, slot.y + PIN_OFFSET_Y, locked, hovered);
         }
+        MultiblockFluidHandler fluids = this.menu.blockEntity().fluidHandler();
+        if (fluids != null && fluids.size() > 1) {
+            for (Slot slot : this.menu.slots) {
+                if (!(slot instanceof MultiblockSlot multiblockSlot) || !multiblockSlot.isFluid()) {
+                    continue;
+                }
+                boolean hovered = this.isMouseOverPin(slot, mouseX, mouseY);
+                drawFluidPin(graphics, slot.x + PIN_OFFSET_X, slot.y + PIN_OFFSET_Y, hovered);
+            }
+        }
     }
 
     private @Nullable MultiblockSlot pinSlotAt(double mouseX, double mouseY) {
         for (Slot slot : this.menu.slots) {
             if (slot instanceof MultiblockSlot multiblockSlot
                     && multiblockSlot.isInput()
+                    && this.isMouseOverPin(slot, mouseX, mouseY)) {
+                return multiblockSlot;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable MultiblockSlot fluidPinSlotAt(double mouseX, double mouseY) {
+        MultiblockFluidHandler fluids = this.menu.blockEntity().fluidHandler();
+        if (fluids == null || fluids.size() <= 1) {
+            return null;
+        }
+        for (Slot slot : this.menu.slots) {
+            if (slot instanceof MultiblockSlot multiblockSlot
+                    && multiblockSlot.isFluid()
                     && this.isMouseOverPin(slot, mouseX, mouseY)) {
                 return multiblockSlot;
             }
@@ -156,6 +228,12 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             graphics.fill(x, y, x + 1, y + PIN_SIZE, color);
             graphics.fill(x + PIN_SIZE - 1, y, x + PIN_SIZE, y + PIN_SIZE, color);
         }
+    }
+
+    private static void drawFluidPin(GuiGraphicsExtractor graphics, int x, int y, boolean hovered) {
+        graphics.fill(x, y, x + PIN_SIZE, y + PIN_SIZE,
+                hovered ? FLUID_PIN_HOVER_COLOR : FLUID_PIN_COLOR);
+        graphics.fill(x + 1, y + 1, x + 2, y + 2, FLUID_PIN_CENTER_COLOR);
     }
 
     @Override
@@ -234,6 +312,29 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             return;
         }
 
+        MultiblockSlot fluidPinSlot = this.fluidPinSlotAt(mouseX, mouseY);
+        if (fluidPinSlot != null) {
+            MultiblockControllerBlockEntity blockEntity = this.menu.blockEntity();
+            MultiblockFluidHandler fluids = blockEntity.fluidHandler();
+            int tankIndex = blockEntity.fluidSlotTankIndex(fluidPinSlot.getSlotIndex());
+            List<Component> lines = new ArrayList<>();
+            if (fluids == null || tankIndex < 0) {
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.fluid_slot.empty"));
+            } else {
+                var tank = fluids.tank(tankIndex);
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.fluid_slot.tank", tank.id()));
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.fluid_slot.tank_index",
+                        tankIndex + 1, fluids.size()));
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.fluid_slot.amount",
+                        fluids.getAmountAsInt(tankIndex), tank.capacity()));
+                if (fluids.size() > 1) {
+                    lines.add(Component.translatable("gui.infinity_nexus_multiblock.fluid_slot.cycle"));
+                }
+            }
+            graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY, mouseX, mouseY);
+            return;
+        }
+
         super.extractTooltip(graphics, mouseX, mouseY);
         MultiblockControllerBlockEntity blockEntity = this.menu.blockEntity();
 
@@ -276,6 +377,25 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                         : List.of(tooltip);
                 graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY,
                         mouseX, mouseY);
+            } else if (element.type() == GuiElementType.ENTITY) {
+                List<EntityPreview> previews = entityPreviews();
+                int page = entityPage(element, previews.size());
+                MultiblockGuiRender.EntityPage pageInfo = MultiblockGuiRender.entityPage(
+                        x, y, element.width(), element.height(), previews.size(), page);
+                for (int index = 0; index < pageInfo.cells().size(); index++) {
+                    MultiblockGuiRender.EntityCell cell = pageInfo.cells().get(index);
+                    if (!isMouseOver(mouseX, mouseY, cell.x(), cell.y(), cell.width(), cell.height())) {
+                        continue;
+                    }
+                    EntityPreview preview = previews.get(pageInfo.firstIndex() + index);
+                    Component name = preview.type().getDescription();
+                    List<Component> lines = preview.count() > 0
+                            ? List.of(Component.empty().append(name).append(" x" + preview.count()))
+                            : List.of(name);
+                    graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY,
+                            mouseX, mouseY);
+                    return;
+                }
             }
         }
     }
@@ -297,33 +417,84 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
 
     private void drawEntityElements(GuiGraphicsExtractor graphics, int originX, int originY,
             MultiblockMenuLayout layout) {
+        List<EntityPreview> previews = entityPreviews();
+        List<Entity> entities = this.previewEntities;
         for (GuiElement element : layout.elements()) {
             if (element.type() != GuiElementType.ENTITY) {
                 continue;
             }
             int x = originX + element.x();
             int y = originY + element.y();
+            int page = entityPage(element, previews.size());
+            MultiblockGuiRender.EntityPage pageInfo = MultiblockGuiRender.entityPage(
+                    x, y, element.width(), element.height(), previews.size(), page);
             MultiblockGuiRender.drawFrame(graphics, x, y, element.width(), element.height());
-            Entity entity = entityForDisplay();
-            if (entity != null && element.width() > 4 && element.height() > 4) {
-                MultiblockGuiRender.renderEntity(graphics, entity, x + 2, y + 2,
-                        element.width() - 4, element.height() - 4);
+            if (!previews.isEmpty()) {
+                MultiblockGuiRender.renderEntities(graphics, entities, x, y,
+                        element.width(), element.height(), page);
             }
+            MultiblockGuiRender.drawPageIndicator(graphics, this.font, x, y,
+                    element.width(), element.height(), pageInfo);
+            MultiblockGuiRender.drawBorder(graphics, x, y, element.width(), element.height());
         }
     }
 
-    private @Nullable Entity entityForDisplay() {
-        EntityType<?> type = this.menu.outputEntityType();
-        if (type == null) {
-            this.previewEntityType = null;
-            this.previewEntity = null;
-            return null;
+    private int entityPage(GuiElement element, int count) {
+        int pageCount = MultiblockGuiRender.pageCount(element.width(), element.height(), count);
+        if (pageCount <= 1) {
+            this.entityPages.remove(element);
+            return 0;
         }
-        if (!type.equals(this.previewEntityType) || this.previewEntity == null) {
-            this.previewEntityType = type;
-            this.previewEntity = MultiblockGuiRender.createEntity(type);
+        int page = Math.floorMod(this.entityPages.getOrDefault(element, 0), pageCount);
+        this.entityPages.put(element, page);
+        return page;
+    }
+
+    private List<Entity> entitiesForDisplay() {
+        this.refreshEntityPreviews();
+        return this.previewEntities;
+    }
+
+    private List<EntityPreview> entityPreviews() {
+        this.refreshEntityPreviews();
+        return this.entityPreviews;
+    }
+
+    private void refreshEntityPreviews() {
+        MultiblockControllerBlockEntity blockEntity = this.menu.blockEntity();
+        List<MultiblockControllerBlockEntity.AreaEntityCount> areaCounts = blockEntity.areaEntityCounts();
+        List<EntityType<?>> recipeTypes = blockEntity.activeEntityTypes();
+        if (areaCounts.equals(this.cachedAreaEntityCounts)
+                && recipeTypes.equals(this.cachedRecipeEntityTypes)) {
+            return;
         }
-        return this.previewEntity;
+        this.cachedAreaEntityCounts = List.copyOf(areaCounts);
+        this.cachedRecipeEntityTypes = List.copyOf(recipeTypes);
+        this.entityPages.clear();
+        List<EntityPreview> previews = new ArrayList<>();
+        List<Entity> entities = new ArrayList<>();
+        List<EntityType<?>> addedTypes = new ArrayList<>();
+        for (MultiblockControllerBlockEntity.AreaEntityCount entry : areaCounts) {
+            Entity entity = MultiblockGuiRender.createEntity(entry.type());
+            if (entity != null) {
+                previews.add(new EntityPreview(entry.type(), entry.count()));
+                entities.add(entity);
+                addedTypes.add(entry.type());
+            }
+        }
+        for (EntityType<?> type : recipeTypes) {
+            if (addedTypes.contains(type)) {
+                continue;
+            }
+            Entity entity = MultiblockGuiRender.createEntity(type);
+            if (entity != null) {
+                previews.add(new EntityPreview(type, 0));
+                entities.add(entity);
+                addedTypes.add(type);
+            }
+        }
+        this.entityPreviews = List.copyOf(previews);
+        this.previewEntities = List.copyOf(entities);
     }
 
     private void drawEnergyBar(GuiGraphicsExtractor graphics, MultiblockMenuLayout layout,
@@ -336,18 +507,26 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             return;
         }
 
-        int width = element.width();
-        int height = element.height();
+        int innerX = x + BAR_INSET;
+        int innerY = y + BAR_INSET;
+        int innerWidth = Math.max(0, element.width() - BAR_INSET * 2);
+        int innerHeight = Math.max(0, element.height() - BAR_INSET * 2);
         int filled = (int) Math.min(energy.getCapacityAsInt(),
-                (long) energy.getAmountAsInt() * (element.direction() == GuiDirection.LEFT || element.direction() == GuiDirection.RIGHT
-                        ? width
-                        : height) / energy.getCapacityAsInt());
+                (long) energy.getAmountAsInt()
+                        * (element.direction() == GuiDirection.LEFT || element.direction() == GuiDirection.RIGHT
+                                ? innerWidth
+                                : innerHeight)
+                        / energy.getCapacityAsInt());
 
         switch (element.direction()) {
-            case UP -> graphics.fill(x, y + height - filled, x + width, y + height, element.color());
-            case DOWN -> graphics.fill(x, y, x + width, y + filled, element.color());
-            case LEFT -> graphics.fill(x + width - filled, y, x + width, y + height, element.color());
-            case RIGHT -> graphics.fill(x, y, x + filled, y + height, element.color());
+            case UP -> graphics.fill(innerX, innerY + innerHeight - filled,
+                    innerX + innerWidth, innerY + innerHeight, element.color());
+            case DOWN -> graphics.fill(innerX, innerY,
+                    innerX + innerWidth, innerY + filled, element.color());
+            case LEFT -> graphics.fill(innerX + innerWidth - filled, innerY,
+                    innerX + innerWidth, innerY + innerHeight, element.color());
+            case RIGHT -> graphics.fill(innerX, innerY,
+                    innerX + filled, innerY + innerHeight, element.color());
         }
     }
 
@@ -367,7 +546,13 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         }
 
         FluidStack stack = fluids.copyToList().get(index);
-        this.fluidRenderer(element, fluids.tank(index).capacity()).render(graphics, x, y, stack);
+        int innerWidth = Math.max(0, element.width() - BAR_INSET * 2);
+        int innerHeight = Math.max(0, element.height() - BAR_INSET * 2);
+        if (innerWidth <= 0 || innerHeight <= 0) {
+            return;
+        }
+        this.fluidRenderer(element, fluids.tank(index).capacity(), innerWidth, innerHeight)
+                .render(graphics, x + BAR_INSET, y + BAR_INSET, stack);
     }
 
     private void drawProgressBar(GuiGraphicsExtractor graphics, MultiblockMenuLayout layout,
@@ -382,20 +567,26 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             return;
         }
 
-        int width = element.width();
-        int height = element.height();
-        int filled = Math.max(0, Math.min(width,
-                (int) ((long) this.menu.progress() * width / max)));
+        int innerX = x + BAR_INSET;
+        int innerY = y + BAR_INSET;
+        int innerWidth = Math.max(0, element.width() - BAR_INSET * 2);
+        int innerHeight = Math.max(0, element.height() - BAR_INSET * 2);
+        int filled = Math.max(0, Math.min(innerWidth,
+                (int) ((long) this.menu.progress() * innerWidth / max)));
         if (element.direction() == GuiDirection.DOWN || element.direction() == GuiDirection.UP) {
-            filled = Math.max(0, Math.min(height,
-                    (int) ((long) this.menu.progress() * height / max)));
+            filled = Math.max(0, Math.min(innerHeight,
+                    (int) ((long) this.menu.progress() * innerHeight / max)));
         }
 
         switch (element.direction()) {
-            case UP -> graphics.fill(x, y + height - filled, x + width, y + height, element.color());
-            case DOWN -> graphics.fill(x, y, x + width, y + filled, element.color());
-            case LEFT -> graphics.fill(x + width - filled, y, x + width, y + height, element.color());
-            case RIGHT -> graphics.fill(x, y, x + filled, y + height, element.color());
+            case UP -> graphics.fill(innerX, innerY + innerHeight - filled,
+                    innerX + innerWidth, innerY + innerHeight, element.color());
+            case DOWN -> graphics.fill(innerX, innerY,
+                    innerX + innerWidth, innerY + filled, element.color());
+            case LEFT -> graphics.fill(innerX + innerWidth - filled, innerY,
+                    innerX + innerWidth, innerY + innerHeight, element.color());
+            case RIGHT -> graphics.fill(innerX, innerY,
+                    innerX + filled, innerY + innerHeight, element.color());
         }
     }
 
@@ -479,7 +670,7 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         for (GuiElement element : layout.elements()) {
             if (element.type() == GuiElementType.SLOT) {
                 graphics.blit(RenderPipelines.GUI_TEXTURED, MultiblockMenuLayout.DEFAULT_TEXTURE,
-                        originX + element.x() - 1, originY + element.y() - 1,
+                        originX + element.x() - 1, originY + element.y(),
                         SLOT_SPRITE_U, SLOT_SPRITE_V, SLOT_SPRITE_SIZE, SLOT_SPRITE_SIZE,
                         SLOT_SPRITE_SIZE, SLOT_SPRITE_SIZE, 256, 256);
             }
@@ -495,12 +686,19 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
     }
 
     private FluidTankRenderer fluidRenderer(GuiElement element, int capacity) {
-        String key = element.capability() + ":" + element.width() + "x" + element.height() + ":" + capacity;
+        return this.fluidRenderer(element, capacity, element.width(), element.height());
+    }
+
+    private FluidTankRenderer fluidRenderer(GuiElement element, int capacity, int width, int height) {
+        String key = element.capability() + ":" + width + "x" + height + ":" + capacity;
         return this.fluidRenderers.computeIfAbsent(key,
-                ignored -> new FluidTankRenderer(capacity, true, element.width(), element.height()));
+                ignored -> new FluidTankRenderer(capacity, true, width, height));
     }
 
     private static boolean isMouseOver(int mouseX, int mouseY, int x, int y, int width, int height) {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
+    }
+
+    private record EntityPreview(EntityType<?> type, int count) {
     }
 }

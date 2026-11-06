@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "id": "infinity_nexus_multiblock:fabrica_de_voxel_cube1",
-  "type": "recipe",
+  "type": "recipeexemple",
   "item_slots": [
     {
       "id": "slot_0",
