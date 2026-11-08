@@ -1,5 +1,7 @@
 package com.Infinity.Nexus.Multiblock.api;
 
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import org.jspecify.annotations.Nullable;
 
@@ -8,7 +10,8 @@ public record FluidTank(
         int capacity,
         int maxReceive,
         int maxExtract,
-        @Nullable FluidFilter filter) {
+        @Nullable FluidFilter filter,
+        CapabilityPorts.@Nullable PortSelector port) {
 
     public FluidTank {
         if (id == null || id.isBlank()) {
@@ -22,7 +25,15 @@ public record FluidTank(
         }
     }
 
+    public FluidTank(String id, int capacity, int maxReceive, int maxExtract, @Nullable FluidFilter filter) {
+        this(id, capacity, maxReceive, maxExtract, filter, null);
+    }
+
     public boolean accepts(FluidResource resource) {
         return this.filter == null || this.filter.matches(resource);
+    }
+
+    public boolean allowsPort(char symbol, BlockState state, Rotation rotation) {
+        return this.port == null || this.port.matches(symbol, state, rotation);
     }
 }

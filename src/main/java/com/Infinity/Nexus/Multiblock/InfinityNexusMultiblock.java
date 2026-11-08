@@ -126,7 +126,7 @@ public class InfinityNexusMultiblock {
         if (controller == null || !controller.allowsCapability(pos, CapabilityPorts.CapabilityType.FLUID)) {
             return null;
         }
-        return controller.getFluidHandler(side);
+        return controller.getFluidHandler(pos, side);
     }
 
     private static @Nullable MultiblockControllerBlockEntity getFormedController(Level level, BlockPos pos) {
@@ -190,7 +190,7 @@ public class InfinityNexusMultiblock {
                 type,
                 (blockEntity, context) -> blockEntity.allowsCapability(
                         blockEntity.getBlockPos(), CapabilityPorts.CapabilityType.FLUID)
-                                ? blockEntity.getFluidHandler(context)
+                                ? blockEntity.getFluidHandler(blockEntity.getBlockPos(), context)
                                 : null);
     }
 

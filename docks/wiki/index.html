@@ -913,7 +913,8 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
       &quot;capacity&quot;: 10000,
       &quot;max_receive&quot;: 1000,
       &quot;max_extract&quot;: 0,
-      &quot;filter&quot;: &quot;minecraft:water&quot;
+      &quot;filter&quot;: &quot;minecraft:water&quot;,
+      &quot;port&quot;: &quot;F&quot;
     }
   ]
 }
@@ -964,7 +965,16 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <td>sem filtro</td>
 <td>ID de fluido ou tag com <code>#</code>.</td>
 </tr>
+<tr>
+<td><code>port</code></td>
+<td align="right">não</td>
+<td>string</td>
+<td>qualquer porta</td>
+<td>Key do pattern, ID de bloco ou tag que dá acesso ao tanque.</td>
+</tr>
 </tbody></table></div>
+<p>O <code>port</code> é opcional. Quando definido, o tanque só é exposto nos blocos de fluido que casarem com esse seletor; a key precisa existir no <code>pattern</code> e, quando <code>capability_ports.fluid</code> existe, também precisa estar selecionada lá. Tanques sem <code>port</code> continuam acessíveis por qualquer porta de fluido. Isso permite, por exemplo, um tanque de água acessível só pela key <code>F</code> e um de lava só pela key <code>L</code>.</p>
+<p>As portas respeitam <code>max_receive</code>/<code>max_extract</code> e <code>filter</code> do tanque. O slot <code>fluid</code> usa os tanques como origem/destino manual: ele ignora <code>max_receive</code> e <code>max_extract</code> (limites de automação), mas respeita <code>capacity</code> e <code>filter</code>. A troca é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.</p>
 <h3 id="73-portas-de-capability-capability_ports"><a class="heading-anchor" href="#73-portas-de-capability-capability_ports" aria-label="Link para 7.3 Portas de capability (capability_ports)">#</a>7.3 Portas de capability (<code>capability_ports</code>)</h3>
 <p><code>capability_ports</code> é opcional e fica no nível raiz, irmão de <code>capabilities</code>.</p>
 <pre><code class="language-json">&quot;capability_ports&quot;: {
@@ -1030,6 +1040,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <li><strong>Com <code>capability_ports</code>:</strong> apenas os blocos selecionados para cada capability.</li>
 <li><strong>Itens:</strong> um hopper encostado em qualquer porta de item acessa o mesmo inventário.</li>
 <li><strong>Energia e fluidos:</strong> normalmente expostos só no controller, incluindo <code>C</code> na lista correspondente.</li>
+<li><strong>Tanques com <code>port</code>:</strong> só aparecem nas portas de fluido que casarem com a key/bloco/tag configurada; as demais portas veem apenas os tanques sem <code>port</code> (e os que casarem com elas).</li>
 <li>O <code>energy.id</code> e os <code>fluids[].id</code> são usados pela GUI para localizar as barras. Eles não mudam as portas.</li>
 </ul>
 <h3 id="75-energia-em-receitas"><a class="heading-anchor" href="#75-energia-em-receitas" aria-label="Link para 7.5 Energia em receitas">#</a>7.5 Energia em receitas</h3>

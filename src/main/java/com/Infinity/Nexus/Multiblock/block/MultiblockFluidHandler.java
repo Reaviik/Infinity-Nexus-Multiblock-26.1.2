@@ -33,6 +33,46 @@ public final class MultiblockFluidHandler extends FluidStacksResourceHandler {
         return -1;
     }
 
+    public ResourceHandler<FluidResource> indexedAccess(List<Integer> indexes) {
+        List<Integer> tanks = List.copyOf(indexes);
+        return new ResourceHandler<>() {
+            @Override
+            public int size() {
+                return tanks.size();
+            }
+
+            @Override
+            public FluidResource getResource(int slot) {
+                return MultiblockFluidHandler.this.getResource(tanks.get(slot));
+            }
+
+            @Override
+            public long getAmountAsLong(int slot) {
+                return MultiblockFluidHandler.this.getAmountAsLong(tanks.get(slot));
+            }
+
+            @Override
+            public long getCapacityAsLong(int slot, FluidResource resource) {
+                return MultiblockFluidHandler.this.getCapacityAsLong(tanks.get(slot), resource);
+            }
+
+            @Override
+            public boolean isValid(int slot, FluidResource resource) {
+                return MultiblockFluidHandler.this.isValid(tanks.get(slot), resource);
+            }
+
+            @Override
+            public int insert(int slot, FluidResource resource, int amount, TransactionContext transaction) {
+                return MultiblockFluidHandler.this.insert(tanks.get(slot), resource, amount, transaction);
+            }
+
+            @Override
+            public int extract(int slot, FluidResource resource, int amount, TransactionContext transaction) {
+                return MultiblockFluidHandler.this.extract(tanks.get(slot), resource, amount, transaction);
+            }
+        };
+    }
+
     public ResourceHandler<FluidResource> manualAccess(int index) {
         Objects.checkIndex(index, size());
         return new ResourceHandler<>() {

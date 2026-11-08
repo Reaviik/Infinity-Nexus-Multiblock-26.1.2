@@ -4,6 +4,7 @@ import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import java.util.List;
 import java.util.Set;
 
+import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
 import com.Infinity.Nexus.Multiblock.api.FluidTank;
 import com.Infinity.Nexus.Multiblock.api.GuiElement;
 import com.Infinity.Nexus.Multiblock.api.GuiElementType;
@@ -16,6 +17,7 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
@@ -42,9 +44,15 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.server.loading.ServerModLoader;
+import net.neoforged.neoforge.transfer.ResourceHandler;
+import net.neoforged.neoforge.transfer.fluid.FluidResource;
+import net.neoforged.neoforge.transfer.transaction.Transaction;
 
 public final class MultiblockGameTests {
     private static final Identifier ENVIRONMENT_ID = Identifier.fromNamespaceAndPath(
@@ -121,6 +129,7 @@ public final class MultiblockGameTests {
             }
             assertEarlySlotPositions(helper);
             assertFluidOnlyGui(helper);
+            assertFluidPortBinding(helper);
             assertSlotLockBehavior(helper);
             assertControllerRecipe(helper);
             assertMultiblockRecipeLoads(helper);
@@ -292,6 +301,45 @@ public final class MultiblockGameTests {
             }
             if (layout.elements().stream().noneMatch(element -> element.type() == GuiElementType.FLUID_BAR)) {
                 throw helper.assertionException(Component.literal("Fluid-only GUI is missing the fluid bar"));
+            }
+        }
+
+        private static void assertFluidPortBinding(GameTestHelper helper) {
+            CapabilityPorts.PortSelector port = CapabilityPorts.PortSelector.symbol('F');
+            FluidTank restricted = new FluidTank("water_tank", 1000, 100, 40, null, port);
+            FluidTank shared = new FluidTank("shared_tank", 1000, 200, 200, null);
+            if (!restricted.allowsPort('F', Blocks.IRON_BLOCK.defaultBlockState(), Rotation.NONE)
+                    || restricted.allowsPort('X', Blocks.IRON_BLOCK.defaultBlockState(), Rotation.NONE)
+                    || !shared.allowsPort('X', Blocks.IRON_BLOCK.defaultBlockState(), Rotation.NONE)) {
+                throw helper.assertionException(Component.literal(
+                        "Fluid tank port selectors do not match the expected pattern keys"));
+            }
+
+            MultiblockFluidHandler handler = new MultiblockFluidHandler(List.of(restricted, shared), () -> {
+            });
+            ResourceHandler<FluidResource> view = handler.indexedAccess(List.of(0));
+            FluidResource water = FluidResource.of(new FluidStack(Fluids.WATER, 1));
+            try (Transaction transaction = Transaction.open(null)) {
+                int inserted = view.insert(0, water, 500, transaction);
+                transaction.commit();
+                if (inserted != 100) {
+                    throw helper.assertionException(Component.literal(
+                            "A restricted fluid port ignored max_receive: " + inserted));
+                }
+            }
+            if (view.size() != 1
+                    || handler.getAmountAsLong(0) != 100L
+                    || handler.getAmountAsLong(1) != 0L) {
+                throw helper.assertionException(Component.literal(
+                        "indexedAccess must expose only the selected tank"));
+            }
+            try (Transaction transaction = Transaction.open(null)) {
+                int extracted = view.extract(0, water, 500, transaction);
+                transaction.commit();
+                if (extracted != 40) {
+                    throw helper.assertionException(Component.literal(
+                            "A restricted fluid port ignored max_extract: " + extracted));
+                }
             }
         }
 

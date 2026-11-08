@@ -580,7 +580,8 @@ No layout padrão (sem `gui.elements`), slots com `x`/`y` que caibam em `176x166
       "capacity": 10000,
       "max_receive": 1000,
       "max_extract": 0,
-      "filter": "minecraft:water"
+      "filter": "minecraft:water",
+      "port": "F"
     }
   ]
 }
@@ -593,8 +594,11 @@ No layout padrão (sem `gui.elements`), slots com `x`/`y` que caibam em `176x166
 | `max_receive` | não | inteiro | `0` | mB aceitos por inserção. `0` desativa. |
 | `max_extract` | não | inteiro | `0` | mB liberados por extração. `0` desativa. |
 | `filter` | não | string | sem filtro | ID de fluido ou tag com `#`. |
+| `port` | não | string | qualquer porta | Key do pattern, ID de bloco ou tag que dá acesso ao tanque. |
 
-O slot `fluid` usa os tanques como origem/destino manual. Ele ignora `max_receive` e `max_extract` (limites de automação), mas respeita `capacity` e `filter`. A troca é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.
+O `port` é opcional. Quando definido, o tanque só é exposto nos blocos de fluido que casarem com esse seletor; a key precisa existir no `pattern` e, quando `capability_ports.fluid` existe, também precisa estar selecionada lá. Tanques sem `port` continuam acessíveis por qualquer porta de fluido. Isso permite, por exemplo, um tanque de água acessível só pela key `F` e um de lava só pela key `L`.
+
+As portas respeitam `max_receive`/`max_extract` e `filter` do tanque. O slot `fluid` usa os tanques como origem/destino manual: ele ignora `max_receive` e `max_extract` (limites de automação), mas respeita `capacity` e `filter`. A troca é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.
 
 ### 7.3 Portas de capability (`capability_ports`)
 
@@ -640,6 +644,7 @@ No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Cam
 - **Com `capability_ports`:** apenas os blocos selecionados para cada capability.
 - **Itens:** um hopper encostado em qualquer porta de item acessa o mesmo inventário.
 - **Energia e fluidos:** normalmente expostos só no controller, incluindo `C` na lista correspondente.
+- **Tanques com `port`:** só aparecem nas portas de fluido que casarem com a key/bloco/tag configurada; as demais portas veem apenas os tanques sem `port` (e os que casarem com elas).
 - O `energy.id` e os `fluids[].id` são usados pela GUI para localizar as barras. Eles não mudam as portas.
 
 ### 7.5 Energia em receitas

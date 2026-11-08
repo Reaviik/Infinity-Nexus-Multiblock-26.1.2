@@ -1833,8 +1833,9 @@
     var problem = V.fluidProblem(fluid);
     var serialized = JSON.stringify(V.buildFluidTank(fluid));
     var filter = trim(fluid.filter) || "qualquer fluido";
+    var port = trim(fluid.port) ? " · porta " + trim(fluid.port) : "";
     var summary = (trim(fluid.id) || "sem id") + " · " + capabilityFieldValue(fluid.capacity) +
-      " mB · " + filter;
+      " mB · " + filter + port;
     return "<div class='slot-card capability-card" + (problem ? " is-problem" : "") +
       "' data-fluid-index='" + index + "'><div class='matcher-head'><span class='slot-index'>F" + (index + 1) +
       "</span><div class='matcher-title'><strong>Tanque de fluido</strong><small>" + esc(summary) +
@@ -1854,6 +1855,9 @@
       "<div class='field'><label>filter</label><input type='text' data-fluid-index='" + index +
       "' data-fluid-field='filter' value='" + esc(fluid.filter || "") +
       "' placeholder='minecraft:water ou #tag' spellcheck='false' autocomplete='off'></div>" +
+      "<div class='field'><label>port</label><input type='text' data-fluid-index='" + index +
+      "' data-fluid-field='port' value='" + esc(fluid.port || "") +
+      "' placeholder='key do pattern (ex.: F)' spellcheck='false' autocomplete='off'></div>" +
       "</div><code class='matcher-json slot-json'>" + esc(serialized === undefined ? "null" : serialized) +
       "</code><p class='matcher-feedback capability-feedback" + (problem ? " is-error" : "") + "'" +
       (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
@@ -1956,7 +1960,8 @@
     var title = card.querySelector(".matcher-title small");
     if (title) {
       title.textContent = (trim(fluid.id) || "sem id") + " · " + capabilityFieldValue(fluid.capacity) +
-        " mB · " + (trim(fluid.filter) || "qualquer fluido");
+        " mB · " + (trim(fluid.filter) || "qualquer fluido") +
+        (trim(fluid.port) ? " · porta " + trim(fluid.port) : "");
     }
     card.classList.toggle("is-problem", Boolean(problem));
   }
@@ -2061,7 +2066,7 @@
     var fluid = isPlainObject(state.capabilities) && Array.isArray(state.capabilities.fluids)
       ? state.capabilities.fluids[index]
       : null;
-    if (!isPlainObject(fluid) || ["id", "capacity", "maxReceive", "maxExtract", "filter"].indexOf(field) === -1) {
+    if (!isPlainObject(fluid) || ["id", "capacity", "maxReceive", "maxExtract", "filter", "port"].indexOf(field) === -1) {
       return;
     }
     fluid[field] = target.value;

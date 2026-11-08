@@ -109,6 +109,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private Set<BlockPos> itemCapabilityPorts = Set.of();
     private Set<BlockPos> energyCapabilityPorts = Set.of();
     private Set<BlockPos> fluidCapabilityPorts = Set.of();
+    private Map<BlockPos, List<Integer>> fluidPortTanks = Map.of();
     private long lastValidationTick = -1L;
     private boolean capabilitySyncPending;
     private int[] inputSlots;
@@ -747,6 +748,17 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     public @Nullable ResourceHandler<FluidResource> getFluidHandler(@Nullable Direction direction) {
         return this.fluidHandler;
+    }
+
+    public @Nullable ResourceHandler<FluidResource> getFluidHandler(BlockPos pos, @Nullable Direction direction) {
+        if (this.fluidHandler == null) {
+            return null;
+        }
+        List<Integer> tanks = this.fluidPortTanks.get(pos);
+        if (tanks == null || tanks.size() == this.fluidHandler.size()) {
+            return this.fluidHandler;
+        }
+        return this.fluidHandler.indexedAccess(tanks);
     }
 
     private void onCapabilityChanged() {
@@ -1392,10 +1404,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Set<BlockPos> previousItemPorts = this.itemCapabilityPorts;
         Set<BlockPos> previousEnergyPorts = this.energyCapabilityPorts;
         Set<BlockPos> previousFluidPorts = this.fluidCapabilityPorts;
+        Map<BlockPos, List<Integer>> previousFluidPortTanks = this.fluidPortTanks;
         this.updateCapabilityPorts(serverLevel, definition, newOrigin, newRotation, matched);
         if (!previousItemPorts.equals(this.itemCapabilityPorts)
                 || !previousEnergyPorts.equals(this.energyCapabilityPorts)
-                || !previousFluidPorts.equals(this.fluidCapabilityPorts)) {
+                || !previousFluidPorts.equals(this.fluidCapabilityPorts)
+                || !previousFluidPortTanks.equals(this.fluidPortTanks)) {
             Set<BlockPos> invalidated = new HashSet<>();
             invalidated.addAll(previousItemPorts);
             invalidated.addAll(previousEnergyPorts);
@@ -1403,6 +1417,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             invalidated.addAll(this.itemCapabilityPorts);
             invalidated.addAll(this.energyCapabilityPorts);
             invalidated.addAll(this.fluidCapabilityPorts);
+            invalidated.addAll(previousFluidPortTanks.keySet());
+            invalidated.addAll(this.fluidPortTanks.keySet());
             this.invalidateCapabilities(List.copyOf(invalidated));
         }
 
@@ -1644,8 +1660,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Set<BlockPos> items = new HashSet<>();
         Set<BlockPos> energy = new HashSet<>();
         Set<BlockPos> fluids = new HashSet<>();
+        Map<BlockPos, List<Integer>> fluidTanksByPort = new LinkedHashMap<>();
         if (matched) {
             CapabilityPorts ports = definition.capabilityPorts();
+            List<FluidTank> tanks = definition.fluidTanks();
             for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
                 BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(newRotation);
                 BlockPos pos = newOrigin.offset(offset.getX(), offset.getY(), offset.getZ());
@@ -1658,18 +1676,27 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 }
                 if (ports.allows(CapabilityPorts.CapabilityType.FLUID, cell.symbol(), state, newRotation)) {
                     fluids.add(pos);
+                    List<Integer> allowed = new ArrayList<>(tanks.size());
+                    for (int index = 0; index < tanks.size(); index++) {
+                        if (tanks.get(index).allowsPort(cell.symbol(), state, newRotation)) {
+                            allowed.add(index);
+                        }
+                    }
+                    fluidTanksByPort.put(pos, List.copyOf(allowed));
                 }
             }
         }
         this.itemCapabilityPorts = Set.copyOf(items);
         this.energyCapabilityPorts = Set.copyOf(energy);
         this.fluidCapabilityPorts = Set.copyOf(fluids);
+        this.fluidPortTanks = Map.copyOf(fluidTanksByPort);
     }
 
     private void clearCapabilityPorts() {
         this.itemCapabilityPorts = Set.of();
         this.energyCapabilityPorts = Set.of();
         this.fluidCapabilityPorts = Set.of();
+        this.fluidPortTanks = Map.of();
     }
 
     private void invalidateCapabilityPorts() {

@@ -6,6 +6,14 @@
 
 ---
 
+## <span style="color:#2DC26B;">` V: 1.0.3`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Filtered inputs for fluid ports using pattern Key
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Fluid tags in recipes
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.0.2`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Recipe support to entity input and output

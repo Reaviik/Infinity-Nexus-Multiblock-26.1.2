@@ -358,7 +358,8 @@ Em uma estrutura formada, a capability de item também é exposta em qualquer bl
       "capacity": 10000,
       "max_receive": 1000,
       "max_extract": 0,
-      "filter": "#c:water"
+      "filter": "#c:water",
+      "port": "F"
     },
     {
       "id": "output_tank",
@@ -379,6 +380,7 @@ Em uma estrutura formada, a capability de item também é exposta em qualquer bl
 - `fluids[].max_receive`: mB aceitos por inserção. Padrão `0` quando omitido.
 - `fluids[].max_extract`: mB liberados por extração. Padrão `0` quando omitido.
 - `fluids[].filter`: opcional; ID de fluido (`minecraft:water`) ou tag (`#c:water`). Sem filtro, o tank aceita qualquer fluido.
+- `fluids[].port`: opcional; key do `pattern` (ex.: `F`), ID de bloco ou tag que dá acesso ao tank. A key precisa existir no `pattern` e, quando `capability_ports.fluid` existe, também precisa estar selecionada. Sem `port`, o tank é acessível por qualquer porta de fluido. Tanques com `port` só aparecem nas portas que casarem com o seletor e respeitam `max_receive`/`max_extract` do tank.
 
 Quando presentes, as capabilities são expostas em todas as faces do controller, sujeitas a `capability_ports`. O `energy.id` e os `fluids[].id` são usados pela GUI para localizar as barras, mas ainda não alteram o comportamento por lado. Energia e fluidos são persistidos no NBT do controller. `/reload` atualiza a definição, cria capabilities que passaram a existir e remove as que deixaram de existir; armazenamentos de energia/fluidos já existentes não são reconfigurados. Novos controllers usam a nova definição.
 

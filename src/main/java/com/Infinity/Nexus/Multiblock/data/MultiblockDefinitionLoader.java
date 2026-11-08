@@ -58,6 +58,16 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                     : DataResult.error(() -> "Expected a single character, got '" + value + "'"),
             value -> DataResult.success(String.valueOf(value)));
 
+    private static final Codec<CapabilityPorts.PortSelector> PORT_SELECTOR_CODEC = Codec.STRING.flatXmap(
+            value -> {
+                Optional<CapabilityPorts.PortSelector> parsed = CapabilityPorts.PortSelector.parse(value);
+                return parsed.<DataResult<CapabilityPorts.PortSelector>>map(DataResult::success)
+                        .orElseGet(() -> DataResult.error(
+                                () -> "Invalid port selector '" + value
+                                        + "': expected a pattern key, a block id or a block tag"));
+            },
+            selector -> DataResult.error(() -> "Fluid tank ports are load-only"));
+
     private static final Codec<BlockMatcher> MATCHER_CODEC = Codec.either(Codec.STRING, MatcherFile.CODEC).flatXmap(
             either -> either.map(MultiblockDefinitionLoader::parseMatcher, MatcherFile::toMatcher),
             matcher -> DataResult.error(() -> "Multiblock matchers are load-only"));
@@ -120,8 +130,37 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
         file.gui().ifPresent(definition::gui);
         MultiblockDefinition built = definition.build();
+        validateFluidPorts(built);
         MultiblockMenuLayout.create(built);
         return built;
+    }
+
+    private static void validateFluidPorts(MultiblockDefinition definition) {
+        Set<Character> symbols = new HashSet<>();
+        for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
+            symbols.add(cell.symbol());
+        }
+        Optional<List<CapabilityPorts.PortSelector>> fluidPorts =
+                definition.capabilityPorts().selectors(CapabilityPorts.CapabilityType.FLUID);
+        for (FluidTank tank : definition.fluidTanks()) {
+            CapabilityPorts.PortSelector selector = tank.port();
+            if (selector == null || selector.symbol().isEmpty()) {
+                continue;
+            }
+            char symbol = selector.symbol().get();
+            if (!symbols.contains(symbol)) {
+                throw new IllegalArgumentException("Fluid tank '" + tank.id() + "' port key '" + symbol
+                        + "' is not used by the pattern");
+            }
+            if (fluidPorts.isPresent()) {
+                boolean possible = fluidPorts.get().stream()
+                        .anyMatch(port -> port.symbol().map(value -> value == symbol).orElse(true));
+                if (!possible) {
+                    throw new IllegalArgumentException("Fluid tank '" + tank.id() + "' port key '" + symbol
+                            + "' is not selected by capability_ports.fluid");
+                }
+            }
+        }
     }
 
     @Override
@@ -259,13 +298,15 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             int capacity,
             int maxReceive,
             int maxExtract,
-            Optional<FluidFilter> filter) {
+            Optional<FluidFilter> filter,
+            Optional<CapabilityPorts.PortSelector> port) {
         private static final Codec<FluidFile> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.STRING.fieldOf("id").forGetter(FluidFile::id),
                 Codec.intRange(1, Integer.MAX_VALUE).fieldOf("capacity").forGetter(FluidFile::capacity),
                 Codec.intRange(0, Integer.MAX_VALUE).optionalFieldOf("max_receive", 0).forGetter(FluidFile::maxReceive),
                 Codec.intRange(0, Integer.MAX_VALUE).optionalFieldOf("max_extract", 0).forGetter(FluidFile::maxExtract),
-                FluidFilter.CODEC.optionalFieldOf("filter").forGetter(FluidFile::filter))
+                FluidFilter.CODEC.optionalFieldOf("filter").forGetter(FluidFile::filter),
+                PORT_SELECTOR_CODEC.optionalFieldOf("port").forGetter(FluidFile::port))
                 .apply(instance, FluidFile::new));
 
         public FluidTank toTank() {
@@ -274,7 +315,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                     this.capacity,
                     this.maxReceive,
                     this.maxExtract,
-                    this.filter.orElse(null));
+                    this.filter.orElse(null),
+                    this.port.orElse(null));
         }
     }
 

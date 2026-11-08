@@ -20,7 +20,7 @@
   var CAPABILITY_MAX = 2147483647;
   var CAPABILITY_PORT_KEYS = ["item", "energy", "fluid"];
   var ENERGY_KEYS = ["id", "capacity", "max_receive", "max_extract"];
-  var FLUID_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter"];
+  var FLUID_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter", "port"];
   var CONTROLLER_FACES = ["front", "back", "left", "right", "top", "bottom"];
   var CONTROLLER_KEYS = ["block", "textures", "formed_textures", "particle", "light_level"];
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
@@ -1269,6 +1269,7 @@
       maxReceive: 1000,
       maxExtract: 0,
       filter: "",
+      port: "",
       extras: {}
     };
   }
@@ -1345,6 +1346,14 @@
       notes.push({
         severity: "warning",
         message: path + ".filter inválido foi ignorado."
+      });
+    }
+    if (typeof value.port === "string") {
+      fluid.port = value.port;
+    } else if (value.port !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: path + ".port inválido foi ignorado."
       });
     }
     Object.keys(value).forEach(function (key) {
@@ -1525,7 +1534,22 @@
     if (filter && !isValidIdentifier(stripTagPrefix(filter))) {
       return "O filtro do tanque precisa ser um fluido ou tag válido.";
     }
+    var port = trimString(fluid.port);
+    if (port && !validFluidPortText(port)) {
+      return "A porta do tanque precisa ser uma key do pattern, um bloco ou uma tag válida.";
+    }
     return "";
+  }
+
+  function validFluidPortText(value) {
+    var text = trimString(value);
+    if (!text) {
+      return true;
+    }
+    if (text.length === 1) {
+      return text !== " ";
+    }
+    return isValidIdentifier(stripTagPrefix(text));
   }
 
   function buildEnergy(energy) {
@@ -1568,6 +1592,7 @@
     var maxReceive = toInt(fluid.maxReceive);
     var maxExtract = toInt(fluid.maxExtract);
     var filter = trimString(fluid.filter);
+    var port = trimString(fluid.port);
     if (id) {
       result.id = id;
     }
@@ -1582,6 +1607,9 @@
     }
     if (filter) {
       result.filter = filter;
+    }
+    if (port) {
+      result.port = port;
     }
     var extras = isPlainObject(fluid.extras) ? fluid.extras : {};
     Object.keys(extras).forEach(function (key) {
@@ -3785,6 +3813,7 @@
     var capabilities = state.capabilities;
     var energyId = "";
     var fluidIds = new Set();
+    var capabilityPatternSymbols = recipePatternSymbols(state);
     if (capabilities !== null && capabilities !== undefined) {
       if (!isPlainObject(capabilities)) {
         capabilitiesOk = false;
@@ -3877,6 +3906,24 @@
                 capabilitiesOk = false;
                 add("fluid.filter.invalid", "error", "capabilities", field,
                   "O filtro do tanque \"" + (fluidId || index) + "\" precisa ser um fluido ou tag válido.");
+              }
+              var fluidPort = trimString(fluid.port);
+              if (fluidPort && !validCapabilityPortSelector(fluidPort, capabilityPatternSymbols)) {
+                capabilitiesOk = false;
+                add("fluid.port.invalid", "error", "capabilities", field,
+                  "A porta do tanque \"" + (fluidId || index) +
+                    "\" precisa ser uma key do pattern, um bloco ou uma tag válida.");
+              } else if (fluidPort.length === 1 && isPlainObject(state.capabilityPorts) &&
+                Array.isArray(state.capabilityPorts.fluid)) {
+                var portExposed = state.capabilityPorts.fluid.some(function (selector) {
+                  var text = trimString(selector);
+                  return text.length > 1 || text === fluidPort;
+                });
+                if (!portExposed) {
+                  add("fluid.port.not_exposed", "warning", "capabilities", field,
+                    "A key \"" + fluidPort + "\" do tanque \"" + (fluidId || index) +
+                      "\" não está em capability_ports.fluid; o tanque ficará inacessível.");
+                }
               }
             });
           }

@@ -1551,6 +1551,73 @@ test("receita do controller exige key para todos os simbolos do pattern", () => 
   assert.equal(V.controllerRecipeProblem(state.controllerRecipe).length > 0, true);
 });
 
+test("fluid tank port importa, exporta e valida a key do pattern", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:tanque_porta",
+    type: "storage",
+    capabilities: {
+      fluids: [{
+        id: "water_tank",
+        capacity: 8000,
+        max_receive: 500,
+        filter: "minecraft:water",
+        port: "I"
+      }]
+    },
+    pattern: {
+      anchor: "C",
+      layers: [["III", "ICI", "III"]],
+      matchers: {
+        I: "minecraft:iron_block"
+      }
+    }
+  });
+  assert.equal(imported.state.capabilities.fluids[0].port, "I");
+  assert.deepEqual(V.buildDefinition(imported.state).capabilities.fluids[0], {
+    id: "water_tank",
+    capacity: 8000,
+    max_receive: 500,
+    filter: "minecraft:water",
+    port: "I"
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+});
+
+test("fluid tank port invalida key fora do pattern e formato invalido", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.fluids = [V.createFluidTank()];
+    value.capabilities.fluids[0].id = "water_tank";
+    value.capabilities.fluids[0].port = "Z";
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("fluid.port.invalid"));
+  assert.equal(result.checks.find((check) => check.id === "capabilities").ok, false);
+
+  const malformed = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.fluids = [V.createFluidTank()];
+    value.capabilities.fluids[0].id = "water_tank";
+    value.capabilities.fluids[0].port = "sem dois pontos";
+  });
+  assert.ok(codes(V.validateState(malformed)).includes("fluid.port.invalid"));
+});
+
+test("fluid tank port avisa quando a key nao esta em capability_ports.fluid", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.fluids = [V.createFluidTank()];
+    value.capabilities.fluids[0].id = "water_tank";
+    value.capabilities.fluids[0].port = "I";
+    value.capabilityPorts = V.createCapabilityPorts();
+    value.capabilityPorts.fluid = ["C"];
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("fluid.port.not_exposed"));
+  assert.ok(!codes(result).includes("fluid.port.invalid"));
+});
+
 if (process.exitCode) {
   console.error("Falhas encontradas.");
 } else {
