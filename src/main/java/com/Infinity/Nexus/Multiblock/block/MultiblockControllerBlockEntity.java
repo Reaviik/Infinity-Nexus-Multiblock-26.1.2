@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +38,7 @@ import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeInput;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -707,21 +709,29 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     }
 
     private void refreshActiveEntityTypes() {
-        List<EntityType<?>> types = new ArrayList<>();
+        Set<EntityType<?>> types = new LinkedHashSet<>();
         if (this.activeRecipe != null) {
-            for (MultiblockRecipeIngredient.Entity input : this.activeRecipe.entityInputs()) {
-                types.add(input.entityType());
-            }
-            for (MultiblockRecipeOutput output : this.activeRecipe.outputs()) {
-                if (output instanceof MultiblockRecipeOutput.Entity entity) {
-                    types.add(entity.entityType());
+            HolderGetter<EntityType<?>> registry = this.entityTypeRegistry();
+            if (registry != null) {
+                for (MultiblockRecipeIngredient.Entity input : this.activeRecipe.entityInputs()) {
+                    types.addAll(input.type().resolve(registry));
+                }
+                for (MultiblockRecipeOutput output : this.activeRecipe.outputs()) {
+                    if (output instanceof MultiblockRecipeOutput.Entity entity) {
+                        types.addAll(entity.type().resolve(registry));
+                    }
                 }
             }
         }
-        if (!types.equals(this.activeEntityTypes)) {
-            this.activeEntityTypes = List.copyOf(types);
+        List<EntityType<?>> resolved = List.copyOf(types);
+        if (!resolved.equals(this.activeEntityTypes)) {
+            this.activeEntityTypes = resolved;
             this.syncClientState();
         }
+    }
+
+    private @Nullable HolderGetter<EntityType<?>> entityTypeRegistry() {
+        return this.level == null ? null : this.level.registryAccess().lookupOrThrow(Registries.ENTITY_TYPE);
     }
 
     private void syncClientState() {
@@ -1024,11 +1034,17 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 }
                 case MultiblockRecipeOutput.Entity entityOutput -> {
                     Optional<BlockPos> spawnPos = this.resolveSpawnPos(entityOutput);
-                    if (spawnPos.isEmpty()) {
+                    HolderGetter<EntityType<?>> registry = this.entityTypeRegistry();
+                    if (spawnPos.isEmpty() || registry == null) {
                         return null;
                     }
                     for (int index = 0; index < entityOutput.count(); index++) {
-                        entities.add(new PlannedEntity(entityOutput.entityType(), spawnPos.get().above()));
+                        Optional<EntityType<?>> entityType = entityOutput.type()
+                                .pick(registry, serverLevel.getRandom());
+                        if (entityType.isEmpty()) {
+                            return null;
+                        }
+                        entities.add(new PlannedEntity(entityType.get(), spawnPos.get().above()));
                     }
                 }
             }
@@ -1189,7 +1205,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                         area,
                         entity -> entity.isAlive()
                                 && !used.contains(entity)
-                                && entity.getType() == input.entityType())) {
+                                && input.type().matches(entity.getType()))) {
                     found = candidate;
                     break;
                 }
@@ -1260,7 +1276,13 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
         BlockPos min = BlockPos.containing(volume.minX, volume.minY, volume.minZ);
         BlockPos max = BlockPos.containing(volume.maxX - 1.0E-4D, volume.maxY - 1.0E-4D, volume.maxZ - 1.0E-4D);
-        for (int floorY = max.getY() - 2; floorY >= min.getY(); floorY--) {
+        Optional<BlockPos> interior = findEntitySpawnFloor(serverLevel, min, max, max.getY() - 2);
+        return interior.isPresent() ? interior : findEntitySpawnFloor(serverLevel, min, max, max.getY());
+    }
+
+    private static Optional<BlockPos> findEntitySpawnFloor(
+            ServerLevel serverLevel, BlockPos min, BlockPos max, int startY) {
+        for (int floorY = startY; floorY >= min.getY(); floorY--) {
             for (int x = min.getX(); x <= max.getX(); x++) {
                 for (int z = min.getZ(); z <= max.getZ(); z++) {
                     BlockPos floorPos = new BlockPos(x, floorY, z);

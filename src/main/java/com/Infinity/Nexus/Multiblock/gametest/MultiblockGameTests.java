@@ -19,14 +19,20 @@ import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
+import com.Infinity.Nexus.Multiblock.recipe.EntityTypeSelector;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeInput;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
+import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.MapCodec;
 import java.util.EnumSet;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -38,6 +44,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.tags.EntityTypeTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -131,9 +139,49 @@ public final class MultiblockGameTests {
             assertFluidOnlyGui(helper);
             assertFluidPortBinding(helper);
             assertSlotLockBehavior(helper);
+            assertEntityTagSelector(helper);
             assertControllerRecipe(helper);
             assertMultiblockRecipeLoads(helper);
+            assertEntityOnlyOutputRecipe(helper);
             helper.succeed();
+        }
+
+        private static void assertEntityTagSelector(GameTestHelper helper) {
+            HolderGetter<EntityType<?>> registry = helper.getLevel().registryAccess()
+                    .lookupOrThrow(Registries.ENTITY_TYPE);
+            EntityTypeSelector undead = new EntityTypeSelector.Tag(EntityTypeTags.UNDEAD);
+            if (!undead.matches(EntityType.ZOMBIE)
+                    || !undead.matches(EntityType.SKELETON)
+                    || undead.matches(EntityType.PIG)) {
+                throw helper.assertionException(Component.literal(
+                        "Entity tag selector must match only undead entity types"));
+            }
+            List<EntityType<?>> resolved = undead.resolve(registry);
+            if (resolved.isEmpty() || !resolved.contains(EntityType.ZOMBIE)) {
+                throw helper.assertionException(Component.literal(
+                        "Entity tag selector failed to resolve #minecraft:undead"));
+            }
+            if (undead.pick(registry, helper.getLevel().getRandom()).isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "Entity tag selector failed to pick a random entity type"));
+            }
+            TagKey<EntityType<?>> chickens = TagKey.create(Registries.ENTITY_TYPE,
+                    Identifier.fromNamespaceAndPath("c", "chickens"));
+            if (!new EntityTypeSelector.Tag(chickens).resolve(registry).contains(EntityType.CHICKEN)) {
+                throw helper.assertionException(Component.literal(
+                        "Entity tag #c:chickens must resolve to minecraft:chicken"));
+            }
+            MultiblockRecipeIngredient.Entity input = new MultiblockRecipeIngredient.Entity(
+                    EntityTypeTags.UNDEAD, "", 1);
+            var encoded = MultiblockRecipeIngredient.CODEC.encodeStart(NbtOps.INSTANCE, input).getOrThrow();
+            MultiblockRecipeIngredient decoded = MultiblockRecipeIngredient.CODEC
+                    .parse(NbtOps.INSTANCE, encoded)
+                    .getOrThrow();
+            if (!(decoded instanceof MultiblockRecipeIngredient.Entity entity)
+                    || entity.type().tag().isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "Entity tag recipe input failed to round-trip through its codec"));
+            }
         }
 
         private static void assertControllerRecipe(GameTestHelper helper) {
@@ -191,7 +239,7 @@ public final class MultiblockGameTests {
                 throw helper.assertionException(Component.literal(
                         "Multiblock recipe failed to load: " + recipeId));
             }
-            if (recipe.entityInputs().stream().noneMatch(input -> input.entityType() == EntityType.PIG)) {
+            if (recipe.entityInputs().stream().noneMatch(input -> input.type().matches(EntityType.PIG))) {
                 throw helper.assertionException(Component.literal(
                         "Multiblock recipe is missing its pig input: " + recipeId));
             }
@@ -225,6 +273,36 @@ public final class MultiblockGameTests {
                                 "Multiblock recipe fluid output decoded incorrectly: " + recipeId));
                     }
                 }
+            }
+        }
+
+        private static void assertEntityOnlyOutputRecipe(GameTestHelper helper) {
+            var json = JsonParser.parseString("""
+                    {
+                      "definition": "infinity_nexus_multiblock:fabrica_de_voxel_cube",
+                      "time": 20,
+                      "inputs": [{"type": "energy", "amount": 100}],
+                      "outputs": [{"type": "entity", "id": "minecraft:chicken"}]
+                    }
+                    """).getAsJsonObject();
+            MultiblockRecipe recipe = MultiblockRecipe.codec().codec()
+                    .parse(JsonOps.INSTANCE, json)
+                    .getOrThrow();
+            if (!recipe.itemInputs().isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "Entity-only output recipe must not require item inputs"));
+            }
+            if (!(recipe.outputs().getFirst() instanceof MultiblockRecipeOutput.Entity entity)) {
+                throw helper.assertionException(Component.literal(
+                        "Entity-only output recipe failed to decode its entity output"));
+            }
+            if (entity.type().direct().isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "Entity-only output recipe lost its entity type"));
+            }
+            if (!recipe.matches(new MultiblockRecipeInput(List.of(), List.of()), helper.getLevel())) {
+                throw helper.assertionException(Component.literal(
+                        "Entity-only output recipe must match an energy-only input"));
             }
         }
 

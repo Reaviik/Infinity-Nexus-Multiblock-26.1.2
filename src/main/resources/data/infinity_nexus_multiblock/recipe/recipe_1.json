@@ -23,18 +23,13 @@
   ],
   "outputs": [
     {
-      "type": "item",
-      "id": "minecraft:sand",
-      "count": 6
-    },
-    {
       "type": "entity",
       "id": "minecraft:cow",
       "spawn": "S"
     },
     {
       "type": "energy",
-      "amount": 50
+      "amount": 500
     }
   ],
   "time": 100

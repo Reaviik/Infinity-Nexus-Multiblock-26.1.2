@@ -1,0 +1,1 @@
+comandos Gradle executados pelo agente devem usar --no-daemon --console=plain (sem mudar org.gradle.daemon no gradle.properties, para não afetar builds manuais).

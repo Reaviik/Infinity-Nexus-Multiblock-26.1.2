@@ -1030,7 +1030,7 @@ O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `outp
 
 - `item`: `ingredient` aceita id, tag `#`, JSON de ingrediente ou objeto com `components`; `count` e opcional e vai de 1 a 99.
 - `fluid`: `ingredient` aceita id ou tag; `amount` e obrigatorio e limitado pela maior capacidade de tanque.
-- `entity`: `id` e o entity type; `count` e opcional (1 a 99, padrao 1) e indica quantas entidades desse tipo precisam existir na area; `spawn` e opcional e aceita simbolo do pattern, bloco ou tag. As entidades precisam estar dentro da area do multibloco ou perto do seletor e sao removidas ao completar.
+- `entity`: `id` (entity type) ou `tag` (tag de entity type, com `#`), exatamente um; `count` e opcional (1 a 99, padrao 1) e indica quantas entidades desse tipo precisam existir na area; `spawn` e opcional e aceita simbolo do pattern, bloco ou tag. As entidades precisam estar dentro da area do multibloco ou perto do seletor e sao removidas ao completar.
 - `energy`: `amount` e o custo total em FE, consumido aos poucos durante o progresso.
 - Pelo menos um input e obrigatorio; a maquina tambem procura receitas que tenham somente energia ou entidade, sem item/fluido.
 
@@ -1053,7 +1053,7 @@ O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `outp
 
 - `chance` e um numero de 0 a 1; default 1.0. Cada output rola separadamente ao completar.
 - Chance 0 nunca gera o resultado, mas os inputs ainda sao consumidos.
-- Itens usam `count` de 1 a 99 e podem ter `components`; fluidos usam `amount`; entidades usam `count` de 1 a 99 (padrão 1) e `spawn` opcional (sem seletor, as entidades de saída surgem dentro da área do multibloco); energia vai para o storage do controller.
+- Itens usam `count` de 1 a 99 e podem ter `components`; fluidos usam `amount`; entidades usam `id` ou `tag` (exatamente um), `count` de 1 a 99 (padrão 1) e `spawn` opcional (sem seletor, as entidades de saída surgem dentro da área do multibloco); energia vai para o storage do controller.
 - O runtime valida todos os outputs antes de iniciar o craft, mesmo os que tem chance menor que 1.
 
 ### 10.5 Matching e validacao

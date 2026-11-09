@@ -1537,7 +1537,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <ul>
 <li><code>item</code>: <code>ingredient</code> aceita id, tag <code>#</code>, JSON de ingrediente ou objeto com <code>components</code>; <code>count</code> e opcional e vai de 1 a 99.</li>
 <li><code>fluid</code>: <code>ingredient</code> aceita id ou tag; <code>amount</code> e obrigatorio e limitado pela maior capacidade de tanque.</li>
-<li><code>entity</code>: <code>id</code> e o entity type; <code>spawn</code> e opcional e aceita simbolo do pattern, bloco ou tag. A entidade precisa estar dentro da area do multibloco ou perto do seletor e e removida ao completar a receita.</li>
+<li><code>entity</code>: <code>id</code> (entity type) ou <code>tag</code> (tag de entity type, com <code>#</code>), exatamente um; <code>spawn</code> e opcional e aceita simbolo do pattern, bloco ou tag. A entidade precisa estar dentro da area do multibloco ou perto do seletor e e removida ao completar a receita.</li>
 <li><code>energy</code>: <code>amount</code> e o custo total em FE, consumido aos poucos durante o progresso.</li>
 <li>Pelo menos um input e obrigatorio; a maquina tambem procura receitas que tenham somente energia ou entidade, sem item/fluido.</li>
 </ul>
@@ -1558,7 +1558,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <ul>
 <li><code>chance</code> e um numero de 0 a 1; default 1.0. Cada output rola separadamente no momento de completar.</li>
 <li>Chance 0 nunca gera o resultado, mas os inputs ainda sao consumidos.</li>
-<li>Itens usam <code>count</code> de 1 a 99 e podem ter <code>components</code>; fluidos usam <code>amount</code>; entidades usam <code>spawn</code> opcional (sem seletor, a entidade de saída surge dentro da área do multibloco); energia vai para o storage do controller.</li>
+<li>Itens usam <code>count</code> de 1 a 99 e podem ter <code>components</code>; fluidos usam <code>amount</code>; entidades usam <code>id</code> ou <code>tag</code> (exatamente um) e <code>spawn</code> opcional (sem seletor, a entidade de saída surge dentro da área do multibloco); energia vai para o storage do controller.</li>
 <li>O runtime valida todos os outputs antes de iniciar o craft, mesmo os que tem chance menor que 1.</li>
 </ul>
 <h3 id="105-matching-e-validacao"><a class="heading-anchor" href="#105-matching-e-validacao" aria-label="Link para 10.5 Matching e validacao">#</a>10.5 Matching e validacao</h3>

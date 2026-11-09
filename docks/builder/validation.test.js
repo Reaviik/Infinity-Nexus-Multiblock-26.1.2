@@ -1363,6 +1363,84 @@ test("entity input e output exportam e validam quantidade", () => {
   assert.ok(invalid.includes("recipe.output.entity_count"));
 });
 
+test("entity input e output aceitam tag", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "entity_tags";
+  const input = V.createRecipeInputRow("entity");
+  input.resource = "#c:chickens";
+  const output = V.createRecipeOutputRow("entity");
+  output.resource = "#minecraft:undead";
+  recipe.inputRows = [input];
+  recipe.outputRows = [output];
+  assert.deepEqual(V.buildRecipe(recipe).inputs, [
+    { type: "entity", tag: "#c:chickens" }
+  ]);
+  assert.deepEqual(V.buildRecipe(recipe).outputs, [
+    { type: "entity", tag: "#minecraft:undead" }
+  ]);
+  const options = {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:nexus_smelting",
+    itemInput: false,
+    itemOutput: false,
+    fluid: false,
+    energy: false,
+    symbols: ["C"],
+    inputSlots: [],
+    outputSlots: [],
+    fluidCapacities: [],
+    energyCapacity: 0
+  };
+  assert.deepEqual(V.validateRecipes([recipe], options).issues, []);
+  input.resource = "#sem_namespace";
+  assert.ok(codes(V.validateRecipes([recipe], options)).includes("recipe.input.entity_invalid"));
+  input.resource = "#c:chickens";
+  output.resource = "#";
+  assert.ok(codes(V.validateRecipes([recipe], options)).includes("recipe.output.entity_invalid"));
+});
+
+test("parseRecipe importa entity com tag", () => {
+  const notes = [];
+  const parsed = V.parseRecipe({
+    type: "infinity_nexus_multiblock:multiblock",
+    definition: "infinity_nexus_multiblock:nexus_smelting",
+    inputs: [{ type: "entity", tag: "c:chickens" }],
+    outputs: [{ type: "entity", tag: "#minecraft:undead", count: 2 }]
+  }, notes);
+  assert.equal(parsed.inputRows[0].resource, "#c:chickens");
+  assert.equal(parsed.outputRows[0].resource, "#minecraft:undead");
+  assert.equal(parsed.outputRows[0].count, "2");
+  assert.deepEqual(notes, []);
+});
+
+test("receita so com output de entidade e valida", () => {
+  const recipe = V.createRecipe();
+  recipe.file = "only_entity_out";
+  const input = V.createRecipeInputRow("energy");
+  input.amount = "100";
+  const output = V.createRecipeOutputRow("entity");
+  output.resource = "minecraft:chicken";
+  recipe.inputRows = [input];
+  recipe.outputRows = [output];
+  assert.deepEqual(V.buildRecipe(recipe).outputs, [
+    { type: "entity", id: "minecraft:chicken" }
+  ]);
+  const options = {
+    machineType: "recipe",
+    definitionId: "infinity_nexus_multiblock:nexus_smelting",
+    itemInput: false,
+    itemOutput: false,
+    fluid: false,
+    energy: true,
+    symbols: ["C"],
+    inputSlots: [],
+    outputSlots: [],
+    fluidCapacities: [],
+    energyCapacity: 10000
+  };
+  assert.deepEqual(V.validateRecipes([recipe], options).issues, []);
+});
+
 test("saida item sem slot de saida bloqueia", () => {
   const recipe = V.createRecipe();
   recipe.file = "no_slot";

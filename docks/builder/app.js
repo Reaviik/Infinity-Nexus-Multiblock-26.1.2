@@ -3509,9 +3509,9 @@
         "<input " + field + "='amount' type='number' min='1' step='1' value='" +
         esc(row.amount) + "'></label>";
     } else if (kind === "entity") {
-      resourceField = "<label class='field'><span>id</span>" +
+      resourceField = "<label class='field'><span>id / tag</span>" +
         "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
-        "value='" + esc(row.resource) + "' placeholder='minecraft:pig'></label>";
+        "value='" + esc(row.resource) + "' placeholder='minecraft:pig ou #c:chickens'></label>";
       amountField = "<label class='field'><span>quantidade</span>" +
         "<input " + field + "='count' type='number' min='1' max='99' step='1' value='" +
         esc(row.count) + "'></label>";
@@ -3746,6 +3746,10 @@
     } else if (typeof parsed.id === "string" && trim(parsed.id)) {
       source = "entry";
       resource = trim(parsed.id);
+    } else if (typeof parsed.tag === "string" && trim(parsed.tag)) {
+      source = "entry";
+      var pastedTag = trim(parsed.tag);
+      resource = pastedTag.charAt(0) === "#" ? pastedTag : "#" + pastedTag;
     }
     if (!resource) {
       return null;

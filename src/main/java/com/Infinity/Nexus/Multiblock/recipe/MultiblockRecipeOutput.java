@@ -8,9 +8,11 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -146,29 +148,34 @@ public sealed interface MultiblockRecipeOutput {
         }
     }
 
-    record Entity(EntityType<?> entityType, String spawn, int count, float chance) implements MultiblockRecipeOutput {
+    record Entity(EntityTypeSelector type, String spawn, int count, float chance) implements MultiblockRecipeOutput {
         private static final MapCodec<Entity> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                EntityType.CODEC.fieldOf("id").forGetter(Entity::entityType),
+                EntityType.CODEC.optionalFieldOf("id").forGetter(entity -> entity.type().direct()),
+                EntityTypeSelector.TAG_CODEC.optionalFieldOf("tag").forGetter(entity -> entity.type().tag()),
                 Codec.STRING.validate(Entity::validateSpawn).optionalFieldOf("spawn", "")
                         .forGetter(Entity::spawn),
                 Codec.intRange(1, 99).optionalFieldOf("count", 1).forGetter(Entity::count),
                 CHANCE_CODEC.optionalFieldOf("chance", 1.0F).forGetter(Entity::chance))
-                .apply(instance, Entity::new));
+                .apply(instance, Entity::fromCodec));
 
         private static final StreamCodec<RegistryFriendlyByteBuf, Entity> STREAM_CODEC = StreamCodec.composite(
-                EntityType.STREAM_CODEC, Entity::entityType,
+                EntityTypeSelector.STREAM_CODEC, Entity::type,
                 ByteBufCodecs.STRING_UTF8, Entity::spawn,
                 ByteBufCodecs.VAR_INT, Entity::count,
                 ByteBufCodecs.FLOAT, Entity::chance,
                 Entity::new);
 
         public Entity {
-            Objects.requireNonNull(entityType, "entityType");
+            Objects.requireNonNull(type, "type");
             spawn = spawn == null ? "" : spawn.trim();
             if (count < 1) {
                 throw new IllegalArgumentException("Entity recipe output count must be positive");
             }
             validateChance(chance);
+        }
+
+        public Entity(EntityType<?> entityType, String spawn, int count, float chance) {
+            this(new EntityTypeSelector.Direct(entityType), spawn, count, chance);
         }
 
         public Entity(EntityType<?> entityType, String spawn, float chance) {
@@ -179,8 +186,31 @@ public sealed interface MultiblockRecipeOutput {
             this(entityType, spawn, 1, 1.0F);
         }
 
+        public Entity(TagKey<EntityType<?>> tag, String spawn, int count, float chance) {
+            this(new EntityTypeSelector.Tag(tag), spawn, count, chance);
+        }
+
+        public Entity(TagKey<EntityType<?>> tag, String spawn) {
+            this(tag, spawn, 1, 1.0F);
+        }
+
         public Optional<PortSelector> selector() {
             return PortSelector.parse(this.spawn);
+        }
+
+        private static Entity fromCodec(
+                Optional<EntityType<?>> entityType,
+                Optional<TagKey<EntityType<?>>> tag,
+                String spawn,
+                int count,
+                float chance) {
+            if (entityType.isPresent() == tag.isPresent()) {
+                throw new IllegalArgumentException("Entity recipe output must define exactly one of 'id' or 'tag'");
+            }
+            EntityTypeSelector type = entityType.<EntityTypeSelector>map(EntityTypeSelector.Direct::new)
+                    .or(() -> tag.map(EntityTypeSelector.Tag::new))
+                    .orElseThrow();
+            return new Entity(type, spawn, count, chance);
         }
 
         private static DataResult<String> validateSpawn(String value) {

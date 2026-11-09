@@ -6,6 +6,21 @@
 
 ---
 
+## <span style="color:#2DC26B;">` V: 1.0.5`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Default entity output spawn position on flat multiblocks
+### <span style="color:#E67E23;"> **Change**:</span>
+### <span style="color:#BA372A;"> **Removed**:</span>
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.0.4`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Entities tag support to recipe in/out
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.0.3`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Filtered inputs for fluid ports using pattern Key

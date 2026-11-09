@@ -45,12 +45,15 @@ import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ItemLike;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
@@ -283,16 +286,23 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         }
 
         List<EntityPreview> entityPreviews = new ArrayList<>();
-        for (MultiblockRecipeIngredient.Entity input : recipe.entityInputs()) {
-            entityPreviews.add(new EntityPreview(input.entityType(), false, input.count(), 1.0F));
-        }
-        for (MultiblockRecipeOutput output : recipe.outputs()) {
-            if (output instanceof MultiblockRecipeOutput.Entity entityOutput) {
-                entityPreviews.add(new EntityPreview(
-                        entityOutput.entityType(),
-                        true,
-                        entityOutput.count(),
-                        entityOutput.chance()));
+        HolderGetter<EntityType<?>> entityRegistry = entityTypeRegistry();
+        if (entityRegistry != null) {
+            for (MultiblockRecipeIngredient.Entity input : recipe.entityInputs()) {
+                for (EntityType<?> entityType : input.type().resolve(entityRegistry)) {
+                    entityPreviews.add(new EntityPreview(entityType, false, input.count(), 1.0F));
+                }
+            }
+            for (MultiblockRecipeOutput output : recipe.outputs()) {
+                if (output instanceof MultiblockRecipeOutput.Entity entityOutput) {
+                    for (EntityType<?> entityType : entityOutput.type().resolve(entityRegistry)) {
+                        entityPreviews.add(new EntityPreview(
+                                entityType,
+                                true,
+                                entityOutput.count(),
+                                entityOutput.chance()));
+                    }
+                }
             }
         }
         if (!entityPreviews.isEmpty()) {
@@ -467,10 +477,15 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
 
     private static String entityInputNames(List<MultiblockRecipeIngredient.Entity> inputs) {
         return inputs.stream()
-                .map(input -> input.entityType().getDescription().getString())
+                .map(input -> input.type().displayName().getString())
                 .distinct()
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
+    }
+
+    private static @Nullable HolderGetter<EntityType<?>> entityTypeRegistry() {
+        Level level = Minecraft.getInstance().level;
+        return level == null ? null : level.registryAccess().lookupOrThrow(Registries.ENTITY_TYPE);
     }
 
     private static void addInvisibleOutput(IRecipeLayoutBuilder builder, MultiblockRecipeOutput output) {

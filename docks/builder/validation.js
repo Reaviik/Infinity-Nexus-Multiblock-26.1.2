@@ -140,6 +140,32 @@
     return text.startsWith("#") ? text.slice(1) : text;
   }
 
+  function parseEntitySelector(value) {
+    var text = trimString(value);
+    if (!text) {
+      return null;
+    }
+    if (text.charAt(0) === "#") {
+      var tag = text.slice(1);
+      return isValidIdentifier(tag) ? { tag: "#" + tag } : null;
+    }
+    return isValidIdentifier(text) ? { id: text } : null;
+  }
+
+  function entityResourceFromEntry(entry) {
+    if (!isPlainObject(entry)) {
+      return "";
+    }
+    if (typeof entry.id === "string" && trimString(entry.id)) {
+      return trimString(entry.id);
+    }
+    if (typeof entry.tag === "string" && trimString(entry.tag)) {
+      var tag = trimString(entry.tag);
+      return tag.charAt(0) === "#" ? tag : "#" + tag;
+    }
+    return "";
+  }
+
   function createMatcher(kind) {
     return {
       kind: kind || "block",
@@ -452,7 +478,11 @@
           row.resource = parseRecipeResource(entry.ingredient);
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
         } else if (kind === "entity") {
-          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.resource = entityResourceFromEntry(entry);
+          if (typeof entry.id === "string" && typeof entry.tag === "string"
+              && trimString(entry.id) && trimString(entry.tag)) {
+            notes.push({ severity: "warning", message: "Entidade com id e tag: apenas o id foi usado." });
+          }
           row.spawn = typeof entry.spawn === "string" ? entry.spawn : "";
           row.count = entry.count === undefined ? "1" : String(entry.count);
         } else {
@@ -510,7 +540,11 @@
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
           row.chance = entry.chance === undefined ? "1" : String(entry.chance);
         } else if (kind === "entity") {
-          row.resource = typeof entry.id === "string" ? entry.id : "";
+          row.resource = entityResourceFromEntry(entry);
+          if (typeof entry.id === "string" && typeof entry.tag === "string"
+              && trimString(entry.id) && trimString(entry.tag)) {
+            notes.push({ severity: "warning", message: "Entidade com id e tag: apenas o id foi usado." });
+          }
           row.spawn = typeof entry.spawn === "string" ? entry.spawn : "";
           row.count = entry.count === undefined ? "1" : String(entry.count);
           row.chance = entry.chance === undefined ? "1" : String(entry.chance);
@@ -523,7 +557,9 @@
     } else if (isPlainObject(raw.output)) {
       var outputKind = recipeRowKind(raw.output.type);
       var outputRow = createRecipeOutputRow(outputKind);
-      outputRow.resource = typeof raw.output.id === "string" ? raw.output.id : "";
+      outputRow.resource = outputKind === "entity"
+        ? entityResourceFromEntry(raw.output)
+        : (typeof raw.output.id === "string" ? raw.output.id : "");
       if (outputKind === "fluid") {
         outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
       } else if (outputKind === "entity") {
@@ -781,11 +817,16 @@
         }
         inputs.push({ type: "fluid", ingredient: fluidId, amount: amount });
       } else if (kind === "entity") {
-        var entityId = trimString(row.resource);
-        if (!entityId) {
+        var entitySelector = parseEntitySelector(row.resource);
+        if (entitySelector === null) {
           return;
         }
-        var entityInput = { type: "entity", id: entityId };
+        var entityInput = { type: "entity" };
+        if (entitySelector.id !== undefined) {
+          entityInput.id = entitySelector.id;
+        } else {
+          entityInput.tag = entitySelector.tag;
+        }
         var entityCount = toIntOr(row.count, 1);
         if (entityCount !== 1) {
           entityInput.count = entityCount;
@@ -838,12 +879,17 @@
         }
         outputs.push(fluidOutput);
       } else if (kind === "entity") {
-        var entityId = trimString(row.resource);
+        var entitySelector = parseEntitySelector(row.resource);
         var spawn = trimString(row.spawn);
-        if (!entityId) {
+        if (entitySelector === null) {
           return;
         }
-        var entityOutput = { type: "entity", id: entityId };
+        var entityOutput = { type: "entity" };
+        if (entitySelector.id !== undefined) {
+          entityOutput.id = entitySelector.id;
+        } else {
+          entityOutput.tag = entitySelector.tag;
+        }
         var entityCount = toIntOr(row.count, 1);
         if (entityCount !== 1) {
           entityOutput.count = entityCount;
@@ -1029,9 +1075,9 @@
           }
         } else if (kind === "entity") {
           var entityId = trimString(row.resource);
-          if (!entityId || !isValidIdentifier(entityId)) {
+          if (parseEntitySelector(entityId) === null) {
             addRecipeIssue("recipe.input.entity_invalid", "error", index, field + "resource",
-              "O id da entidade precisa ser um identifier valido.");
+              "O id ou tag da entidade precisa ser valido (tag usa #, ex.: #c:chickens).");
           }
           var entityCount = toInt(row.count);
           if (entityCount === null || entityCount < 1 || entityCount > 99) {
@@ -1122,9 +1168,9 @@
           }
         } else if (kind === "entity") {
           var entityId = trimString(row.resource);
-          if (!entityId || !isValidIdentifier(entityId)) {
+          if (parseEntitySelector(entityId) === null) {
             addRecipeIssue("recipe.output.entity_invalid", "error", index, field + "resource",
-              "O id da entidade precisa ser um identifier valido.");
+              "O id ou tag da entidade precisa ser valido (tag usa #, ex.: #c:chickens).");
           }
           var entityCount = toInt(row.count);
           if (entityCount === null || entityCount < 1 || entityCount > 99) {
@@ -4163,6 +4209,8 @@
     createRecipeInputRow: createRecipeInputRow,
     createRecipeOutputRow: createRecipeOutputRow,
     parseRecipeResource: parseRecipeResource,
+    parseEntitySelector: parseEntitySelector,
+    entityResourceFromEntry: entityResourceFromEntry,
     recipeRowKind: recipeRowKind,
     parseRecipe: parseRecipe,
     buildRecipe: buildRecipe,
