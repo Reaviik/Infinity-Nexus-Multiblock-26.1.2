@@ -53,8 +53,9 @@
     { id: "matchers", label: "Matchers", hint: "blocos e tags" },
     { id: "slots", label: "Slots", hint: "item_slots" },
     { id: "capabilities", label: "Capabilities", hint: "energia, fluidos e portas" },
-    { id: "controller", label: "Controller", hint: "item único e receita" },
+    { id: "controller", label: "Controller", hint: "texturas, item e receita" },
     { id: "gui", label: "GUI", hint: "layout e elementos" },
+    { id: "sounds", label: "Sons", hint: "vanilla ou custom" },
     { id: "recipes", label: "Receitas", hint: "data-driven e JEI" },
     { id: "inheritance", label: "Herança", hint: "extends/family e overrides" },
     { id: "review", label: "Revisão", hint: "JSON e checklist" }
@@ -101,6 +102,8 @@
   var lastPaintKey = "";
   var saveTimer = null;
   var toastTimer = null;
+  var minecraftSoundData = null;
+  var minecraftSoundOptionsRendered = false;
 
   function $(id) {
     return document.getElementById(id);
@@ -361,6 +364,20 @@
       state.capabilityPorts = null;
     }
     delete state.extras.capability_ports;
+    if (!isPlainObject(state.textures)) {
+      state.textures = isPlainObject(state.extras.textures)
+        ? V.parseTextures(state.extras.textures, [])
+        : V.createTextures();
+    }
+    state.textures.idle = Object.assign(
+      V.createTextureSet(),
+      isPlainObject(state.textures.idle) ? state.textures.idle : {}
+    );
+    state.textures.active = Object.assign(
+      V.createTextureSet(),
+      isPlainObject(state.textures.active) ? state.textures.active : {}
+    );
+    delete state.extras.textures;
     delete state.controller;
     delete state.recipeType;
     delete state.extras.controller;
@@ -393,6 +410,16 @@
       }
     }
     delete state.extras.gui;
+    if (!isPlainObject(state.sounds) && isPlainObject(state.extras.sounds)) {
+      state.sounds = V.parseSounds(state.extras.sounds, []);
+    }
+    if (!isPlainObject(state.sounds)) {
+      state.sounds = V.createSounds();
+    }
+    if (!isPlainObject(state.sounds.extras)) {
+      state.sounds.extras = {};
+    }
+    delete state.extras.sounds;
     if (!isPlainObject(state.patternExtras)) {
       state.patternExtras = {};
     }
@@ -636,7 +663,8 @@
   }
 
   function renderFieldErrors() {
-    ["namespace", "path", "tier", "priority", "inventoryRows", "anchor", "pattern", "inheritanceParent"].forEach(function (field) {
+    ["namespace", "path", "tier", "priority", "inventoryRows", "anchor", "pattern", "inheritanceParent",
+      "soundProcessing", "soundFinish"].forEach(function (field) {
       setFieldError(field);
     });
     Object.keys(FIELD_INPUTS).forEach(function (field) {
@@ -665,6 +693,7 @@
     setStepBadge("capabilitiesBadge", "capabilities");
     setStepBadge("controllerBadge", "controller");
     setStepBadge("guiBadge", "gui");
+    setStepBadge("soundsBadge", "sounds");
     setStepBadge("recipesBadge", "recipes");
     setStepBadge("inheritanceBadge", "inheritance");
     setStepBadge("reviewBadge", null);
@@ -2186,6 +2215,90 @@
     return "Shaped " + rows.length + "x" + width + " -> infinity_nexus_multiblock:multiblock_controller";
   }
 
+  function textureSetCount(textures) {
+    if (!isPlainObject(textures)) {
+      return 0;
+    }
+    return ["front", "side", "top", "bottom", "particle"].filter(function (key) {
+      return Boolean(trim(textures[key]));
+    }).length;
+  }
+
+  function texturesSummaryText() {
+    var textures = isPlainObject(state.textures) ? state.textures : null;
+    if (!textures) {
+      return "Sem texturas por definição; usa o modelo padrão do controller.";
+    }
+    var idle = textureSetCount(textures.idle);
+    var active = textureSetCount(textures.active);
+    if (idle === 0 && active === 0) {
+      return "Sem texturas por definição; usa o modelo padrão do controller.";
+    }
+    var parts = [];
+    if (idle > 0) {
+      parts.push(idle + (idle === 1 ? " face idle" : " faces idle"));
+    }
+    if (active > 0) {
+      parts.push(active + (active === 1 ? " face active" : " faces active"));
+    }
+    return parts.join(" + ") + " configurada(s).";
+  }
+
+  function updateTexturesCard() {
+    var textures = isPlainObject(state.textures) ? state.textures : V.createTextures();
+    var summary = $("texturesSummary");
+    var feedback = $("texturesFeedback");
+    var jsonElement = $("texturesJson");
+    if (summary) {
+      summary.textContent = texturesSummaryText();
+    }
+    if (feedback) {
+      var problem = V.texturesProblem(textures);
+      feedback.textContent = problem;
+      feedback.hidden = !problem;
+      feedback.className = "matcher-feedback controller-feedback" + (problem ? " is-error" : "");
+    }
+    if (jsonElement) {
+      jsonElement.textContent = JSON.stringify(V.buildTextures(textures), null, 2);
+    }
+  }
+
+  function renderTextures() {
+    var textures = isPlainObject(state.textures) ? state.textures : V.createTextures();
+    $$("[data-texture-set]").forEach(function (input) {
+      var setName = input.getAttribute("data-texture-set");
+      var field = input.getAttribute("data-texture-field");
+      var set = isPlainObject(textures[setName]) ? textures[setName] : {};
+      input.value = trim(set[field]);
+      input.classList.remove("is-invalid");
+    });
+    updateTexturesCard();
+  }
+
+  function onTexturesInput(event) {
+    var input = closest(event.target, "[data-texture-set]");
+    if (!input) {
+      return;
+    }
+    var setName = input.getAttribute("data-texture-set");
+    var field = input.getAttribute("data-texture-field");
+    if (!isPlainObject(state.textures)) {
+      state.textures = V.createTextures();
+    }
+    if (!isPlainObject(state.textures[setName])) {
+      state.textures[setName] = V.createTextureSet();
+    }
+    state.textures[setName][field] = input.value;
+    updateTexturesCard();
+    refresh({ skipTextures: true, skipControllerRecipe: true });
+  }
+
+  function resetTextures() {
+    state.textures = V.createTextures();
+    refresh({ skipControllerRecipe: true });
+    showToast("Texturas por definição removidas.");
+  }
+
   function updateControllerRecipeCard() {
     var recipe = isPlainObject(state.controllerRecipe) ? state.controllerRecipe : null;
     var summary = $("controllerRecipeSummary");
@@ -2960,6 +3073,125 @@
       });
     }
     updateGuiCard();
+  }
+
+  function soundsSummaryText() {
+    var sounds = isPlainObject(state.sounds) ? state.sounds : null;
+    var parts = [];
+    if (sounds && trim(sounds.processing)) {
+      parts.push("processing");
+    }
+    if (sounds && trim(sounds.finish)) {
+      parts.push("finish");
+    }
+    if (parts.length === 0) {
+      return "Sem sons; a máquina permanece silenciosa.";
+    }
+    if (parts.length === 2) {
+      return "Sons definidos: processing e finish.";
+    }
+    return "Som definido: " + parts[0] + ".";
+  }
+
+  function minecraftSoundCatalog() {
+    if (minecraftSoundData) {
+      return minecraftSoundData;
+    }
+    var data = window.MINECRAFT_SOUNDS;
+    if (isPlainObject(data) && Array.isArray(data.sounds)) {
+      minecraftSoundData = data;
+    } else if (Array.isArray(data)) {
+      minecraftSoundData = { version: "", sounds: data };
+    }
+    return minecraftSoundData;
+  }
+
+  function renderMinecraftSoundOptions() {
+    var list = $("minecraftSoundList");
+    var status = $("minecraftSoundStatus");
+    if (!list || !status) {
+      return;
+    }
+    var catalog = minecraftSoundCatalog();
+    if (!catalog) {
+      status.textContent = "Lista de sons vanilla indisponível; digite o identifier manualmente.";
+      return;
+    }
+    if (!minecraftSoundOptionsRendered) {
+      var fragment = document.createDocumentFragment();
+      catalog.sounds.forEach(function (soundId) {
+        if (typeof soundId !== "string") {
+          return;
+        }
+        var option = document.createElement("option");
+        option.value = soundId;
+        fragment.appendChild(option);
+      });
+      list.appendChild(fragment);
+      minecraftSoundOptionsRendered = true;
+    }
+    status.textContent = catalog.sounds.length + " sons vanilla" +
+      (catalog.version ? " (" + catalog.version + ")" : "") +
+      ". Escolha na lista ou digite um ID próprio.";
+  }
+
+  function updateSoundsCard() {
+    var summary = $("soundsSummary");
+    if (summary) {
+      summary.textContent = soundsSummaryText();
+    }
+    [["soundProcessing", "processing"], ["soundFinish", "finish"]].forEach(function (pair) {
+      var input = $(pair[0]);
+      if (!input) {
+        return;
+      }
+      var hasError = report.issues.some(function (entry) {
+        return entry.severity === "error" && entry.field === pair[0];
+      });
+      input.classList.toggle("is-invalid", hasError);
+    });
+  }
+
+  function renderSounds() {
+    var sounds = isPlainObject(state.sounds) ? state.sounds : V.createSounds();
+    state.sounds = sounds;
+    if (!isPlainObject(sounds.extras)) {
+      sounds.extras = {};
+    }
+    var processingInput = $("soundProcessing");
+    var finishInput = $("soundFinish");
+    if (processingInput) {
+      processingInput.value = trim(sounds.processing);
+    }
+    if (finishInput) {
+      finishInput.value = trim(sounds.finish);
+    }
+    renderMinecraftSoundOptions();
+    updateSoundsCard();
+  }
+
+  function onSoundInput(event) {
+    var target = event.target;
+    var field = target ? target.getAttribute("data-sound-field") : "";
+    if (!field) {
+      return;
+    }
+    if (!isPlainObject(state.sounds)) {
+      state.sounds = V.createSounds();
+    }
+    state.sounds[field] = target.value;
+    refresh({
+      skipPattern: true,
+      skipMatchers: true,
+      skipSlots: true,
+      skipCapabilities: true,
+      skipController: true,
+      skipGui: true,
+      skipSounds: true,
+      skipRecipes: true,
+      skipInheritance: true
+    });
+    updateSoundsCard();
   }
 
   function ensureGui() {
@@ -4315,11 +4547,17 @@
     if (activeStep === "capabilities" && !settings.skipCapabilities) {
       renderCapabilities();
     }
+    if (activeStep === "controller" && !settings.skipTextures) {
+      renderTextures();
+    }
     if (activeStep === "controller" && !settings.skipControllerRecipe) {
       renderControllerRecipe();
     }
     if (activeStep === "gui" && !settings.skipGui) {
       renderGui();
+    }
+    if (activeStep === "sounds" && !settings.skipSounds) {
+      renderSounds();
     }
     if (activeStep === "recipes" && !settings.skipRecipes) {
       renderRecipes();
@@ -4450,6 +4688,18 @@
     }
     if (field === "gui") {
       focusElement($("guiPanel"), false);
+      return;
+    }
+    if (field === "sounds") {
+      focusElement($("soundsPanel"), false);
+      return;
+    }
+    if (field === "soundProcessing") {
+      focusElement($("soundProcessing"), true);
+      return;
+    }
+    if (field === "soundFinish") {
+      focusElement($("soundFinish"), true);
       return;
     }
     if (field === "guiTexture") {
@@ -5145,6 +5395,8 @@
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);
     $("capabilityPortsPanel").addEventListener("input", onCapabilityPortsInput);
+    $("texturesForm").addEventListener("input", onTexturesInput);
+    $("resetTexturesBtn").addEventListener("click", resetTextures);
     $("addControllerRecipeBtn").addEventListener("click", addControllerRecipe);
     $("removeControllerRecipeBtn").addEventListener("click", removeControllerRecipe);
     $("controllerRecipePalette").addEventListener("click", onControllerRecipePaletteClick);
@@ -5162,6 +5414,7 @@
     $("guiCanvas").addEventListener("pointermove", moveGuiCanvasDrag);
     $("guiCanvas").addEventListener("pointerup", endGuiCanvasDrag);
     $("guiCanvas").addEventListener("pointercancel", endGuiCanvasDrag);
+    $("soundsPanel").addEventListener("input", onSoundInput);
     $("inheritanceMode").addEventListener("change", onInheritanceChange);
     $("inheritanceTemplate").addEventListener("change", onInheritanceChange);
     $("inheritanceParent").addEventListener("input", onInheritanceInput);

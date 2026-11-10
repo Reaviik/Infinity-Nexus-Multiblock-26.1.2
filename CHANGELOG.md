@@ -4,14 +4,26 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+## <span style="color:#2DC26B;">` V: 1.0.7`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Support for controller custom textures
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.0.6`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Multiblock preview fixed in world on attack with controller in hand
+- Sound support to multiblock process and finisher recipes
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Multiblock preview fps reduced
+### <span style="color:#E67E23;"> **Change**:</span>
+- Update builder
+
 ---
 
 ## <span style="color:#2DC26B;">` V: 1.0.5`</span>
-### <span style="color:#3598DB;"> **Add**:</span>
 ### <span style="color:#F1C40F;"> **Fix**:</span>
 - Default entity output spawn position on flat multiblocks
-### <span style="color:#E67E23;"> **Change**:</span>
-### <span style="color:#BA372A;"> **Removed**:</span>
 
 ---
 

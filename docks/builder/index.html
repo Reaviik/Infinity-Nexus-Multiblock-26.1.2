@@ -353,7 +353,7 @@
           <div>
             <p class="eyebrow">Etapa 06 · opcional</p>
             <h1 id="controllerTitle">Controller único e receita</h1>
-            <p class="view-subtitle">Todas as definições usam o mesmo bloco e item controller. Aqui você apenas configura a receita shaped opcional que cria esse item.</p>
+            <p class="view-subtitle">Todas as definições usam o mesmo bloco e item controller. Aqui você configura texturas opcionais por definição e a receita shaped que cria esse item.</p>
           </div>
           <span class="badge badge-neutral" id="controllerBadge">Pendente</span>
         </div>
@@ -362,7 +362,7 @@
           <div class="panel-head">
             <div>
               <h2>controller compartilhado</h2>
-              <p class="panel-subtitle" id="controllerSummary">Todas as definições usam o mesmo controller; não há bloco ou textura por máquina.</p>
+              <p class="panel-subtitle" id="controllerSummary">Todas as definições usam o mesmo controller; as texturas por definição são opcionais.</p>
             </div>
           </div>
           <div class="missing-empty">
@@ -370,6 +370,69 @@
             <p><code>infinity_nexus_multiblock:multiblock_controller</code></p>
             <p>Cada definição é associada ao controller pelo componente <code>infinity_nexus_multiblock:multiblock_definition</code>.</p>
           </div>
+        </div>
+
+        <div class="panel" id="texturesPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>textures</h2>
+              <p class="panel-subtitle" id="texturesSummary">Sem texturas por definição; usa o modelo padrão do controller.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny btn-danger" id="resetTexturesBtn">limpar texturas</button>
+            </div>
+          </div>
+          <p class="field-hint">Ids completos como <code>minecraft:block/stone</code>. Faces omitidas caem no modelo padrão. <code>particle</code> cai em <code>front</code> quando vazio.</p>
+          <div id="texturesForm" autocomplete="off">
+            <h3 class="controller-section-title">Idle <span class="controller-optional">controller parado</span></h3>
+            <div class="controller-texture-grid">
+              <div class="field">
+                <label for="textureIdleFront">front</label>
+                <input id="textureIdleFront" type="text" data-texture-set="idle" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="minecraft:block/stone">
+              </div>
+              <div class="field">
+                <label for="textureIdleSide">side</label>
+                <input id="textureIdleSide" type="text" data-texture-set="idle" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_planks">
+              </div>
+              <div class="field">
+                <label for="textureIdleTop">top</label>
+                <input id="textureIdleTop" type="text" data-texture-set="idle" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log_top">
+              </div>
+              <div class="field">
+                <label for="textureIdleBottom">bottom</label>
+                <input id="textureIdleBottom" type="text" data-texture-set="idle" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log_top">
+              </div>
+              <div class="field">
+                <label for="textureIdleParticle">particle</label>
+                <input id="textureIdleParticle" type="text" data-texture-set="idle" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="padrão: front">
+              </div>
+            </div>
+            <h3 class="controller-section-title">Active <span class="controller-optional">opcional, controller processando</span></h3>
+            <div class="controller-texture-grid">
+              <div class="field">
+                <label for="textureActiveFront">front</label>
+                <input id="textureActiveFront" type="text" data-texture-set="active" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="minecraft:block/smooth_stone">
+              </div>
+              <div class="field">
+                <label for="textureActiveSide">side</label>
+                <input id="textureActiveSide" type="text" data-texture-set="active" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log">
+              </div>
+              <div class="field">
+                <label for="textureActiveTop">top</label>
+                <input id="textureActiveTop" type="text" data-texture-set="active" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="herda idle">
+              </div>
+              <div class="field">
+                <label for="textureActiveBottom">bottom</label>
+                <input id="textureActiveBottom" type="text" data-texture-set="active" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="herda idle">
+              </div>
+              <div class="field">
+                <label for="textureActiveParticle">particle</label>
+                <input id="textureActiveParticle" type="text" data-texture-set="active" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="herda idle">
+              </div>
+            </div>
+          </div>
+          <code class="matcher-json slot-json controller-json" id="texturesJson"></code>
+          <p class="matcher-feedback controller-feedback" id="texturesFeedback" hidden></p>
         </div>
 
         <div class="panel" id="controllerRecipePanel">
@@ -404,7 +467,7 @@
         </div>
 
         <div class="callout callout-info">
-          O controller, suas texturas e o block entity são compartilhados por todas as definições. O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
+          O bloco, o item e o block entity são compartilhados; o campo <code>textures</code> permite sobrescrever as texturas por definição (idle/active). O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
         </div>
       </section>
 
@@ -489,10 +552,55 @@
         </div>
       </section>
 
-      <section class="view" data-view="recipes" aria-labelledby="recipesTitle" hidden>
+      <section class="view" data-view="sounds" aria-labelledby="soundsTitle" hidden>
         <div class="view-head">
           <div>
             <p class="eyebrow">Etapa 08 · opcional</p>
+            <h1 id="soundsTitle">Sons</h1>
+            <p class="view-subtitle">Escolha um som vanilla na lista ou digite um <code>namespace:path</code> do seu próprio resource pack. <code>processing</code> toca enquanto a receita avança; <code>finish</code> toca ao completar.</p>
+          </div>
+          <span class="badge badge-neutral" id="soundsBadge">Pendente</span>
+        </div>
+
+        <div class="panel" id="soundsPanel">
+          <div class="panel-head">
+            <div>
+              <h2>sounds</h2>
+              <p class="panel-subtitle" id="soundsSummary">Sem sons; a máquina permanece silenciosa.</p>
+            </div>
+          </div>
+          <div class="controller-form">
+            <div class="field field-wide">
+              <label for="soundProcessing">processing</label>
+              <input id="soundProcessing" type="text" list="minecraftSoundList" data-sound-field="processing"
+                spellcheck="false" autocomplete="off" placeholder="minecraft:block.furnace.fire_crackle">
+              <p class="field-hint">Toca a cada 20 ticks enquanto houver progresso. Vazio desativa o som.</p>
+              <p class="field-error" data-error-for="soundProcessing"></p>
+            </div>
+            <div class="field field-wide">
+              <label for="soundFinish">finish</label>
+              <input id="soundFinish" type="text" list="minecraftSoundList" data-sound-field="finish"
+                spellcheck="false" autocomplete="off" placeholder="minecraft:block.anvil.use">
+              <p class="field-hint">Toca uma vez quando a receita completa. Vazio desativa o som.</p>
+              <p class="field-error" data-error-for="soundFinish"></p>
+            </div>
+          </div>
+          <datalist id="minecraftSoundList"></datalist>
+          <p class="grid-help" id="minecraftSoundStatus">Carregando lista de sons vanilla...</p>
+        </div>
+
+        <div class="callout callout-info">
+          A lista vem de <code>data/minecraft_sounds.json</code>, gerada a partir do <code>sounds.json</code> do Minecraft 26.1.2 (1902 eventos).
+          Você pode digitar qualquer identifier; para usar um som próprio, adicione a entrada em
+          <code>assets/&lt;namespace&gt;/sounds.json</code> e o arquivo <code>.ogg</code> correspondente.
+          Sons só são reproduzidos em máquinas <code>type=recipe</code>.
+        </div>
+      </section>
+
+      <section class="view" data-view="recipes" aria-labelledby="recipesTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 09 · opcional</p>
             <h1 id="recipesTitle">Receitas data-driven</h1>
             <p class="view-subtitle">Crie os arquivos de receita em <code>data/&lt;namespace&gt;/recipe/</code>. O tipo é fixo e o builder preenche <code>definition</code> automaticamente.</p>
           </div>
@@ -529,7 +637,7 @@
       <section class="view" data-view="inheritance" aria-labelledby="inheritanceTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 09 · opcional</p>
+            <p class="eyebrow">Etapa 10 · opcional</p>
             <h1 id="inheritanceTitle">Herança e templates</h1>
             <p class="view-subtitle">Compartilhe pattern, slots, capabilities e GUI com um pai usando <code>extends</code> ou <code>family</code>. O filho declara apenas o que muda.</p>
           </div>
@@ -586,7 +694,7 @@
       <section class="view" data-view="review" aria-labelledby="reviewTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 10 · revisão</p>
+            <p class="eyebrow">Etapa 11 · revisão</p>
             <h1 id="reviewTitle">JSON e checklist</h1>
             <p class="view-subtitle">Revise o resultado, copie o JSON e salve no caminho indicado. O jogo continua sendo a autoridade final.</p>
           </div>
@@ -711,7 +819,7 @@
 
       <div class="notes-card">
         <h3>Escopo do builder</h3>
-        <p>Identidade, pattern, matchers, slots, capabilities, receita do controller, GUI, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
+        <p>Identidade, pattern, matchers, slots, capabilities, receita do controller, GUI, sons, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
         <p>O controller é único e registrado pelo mod. O builder não gera blockstates, modelos ou texturas de controller por definição.</p>
       </div>
     </aside>
@@ -735,6 +843,7 @@
 
   <script src="validation.js"></script>
   <script src="preview3d.js"></script>
+  <script src="data/minecraft_sounds.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

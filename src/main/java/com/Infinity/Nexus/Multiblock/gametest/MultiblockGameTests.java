@@ -2,6 +2,8 @@ package com.Infinity.Nexus.Multiblock.gametest;
 
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
@@ -14,11 +16,13 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
+import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.recipe.EntityTypeSelector;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
@@ -135,6 +139,7 @@ public final class MultiblockGameTests {
                                     + "' is outside " + layout.width() + "x" + layout.height()));
                 }
             }
+            assertDefinitionTextures(helper);
             assertEarlySlotPositions(helper);
             assertFluidOnlyGui(helper);
             assertFluidPortBinding(helper);
@@ -224,6 +229,66 @@ public final class MultiblockGameTests {
                 throw helper.assertionException(Component.literal(
                         "Generated controller recipe has definition " + componentDefinition
                                 + " instead of " + definitionId));
+            }
+        }
+
+        private static void assertDefinitionTextures(GameTestHelper helper) {
+            Identifier definitionId = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "fabrica_de_voxel_cube");
+            MultiblockDefinition definition = MultiblockDefinitions.get(definitionId);
+            if (definition == null) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock definition is missing: " + definitionId));
+            }
+
+            MultiblockTextures textures = definition.textures();
+            if (textures.isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock definition is missing its configured textures: " + definitionId));
+            }
+
+            Identifier stone = Identifier.parse("minecraft:block/stone");
+            Identifier smoothStone = Identifier.parse("minecraft:block/smooth_stone");
+            Identifier oakPlanks = Identifier.parse("minecraft:block/oak_planks");
+            Identifier oakLog = Identifier.parse("minecraft:block/oak_log");
+            Map<String, Identifier> idle = textures.resolve(false);
+            Map<String, Identifier> active = textures.resolve(true);
+            if (!stone.equals(idle.get("front"))
+                    || !oakPlanks.equals(idle.get("side"))
+                    || !stone.equals(idle.get("particle"))) {
+                throw helper.assertionException(Component.literal(
+                        "Idle textures resolved incorrectly: " + idle));
+            }
+            if (!smoothStone.equals(active.get("front"))
+                    || !oakLog.equals(active.get("side"))) {
+                throw helper.assertionException(Component.literal(
+                        "Active textures did not overlay the idle textures: " + active));
+            }
+
+            Identifier front = Identifier.parse("minecraft:block/front_test");
+            MultiblockTextures particleFallback = new MultiblockTextures(
+                    new MultiblockTextures.TextureSet(
+                            Optional.of(front),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty()),
+                    Optional.empty());
+            if (!front.equals(particleFallback.resolve(false).get("particle"))) {
+                throw helper.assertionException(Component.literal(
+                        "Resolved textures must fall back from particle to front"));
+            }
+
+            var encoded = MultiblockTextures.CODEC.codec()
+                    .encodeStart(JsonOps.INSTANCE, textures)
+                    .getOrThrow();
+            MultiblockTextures decoded = MultiblockTextures.CODEC.codec()
+                    .parse(JsonOps.INSTANCE, encoded)
+                    .getOrThrow();
+            if (!textures.equals(decoded)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock textures failed to round-trip through their codec: "
+                                + textures + " != " + decoded));
             }
         }
 

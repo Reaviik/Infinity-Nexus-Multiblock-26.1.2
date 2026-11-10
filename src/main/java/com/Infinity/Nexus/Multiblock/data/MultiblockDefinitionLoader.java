@@ -21,6 +21,8 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockSounds;
+import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.google.gson.JsonObject;
@@ -82,6 +84,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             ItemSlotFile.CODEC.listOf().optionalFieldOf("item_slots", List.of()).forGetter(DefinitionFile::itemSlots),
             CapabilitiesFile.CODEC.optionalFieldOf("capabilities", CapabilitiesFile.EMPTY).forGetter(DefinitionFile::capabilities),
             MultiblockGui.CODEC.optionalFieldOf("gui").forGetter(DefinitionFile::gui),
+            SoundsFile.CODEC.optionalFieldOf("sounds").forGetter(DefinitionFile::sounds),
+            MultiblockTextures.CODEC.codec().optionalFieldOf("textures").forGetter(DefinitionFile::textures),
             PortsFile.CODEC.optionalFieldOf("capability_ports").forGetter(DefinitionFile::capabilityPorts),
             PatternFile.CODEC.fieldOf("pattern").forGetter(DefinitionFile::pattern))
             .apply(instance, DefinitionFile::new));
@@ -125,6 +129,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .inventoryRows(file.inventoryRows())
                 .itemSlots(itemSlots)
                 .fluidTanks(fluidTanks)
+                .sounds(file.sounds().map(SoundsFile::toSounds).orElse(MultiblockSounds.EMPTY))
+                .textures(file.textures().orElse(MultiblockTextures.EMPTY))
                 .capabilityPorts(file.capabilityPorts().map(PortsFile::toPorts).orElse(CapabilityPorts.ALL))
                 .pattern(pattern.build());
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
@@ -236,8 +242,21 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             List<ItemSlotFile> itemSlots,
             CapabilitiesFile capabilities,
             Optional<MultiblockGui> gui,
+            Optional<SoundsFile> sounds,
+            Optional<MultiblockTextures> textures,
             Optional<PortsFile> capabilityPorts,
             PatternFile pattern) {
+    }
+
+    public record SoundsFile(Optional<Identifier> processing, Optional<Identifier> finish) {
+        private static final Codec<SoundsFile> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                Identifier.CODEC.optionalFieldOf("processing").forGetter(SoundsFile::processing),
+                Identifier.CODEC.optionalFieldOf("finish").forGetter(SoundsFile::finish))
+                .apply(instance, SoundsFile::new));
+
+        public MultiblockSounds toSounds() {
+            return new MultiblockSounds(this.processing, this.finish);
+        }
     }
 
     public record PortsFile(

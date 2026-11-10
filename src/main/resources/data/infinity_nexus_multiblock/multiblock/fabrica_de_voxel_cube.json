@@ -2,6 +2,20 @@
   "schema_version": 2,
   "id": "infinity_nexus_multiblock:fabrica_de_voxel_cube",
   "type": "recipe",
+  "textures": {
+    "front": "minecraft:block/stone",
+    "side": "minecraft:block/oak_planks",
+    "top": "minecraft:block/oak_log_top",
+    "bottom": "minecraft:block/oak_log_top",
+    "particle": "minecraft:block/stone",
+    "active": {
+      "front": "minecraft:block/smooth_stone",
+      "side": "minecraft:block/oak_log",
+      "top": "minecraft:block/oak_log_top",
+      "bottom": "minecraft:block/oak_log_top",
+      "particle": "minecraft:block/smooth_stone"
+    }
+  },
   "item_slots": [
     {
       "id": "slot_0",
@@ -91,18 +105,6 @@
       }
     ]
   },
-  "recipe": {
-    "pattern": [
-      "ABA",
-      "BCB",
-      "ABA"
-    ],
-    "key": {
-      "A": "minecraft:iron_ingot",
-      "B": "minecraft:ender_pearl",
-      "C": "minecraft:redstone_block"
-    }
-  },
   "gui": {
     "elements": [
       {
@@ -159,6 +161,10 @@
         "color": "0xFF00AA00"
       }
     ]
+  },
+  "sounds": {
+    "processing": "minecraft:block.blastfurnace.fire_crackle",
+    "finish": "minecraft:block.lava.extinguish"
   },
   "pattern": {
     "anchor": "C",
@@ -236,7 +242,7 @@
         " H   H                 E   E ",
         "H     H               E     E",
         "H     H   B   B   B   E     E",
-        "H     H               E     E",
+        "H     H       V       E     E",
         " H   H                 E   E ",
         "  HHH                   EEE  ",
         "                             ",
@@ -415,7 +421,13 @@
       "R": "infinity_nexus_mod:decor_pedestal",
       "S": "infinity_nexus_mod:resource_pedestal",
       "T": "infinity_nexus_mod:creativity_pedestal",
-      "U": "infinity_nexus_mod:tech_pedestal"
+      "U": "infinity_nexus_mod:tech_pedestal",
+      "V": {
+        "block": "minecraft:lever",
+        "state": {
+          "powered": "true"
+        }
+      }
     }
   }
 }

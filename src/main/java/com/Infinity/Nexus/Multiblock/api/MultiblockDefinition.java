@@ -28,6 +28,8 @@ public final class MultiblockDefinition {
     private final Optional<EnergyCapability> energy;
     private final List<FluidTank> fluidTanks;
     private final Optional<MultiblockGui> gui;
+    private final MultiblockSounds sounds;
+    private final MultiblockTextures textures;
     private final CapabilityPorts capabilityPorts;
 
     private MultiblockDefinition(
@@ -42,6 +44,8 @@ public final class MultiblockDefinition {
             Optional<EnergyCapability> energy,
             List<FluidTank> fluidTanks,
             Optional<MultiblockGui> gui,
+            MultiblockSounds sounds,
+            MultiblockTextures textures,
             CapabilityPorts capabilityPorts) {
         this.id = id;
         this.schemaVersion = schemaVersion;
@@ -54,6 +58,8 @@ public final class MultiblockDefinition {
         this.energy = energy;
         this.fluidTanks = fluidTanks;
         this.gui = gui;
+        this.sounds = sounds;
+        this.textures = textures;
         this.capabilityPorts = capabilityPorts;
     }
 
@@ -130,6 +136,14 @@ public final class MultiblockDefinition {
         return this.gui;
     }
 
+    public MultiblockSounds sounds() {
+        return this.sounds;
+    }
+
+    public MultiblockTextures textures() {
+        return this.textures;
+    }
+
     public CapabilityPorts capabilityPorts() {
         return this.capabilityPorts;
     }
@@ -163,6 +177,8 @@ public final class MultiblockDefinition {
         private EnergyCapability energy;
         private List<FluidTank> fluidTanks = List.of();
         private MultiblockGui gui;
+        private MultiblockSounds sounds = MultiblockSounds.EMPTY;
+        private MultiblockTextures textures = MultiblockTextures.EMPTY;
         private CapabilityPorts capabilityPorts = CapabilityPorts.ALL;
 
         private Builder(Identifier id) {
@@ -228,6 +244,16 @@ public final class MultiblockDefinition {
             return this;
         }
 
+        public Builder sounds(MultiblockSounds sounds) {
+            this.sounds = Objects.requireNonNull(sounds, "sounds");
+            return this;
+        }
+
+        public Builder textures(MultiblockTextures textures) {
+            this.textures = Objects.requireNonNull(textures, "textures");
+            return this;
+        }
+
         public Builder capabilityPorts(CapabilityPorts capabilityPorts) {
             this.capabilityPorts = Objects.requireNonNull(capabilityPorts, "capabilityPorts");
             return this;
@@ -265,6 +291,8 @@ public final class MultiblockDefinition {
                     Optional.ofNullable(this.energy),
                     this.fluidTanks,
                     Optional.ofNullable(this.gui),
+                    this.sounds,
+                    this.textures,
                     this.capabilityPorts);
         }
     }

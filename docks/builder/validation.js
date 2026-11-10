@@ -23,6 +23,7 @@
   var FLUID_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter", "port"];
   var CONTROLLER_FACES = ["front", "back", "left", "right", "top", "bottom"];
   var CONTROLLER_KEYS = ["block", "textures", "formed_textures", "particle", "light_level"];
+  var TEXTURE_SET_KEYS = ["front", "side", "top", "bottom", "particle"];
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
   var CONTROLLER_RECIPE_MAX_SIZE = 3;
   var MAX_LIGHT_LEVEL = 15;
@@ -30,6 +31,7 @@
   var GUI_ELEMENT_KEYS = ["type", "x", "y", "width", "height", "text", "slot", "capability", "color", "shadow", "direction", "u", "v"];
   var GUI_DIRECTIONS = ["up", "down", "left", "right"];
   var GUI_KEYS = ["texture", "width", "height", "texture_width", "texture_height", "elements"];
+  var SOUND_KEYS = ["processing", "finish"];
   var GUI_DEFAULT_WIDTH = 176;
   var GUI_DEFAULT_HEIGHT = 166;
   var GUI_DEFAULT_TEXTURE_SIZE = 256;
@@ -50,8 +52,10 @@
     "capabilities",
     "capability_ports",
     "controller",
+    "textures",
     "recipe",
     "gui",
+    "sounds",
     "pattern",
     "extends",
     "family",
@@ -59,7 +63,7 @@
     "overrides"
   ];
   var KNOWN_PATTERN_KEYS = ["anchor", "layers", "matchers"];
-  var STEP_ORDER = ["identity", "pattern", "matchers", "slots", "capabilities", "controller", "gui", "recipes", "inheritance", "review"];
+  var STEP_ORDER = ["identity", "pattern", "matchers", "slots", "capabilities", "controller", "gui", "sounds", "recipes", "inheritance", "review"];
   var CHECK_LABELS = {
     schema: "schema_version = 2",
     identity: "id, namespace, path e type válidos",
@@ -70,8 +74,10 @@
     capabilities: "capabilities válidas",
     capabilityPorts: "capability_ports válidas",
     controller: "controller único e item compartilhado",
+    textures: "texturas idle/active válidas",
     controllerRecipe: "receita shaped do controller válida",
     gui: "gui e elementos válidos",
+    sounds: "sons processing/finish válidos",
     recipes: "receitas data-driven válidas",
     inheritance: "herança, template e overrides válidos",
     metadata: "tier, priority e inventory_rows válidos"
@@ -1696,6 +1702,142 @@
     return textures;
   }
 
+  function createTextureSet() {
+    return {
+      front: "",
+      side: "",
+      top: "",
+      bottom: "",
+      particle: ""
+    };
+  }
+
+  function createTextures() {
+    return {
+      idle: createTextureSet(),
+      active: createTextureSet()
+    };
+  }
+
+  function parseTextureSet(value, notes, path) {
+    var textures = createTextureSet();
+    if (value === undefined || value === null) {
+      return textures;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: path + " precisa ser um objeto e foi ignorado."
+      });
+      return textures;
+    }
+    TEXTURE_SET_KEYS.forEach(function (key) {
+      var raw = value[key];
+      if (raw === undefined || raw === null) {
+        return;
+      }
+      if (typeof raw !== "string") {
+        notes.push({
+          severity: "warning",
+          message: path + "." + key + " inválido foi ignorado."
+        });
+        return;
+      }
+      textures[key] = raw.trim();
+    });
+    return textures;
+  }
+
+  function parseTextures(value, notes, path) {
+    var textures = createTextures();
+    if (value === undefined || value === null) {
+      return textures;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: path + " precisa ser um objeto e foi ignorado."
+      });
+      return textures;
+    }
+    textures.idle = parseTextureSet(value, notes, path);
+    if (value.active !== undefined && value.active !== null) {
+      textures.active = parseTextureSet(value.active, notes, path + ".active");
+    }
+    return textures;
+  }
+
+  function hasTextureSet(textures) {
+    if (!isPlainObject(textures)) {
+      return false;
+    }
+    return TEXTURE_SET_KEYS.some(function (key) {
+      return Boolean(trimString(textures[key]));
+    });
+  }
+
+  function hasTextures(textures) {
+    return isPlainObject(textures) && (hasTextureSet(textures.idle) || hasTextureSet(textures.active));
+  }
+
+  function buildTextureSet(textures) {
+    var result = {};
+    if (!isPlainObject(textures)) {
+      return result;
+    }
+    TEXTURE_SET_KEYS.forEach(function (key) {
+      var texture = trimString(textures[key]);
+      if (texture) {
+        result[key] = texture;
+      }
+    });
+    return result;
+  }
+
+  function buildTextures(textures) {
+    var result = {};
+    if (!isPlainObject(textures)) {
+      return result;
+    }
+    var idle = buildTextureSet(textures.idle);
+    Object.keys(idle).forEach(function (key) {
+      result[key] = idle[key];
+    });
+    var active = buildTextureSet(textures.active);
+    if (Object.keys(active).length > 0) {
+      result.active = active;
+    }
+    return result;
+  }
+
+  function textureSetProblem(textures, label) {
+    if (textures === undefined || textures === null) {
+      return "";
+    }
+    if (!isPlainObject(textures)) {
+      return label + " precisa ser um objeto.";
+    }
+    for (var index = 0; index < TEXTURE_SET_KEYS.length; index += 1) {
+      var key = TEXTURE_SET_KEYS[index];
+      var texture = trimString(textures[key]);
+      if (texture && !isValidIdentifier(texture)) {
+        return label + "." + key + " precisa ser um identifier válido.";
+      }
+    }
+    return "";
+  }
+
+  function texturesProblem(textures) {
+    if (textures === undefined || textures === null) {
+      return "";
+    }
+    if (!isPlainObject(textures)) {
+      return "textures precisa ser um objeto.";
+    }
+    return textureSetProblem(textures.idle, "textures") ||
+      textureSetProblem(textures.active, "textures.active");
+  }
+
   function createController() {
     return {
       block: "",
@@ -2473,6 +2615,67 @@
     return result;
   }
 
+  function createSounds() {
+    return {
+      processing: "",
+      finish: "",
+      extras: {}
+    };
+  }
+
+  function parseSounds(value, notes) {
+    if (value === undefined) {
+      return createSounds();
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: "sounds inválido foi ignorado."
+      });
+      return createSounds();
+    }
+    var sounds = createSounds();
+    SOUND_KEYS.forEach(function (key) {
+      if (value[key] === undefined) {
+        return;
+      }
+      if (typeof value[key] === "string") {
+        sounds[key] = value[key].trim();
+      } else {
+        notes.push({
+          severity: "warning",
+          message: "sounds." + key + " inválido foi ignorado."
+        });
+      }
+    });
+    Object.keys(value).forEach(function (key) {
+      if (!SOUND_KEYS.includes(key)) {
+        sounds.extras[key] = clone(value[key]);
+      }
+    });
+    return sounds;
+  }
+
+  function buildSounds(sounds) {
+    if (!isPlainObject(sounds)) {
+      return clone(sounds);
+    }
+    var result = {};
+    SOUND_KEYS.forEach(function (key) {
+      var id = trimString(sounds[key]);
+      if (id) {
+        result[key] = id;
+      }
+    });
+    var extras = isPlainObject(sounds.extras) ? sounds.extras : {};
+    Object.keys(extras).forEach(function (key) {
+      if (!SOUND_KEYS.includes(key)) {
+        result[key] = clone(extras[key]);
+      }
+    });
+    return result;
+  }
+
   function guiInside(gui, x, y, width, height) {
     return x >= 0 && y >= 0 && x + width <= gui.width && y + height <= gui.height;
   }
@@ -2762,8 +2965,10 @@
       itemSlots: null,
       capabilities: null,
       capabilityPorts: null,
+      textures: createTextures(),
       controllerRecipe: null,
       gui: null,
+      sounds: createSounds(),
       recipes: [],
       inheritance: createInheritance(),
       anchor: "C",
@@ -2796,8 +3001,14 @@
       itemSlots: null,
       capabilities: null,
       capabilityPorts: null,
+      textures: createTextures(),
       controllerRecipe: null,
       gui: null,
+      sounds: {
+        processing: "minecraft:block.furnace.fire_crackle",
+        finish: "minecraft:block.anvil.use",
+        extras: {}
+      },
       recipes: [],
       inheritance: createInheritance(),
       anchor: "C",
@@ -3068,8 +3279,10 @@
     state.itemSlots = parseItemSlots(raw.item_slots, notes);
     state.capabilities = parseCapabilities(raw.capabilities, notes);
     state.capabilityPorts = parseCapabilityPorts(raw.capability_ports, notes);
+    state.textures = parseTextures(raw.textures, notes, "textures");
     state.controllerRecipe = parseControllerRecipe(raw.recipe, notes);
     state.gui = parseGui(raw.gui, notes);
+    state.sounds = parseSounds(raw.sounds, notes);
     state.inheritance = parseInheritance(raw, notes);
 
     var pattern = isPlainObject(raw.pattern) ? raw.pattern : null;
@@ -3198,6 +3411,12 @@
         definition.capability_ports = capabilityPorts;
       }
     }
+    if (isPlainObject(state.textures)) {
+      var textures = buildTextures(state.textures);
+      if (Object.keys(textures).length > 0) {
+        definition.textures = textures;
+      }
+    }
     if (isPlainObject(state.controllerRecipe)) {
       var controllerRecipe = buildControllerRecipe(state.controllerRecipe);
       if (Object.keys(controllerRecipe).length > 0) {
@@ -3206,6 +3425,12 @@
     }
     if (isPlainObject(state.gui)) {
       definition.gui = buildGui(state.gui);
+    }
+    if (isPlainObject(state.sounds)) {
+      var sounds = buildSounds(state.sounds);
+      if (Object.keys(sounds).length > 0) {
+        definition.sounds = sounds;
+      }
     }
 
     Object.keys(extras).forEach(function (key) {
@@ -3364,6 +3589,15 @@
     if (inventoryRows === null || inventoryRows < 1 || inventoryRows > 6) {
       add("inventory_rows.invalid", "error", "identity", "inventoryRows",
         "inventory_rows precisa ser um inteiro de 1 a 6.");
+    }
+
+    var texturesOk = true;
+    if (state.textures !== null && state.textures !== undefined) {
+      var texturesIssue = texturesProblem(state.textures);
+      if (texturesIssue) {
+        texturesOk = false;
+        add("textures.invalid", "error", "controller", "textures", texturesIssue);
+      }
     }
 
     var controllerRecipeOk = true;
@@ -3582,6 +3816,38 @@
               }
             });
           }
+        }
+      }
+    }
+
+    var soundsOk = true;
+    if (state.sounds !== null && state.sounds !== undefined) {
+      if (!isPlainObject(state.sounds)) {
+        soundsOk = false;
+        add("sounds.invalid", "error", "sounds", "sounds",
+          "sounds precisa ser um objeto ou ficar ausente.");
+      } else {
+        var hasMachineSound = false;
+        SOUND_KEYS.forEach(function (key) {
+          var rawValue = state.sounds[key];
+          var soundId = trimString(rawValue);
+          var field = "sound" + key.charAt(0).toUpperCase() + key.slice(1);
+          if (rawValue !== undefined && rawValue !== null && typeof rawValue !== "string") {
+            soundsOk = false;
+            add("sounds." + key + ".invalid", "error", "sounds", field,
+              "sounds." + key + " precisa ser um identifier namespace:path.");
+          } else if (soundId && !isValidIdentifier(soundId)) {
+            soundsOk = false;
+            add("sounds." + key + ".invalid", "error", "sounds", field,
+              "sounds." + key + " precisa ser um identifier namespace:path.");
+          }
+          if (soundId) {
+            hasMachineSound = true;
+          }
+        });
+        if (hasMachineSound && state.type !== "recipe") {
+          add("sounds.type", "warning", "sounds", "sounds",
+            "Sons só tocam em máquinas type=recipe; em storage o campo é ignorado em runtime.");
         }
       }
     }
@@ -4102,6 +4368,12 @@
       step: "controller"
     });
     checks.push({
+      id: "textures",
+      label: CHECK_LABELS.textures,
+      ok: texturesOk,
+      step: "controller"
+    });
+    checks.push({
       id: "controllerRecipe",
       label: CHECK_LABELS.controllerRecipe,
       ok: controllerRecipeOk,
@@ -4123,6 +4395,14 @@
         return errorCodes.has(code);
       }),
       step: "gui"
+    });
+    checks.push({
+      id: "sounds",
+      label: CHECK_LABELS.sounds,
+      ok: !["sounds.invalid", "sounds.processing.invalid", "sounds.finish.invalid"].some(function (code) {
+        return errorCodes.has(code);
+      }),
+      step: "sounds"
     });
     checks.push({
       id: "recipes",
@@ -4228,11 +4508,20 @@
     capabilityPortText: capabilityPortText,
     createEnergy: createEnergy,
     createFluidTank: createFluidTank,
+    createTextureSet: createTextureSet,
+    createTextures: createTextures,
+    parseTextures: parseTextures,
+    buildTextures: buildTextures,
+    hasTextures: hasTextures,
+    texturesProblem: texturesProblem,
     createController: createController,
     createFormedTextures: createFormedTextures,
     createControllerRecipe: createControllerRecipe,
     createGui: createGui,
     createGuiElement: createGuiElement,
+    createSounds: createSounds,
+    parseSounds: parseSounds,
+    buildSounds: buildSounds,
     parseItemSlots: parseItemSlots,
     parseCapabilities: parseCapabilities,
     parseCapabilityPorts: parseCapabilityPorts,

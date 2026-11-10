@@ -1,7 +1,8 @@
 package com.Infinity.Nexus.Multiblock.client.preview;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
 
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.mojang.blaze3d.platform.Lighting.Entry;
@@ -14,6 +15,7 @@ import net.minecraft.client.gui.render.pip.PictureInPictureRenderer;
 import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.BlockModelRenderState;
+import net.minecraft.client.renderer.block.BlockModelSet;
 import net.minecraft.client.renderer.block.model.BlockDisplayContext;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
@@ -115,9 +117,16 @@ public final class MultiblockDiorama {
     }
 
     static final class Renderer extends PictureInPictureRenderer<State> {
-        private final BlockModelRenderState block = new BlockModelRenderState();
-        private final List<ItemStackRenderState> items = new ArrayList<>();
+        private final Map<BlockState, BlockModelRenderState> blocks = new HashMap<>();
+        private final Map<ItemStack, ItemStackRenderState> items = new IdentityHashMap<>();
         private final BlockDisplayContext context = BlockDisplayContext.create();
+        private @Nullable BlockModelSet blockModels;
+        private @Nullable MultiblockStructureData itemStructure;
+        private @Nullable MultiblockStructureData renderedStructure;
+        private int renderedLayer = Integer.MIN_VALUE;
+        private float renderedYaw = Float.NaN;
+        private float renderedScale = Float.NaN;
+        private float renderedTime = Float.NaN;
 
         Renderer(BufferSource portBuffers) {
             super(portBuffers);
@@ -134,11 +143,29 @@ public final class MultiblockDiorama {
                     Minecraft.getInstance().gameRenderer.getFeatureRenderDispatcher();
             renderToTexture(state, poseStack, features.getSubmitNodeStorage());
             features.renderAllFeatures();
+            this.renderedStructure = state.structure();
+            this.renderedLayer = state.layer();
+            this.renderedYaw = state.yaw();
+            this.renderedScale = state.scale();
+            this.renderedTime = state.time();
+        }
+
+        @Override
+        protected boolean textureIsReadyToBlit(State state) {
+            return this.renderedStructure == state.structure()
+                    && this.renderedLayer == state.layer()
+                    && this.renderedYaw == state.yaw()
+                    && this.renderedScale == state.scale()
+                    && Math.abs(state.time() - this.renderedTime) < 1.0F;
         }
 
         private void renderToTexture(State state, PoseStack poseStack, SubmitNodeCollector collector) {
             Minecraft minecraft = Minecraft.getInstance();
             MultiblockStructureData structure = state.structure();
+            if (this.itemStructure != structure) {
+                this.items.clear();
+                this.itemStructure = structure;
+            }
             MultiblockPattern pattern = structure.definition().pattern();
             minecraft.gameRenderer.getLighting().setupFor(Entry.ITEMS_3D);
 
@@ -149,7 +176,6 @@ public final class MultiblockDiorama {
             poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
             poseStack.translate(-pattern.sizeX() / 2.0F, -pattern.sizeY() / 2.0F, -pattern.sizeZ() / 2.0F);
 
-            int itemIndex = 0;
             for (MultiblockStructureData.Cell cell : structure.cells()) {
                 if (state.layer() >= 0 && cell.y() > state.layer()) {
                     continue;
@@ -160,7 +186,7 @@ public final class MultiblockDiorama {
                 } else {
                     ItemStack stack = shownStack(cell, time);
                     if (!stack.isEmpty()) {
-                        itemIndex = this.renderItem(poseStack, collector, stack, itemIndex);
+                        this.renderItem(poseStack, collector, stack);
                     }
                 }
             }
@@ -172,11 +198,21 @@ public final class MultiblockDiorama {
                 BlockState state,
                 MultiblockStructureData.Cell cell) {
             Minecraft minecraft = Minecraft.getInstance();
+            BlockModelSet modelSet = minecraft.getModelManager().getBlockModelSet();
+            if (modelSet != this.blockModels) {
+                this.blocks.clear();
+                this.blockModels = modelSet;
+            }
+            BlockModelRenderState block = this.blocks.get(state);
+            if (block == null) {
+                block = new BlockModelRenderState();
+                minecraft.getBlockModelResolver().update(block, state, this.context);
+                this.blocks.put(state, block);
+            }
             poseStack.pushPose();
             poseStack.translate(cell.x() + 0.5F, cell.y() + 0.5F, cell.z() + 0.5F);
             poseStack.translate(-0.5F, -0.5F, -0.5F);
-            minecraft.getBlockModelResolver().update(this.block, state, this.context);
-            this.block.submitMultiLayer(
+            block.submitMultiLayer(
                     poseStack,
                     collector,
                     LIGHT,
@@ -185,23 +221,28 @@ public final class MultiblockDiorama {
             poseStack.popPose();
         }
 
-        private int renderItem(
+        private void renderItem(
                 PoseStack poseStack,
                 SubmitNodeCollector collector,
-                ItemStack stack,
-                int itemIndex) {
+                ItemStack stack) {
             Minecraft minecraft = Minecraft.getInstance();
-            if (itemIndex == this.items.size()) {
-                this.items.add(new ItemStackRenderState());
+            ItemStackRenderState item = this.items.get(stack);
+            if (item == null) {
+                item = new ItemStackRenderState();
+                this.updateItem(minecraft, item, stack);
+                this.items.put(stack, item);
+            } else if (item.isAnimated()) {
+                this.updateItem(minecraft, item, stack);
             }
-            ItemStackRenderState item = this.items.get(itemIndex);
-            minecraft.getItemModelResolver()
-                    .updateForTopItem(item, stack, ItemDisplayContext.NONE, minecraft.level, null, 0);
             poseStack.pushPose();
             poseStack.translate(0.5F, 0.5F, 0.5F);
             item.submit(poseStack, collector, LIGHT, OverlayTexture.NO_OVERLAY, 0);
             poseStack.popPose();
-            return itemIndex + 1;
+        }
+
+        private void updateItem(Minecraft minecraft, ItemStackRenderState item, ItemStack stack) {
+            minecraft.getItemModelResolver()
+                    .updateForTopItem(item, stack, ItemDisplayContext.NONE, minecraft.level, null, 0);
         }
 
         @Override

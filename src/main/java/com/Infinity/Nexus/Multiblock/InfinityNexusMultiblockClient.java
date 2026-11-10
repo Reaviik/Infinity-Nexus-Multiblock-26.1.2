@@ -1,5 +1,7 @@
 package com.Infinity.Nexus.Multiblock;
 
+import com.Infinity.Nexus.Multiblock.client.model.ControllerBlockStateModel;
+import com.Infinity.Nexus.Multiblock.client.model.ControllerSpecialRenderer;
 import com.Infinity.Nexus.Multiblock.client.preview.MultiblockDiorama;
 import com.Infinity.Nexus.Multiblock.client.preview.MultiblockPreview;
 import net.neoforged.api.distmarker.Dist;
@@ -20,6 +22,8 @@ public class InfinityNexusMultiblockClient {
     public InfinityNexusMultiblockClient(ModContainer container, IEventBus modBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         modBus.addListener(MultiblockDiorama::register);
+        modBus.addListener(ControllerBlockStateModel.Unbaked::register);
+        modBus.addListener(ControllerSpecialRenderer.Unbaked::register);
     }
 
     @SubscribeEvent

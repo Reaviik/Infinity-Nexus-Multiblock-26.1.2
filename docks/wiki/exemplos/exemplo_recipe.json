@@ -38,6 +38,10 @@
       }
     ]
   },
+  "sounds": {
+    "processing": "minhamod:block.minha_maquina.processing",
+    "finish": "minhamod:block.minha_maquina.finish"
+  },
   "pattern": {
     "anchor": "C",
     "layers": [

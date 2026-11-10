@@ -1696,6 +1696,134 @@ test("fluid tank port avisa quando a key nao esta em capability_ports.fluid", ()
   assert.ok(!codes(result).includes("fluid.port.invalid"));
 });
 
+test("sounds importa, preserva extras e exporta processing/finish", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "minhamod:maquina",
+    type: "recipe",
+    sounds: {
+      processing: "minecraft:block.furnace.fire_crackle",
+      finish: "minhamod:block.custom.finish",
+      custom: 1
+    },
+    pattern: {
+      anchor: "C",
+      layers: [["III", "ICI", "III"]],
+      matchers: { I: "minecraft:iron_block" }
+    }
+  });
+  assert.equal(imported.state.sounds.processing, "minecraft:block.furnace.fire_crackle");
+  assert.equal(imported.state.sounds.finish, "minhamod:block.custom.finish");
+  assert.equal(imported.state.sounds.extras.custom, 1);
+  assert.deepEqual(V.buildDefinition(imported.state).sounds, {
+    processing: "minecraft:block.furnace.fire_crackle",
+    finish: "minhamod:block.custom.finish",
+    custom: 1
+  });
+});
+
+test("sounds vazios sao omitidos e ids invalidos bloqueiam o checklist", () => {
+  assert.equal(V.buildDefinition(V.createDefaultState()).sounds, undefined);
+
+  const invalid = withState((value) => {
+    value.sounds.processing = "furnace";
+  });
+  const result = V.validateState(invalid);
+  assert.ok(codes(result).includes("sounds.processing.invalid"));
+  assert.equal(result.checks.find((check) => check.id === "sounds").ok, false);
+});
+
+test("sounds custom validos e aviso em storage", () => {
+  const recipe = withState((value) => {
+    value.type = "recipe";
+    value.sounds.processing = "minhamod:machine/proc";
+    value.sounds.finish = "minhamod:machine/finish";
+  });
+  const recipeCodes = codes(V.validateState(recipe));
+  assert.ok(!recipeCodes.includes("sounds.processing.invalid"));
+  assert.ok(!recipeCodes.includes("sounds.finish.invalid"));
+  assert.ok(!recipeCodes.includes("sounds.type"));
+
+  const storage = withState((value) => {
+    value.sounds.finish = "minecraft:block.anvil.use";
+  });
+  assert.ok(codes(V.validateState(storage)).includes("sounds.type"));
+});
+
+test("sounds invalido e ignorado com aviso na importacao", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "minhamod:maquina",
+    type: "recipe",
+    sounds: []
+  });
+  assert.ok(imported.notes.some((note) => note.message.includes("sounds inválido")));
+  assert.deepEqual(imported.state.sounds, V.createSounds());
+});
+
+test("textures e opcional e nao aparece quando vazio", () => {
+  const state = V.createDefaultState();
+  const json = V.buildDefinition(state);
+  assert.equal(json.textures, undefined);
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.checks.find((check) => check.id === "textures").ok, true);
+});
+
+test("textures exporta idle e active e faz round-trip", () => {
+  const state = withState((value) => {
+    value.textures = V.createTextures();
+    value.textures.idle.front = "minecraft:block/stone";
+    value.textures.idle.side = "minecraft:block/oak_planks";
+    value.textures.idle.top = "minecraft:block/oak_log_top";
+    value.textures.idle.bottom = "minecraft:block/oak_log_top";
+    value.textures.active.front = "minecraft:block/smooth_stone";
+    value.textures.active.side = "minecraft:block/oak_log";
+  });
+  const json = V.buildDefinition(state);
+  assert.deepEqual(json.textures, {
+    front: "minecraft:block/stone",
+    side: "minecraft:block/oak_planks",
+    top: "minecraft:block/oak_log_top",
+    bottom: "minecraft:block/oak_log_top",
+    active: {
+      front: "minecraft:block/smooth_stone",
+      side: "minecraft:block/oak_log"
+    }
+  });
+  const imported = V.importDefinition(json);
+  assert.deepEqual(V.buildDefinition(imported.state).textures, json.textures);
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+});
+
+test("textures invalidas bloqueiam a exportacao", () => {
+  const state = withState((value) => {
+    value.textures = V.createTextures();
+    value.textures.idle.front = "stone";
+    value.textures.active.side = "minecraft:block/oak planks";
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("textures.invalid"));
+  assert.equal(result.checks.find((check) => check.id === "textures").ok, false);
+});
+
+test("textures invalidas na importacao sao ignoradas com nota", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "minhamod:maquina",
+    type: "storage",
+    textures: {
+      front: 42,
+      side: "minecraft:block/oak_planks",
+      active: "stone"
+    }
+  });
+  assert.equal(imported.state.textures.idle.side, "minecraft:block/oak_planks");
+  assert.equal(imported.state.textures.idle.front, "");
+  assert.ok(imported.notes.some((note) => note.message.includes("textures.front")));
+  assert.ok(imported.notes.some((note) => note.message.includes("textures.active")));
+});
+
 if (process.exitCode) {
   console.error("Falhas encontradas.");
 } else {

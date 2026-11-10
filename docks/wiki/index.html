@@ -96,9 +96,10 @@
 <li class="toc-item toc-level-3"><a href="#88-exemplo-com-slot-antigo-e-progresso">8.8 Exemplo com slot antigo e progresso</a></li>
 <li class="toc-item toc-level-2"><a href="#9-controller-único-e-receita">9. Controller único e receita</a></li>
 <li class="toc-item toc-level-3"><a href="#91-o-controller-compartilhado">9.1 O controller compartilhado</a></li>
-<li class="toc-item toc-level-3"><a href="#92-como-o-vínculo-é-aplicado">9.2 Como o vínculo é aplicado</a></li>
-<li class="toc-item toc-level-3"><a href="#93-receita-shaped-opcional-do-controller">9.3 Receita shaped opcional do controller</a></li>
-<li class="toc-item toc-level-3"><a href="#94-api-java">9.4 API Java</a></li>
+<li class="toc-item toc-level-3"><a href="#92-texturas-por-definição">9.2 Texturas por definição</a></li>
+<li class="toc-item toc-level-3"><a href="#93-como-o-vínculo-é-aplicado">9.3 Como o vínculo é aplicado</a></li>
+<li class="toc-item toc-level-3"><a href="#94-receita-shaped-opcional-do-controller">9.4 Receita shaped opcional do controller</a></li>
+<li class="toc-item toc-level-3"><a href="#95-api-java">9.5 API Java</a></li>
 <li class="toc-item toc-level-2"><a href="#10-receitas">10. Receitas</a></li>
 <li class="toc-item toc-level-3"><a href="#101-arquivo">10.1 Arquivo</a></li>
 <li class="toc-item toc-level-3"><a href="#102-campos-da-receita">10.2 Campos da receita</a></li>
@@ -195,7 +196,7 @@ Loader: valida o JSON e cria a definição
 Estrutura: pattern é validado com rotação
 Máquina: inventário, energia, fluidos, GUI e receita funcionam
 </code></pre>
-<p>Não há mais <code>controller</code> nem <code>recipe_type</code> na definição. O controller compartilhado exibe o nome da definição via <code>MultiblockDefinition#displayName()</code>; a chave de tradução é <code>multiblock.&lt;namespace&gt;.&lt;path&gt;</code> e o fallback é o path formatado, como <code>fabrica_de_voxel_cube</code> -&gt; <code>Fabrica De Voxel Cube</code>.</p>
+<p>Não há mais <code>controller</code> nem <code>recipe_type</code> na definição. O controller compartilhado exibe o nome da definição via <code>MultiblockDefinition#displayName()</code>; a chave de tradução é <code>multiblock.&lt;namespace&gt;.&lt;path&gt;</code> e o fallback é o path formatado, como <code>fabrica_de_voxel_cube</code> -&gt; <code>Fabrica De Voxel Cube</code>. O campo opcional <code>textures</code> permite especializar as texturas do controller por definição; veja a seção 9.2.</p>
 <p>No JEI, a categoria de <strong>receita</strong> é filtrada pelo componente de definição do controller. A categoria de <strong>estrutura</strong> ainda usa o controller genérico como catalisador e pode listar todas as estruturas; trate isso como limitação conhecida até o filtro por definição ser implementado.</p>
 <p>A categoria de receita do JEI usa o mesmo layout da GUI da máquina para <code>item_slots</code> x/y e elementos <code>slot</code>, <code>fluid_bar</code>, <code>energy_bar</code>, <code>arrow</code>, <code>entity</code> e <code>title</code>; o fundo é <code>textures/gui/jei_base.png</code>. A categoria de estrutura usa um painel próprio.</p>
 <p>Na GUI da máquina, clicar na seta ou na barra de progresso abre as receitas daquela definição no JEI. Na categoria JEI, a transferência move ingredientes de item para slots <code>input</code> compatíveis; fluidos são inseridos manualmente.</p>
@@ -321,6 +322,13 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <td>Restringe quais blocos membros expõem item, energia e fluido. Veja a seção 7.3.</td>
 </tr>
 <tr>
+<td><code>textures</code></td>
+<td align="right">não</td>
+<td>objeto</td>
+<td>ausente</td>
+<td>Sobrescreve as texturas do controller por definição. Aceita <code>front</code>, <code>side</code>, <code>top</code>, <code>bottom</code>, <code>particle</code> e <code>active</code>. Veja a seção 9.2.</td>
+</tr>
+<tr>
 <td><code>gui</code></td>
 <td align="right">não</td>
 <td>objeto</td>
@@ -418,11 +426,11 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
   }
 }
 </code></pre>
-<p>Esse JSON já carrega como definição em qualquer namespace. O item controller recebe o componente de definição com <code>minhamod:minha_maquina</code>; ao colocar o bloco, o block entity usa esse ID. Não é necessário criar bloco ou textura por máquina.</p>
+<p>Esse JSON já carrega como definição em qualquer namespace. O item controller recebe o componente de definição com <code>minhamod:minha_maquina</code>; ao colocar o bloco, o block entity usa esse ID. Não é necessário criar bloco por máquina; texturas por definição são opcionais via <code>textures</code>.</p>
 <h3 id="34-migrar-do-schema-1"><a class="heading-anchor" href="#34-migrar-do-schema-1" aria-label="Link para 3.4 Migrar do schema 1">#</a>3.4 Migrar do schema 1</h3>
 <ol>
 <li>Troque <code>&quot;schema_version&quot;: 1</code> por <code>&quot;schema_version&quot;: 2</code>.</li>
-<li>Remova o objeto <code>controller</code>; o bloco, as texturas e o block entity agora são compartilhados.</li>
+<li>Remova o objeto <code>controller</code>; o bloco e o block entity agora são compartilhados. Se quiser texturas por máquina, use o novo campo top-level <code>textures</code>.</li>
 <li>Remova <code>recipe_type</code> da definição; toda receita de máquina usa <code>infinity_nexus_multiblock:multiblock</code>.</li>
 <li>Em cada receita, troque o tipo antigo por <code>&quot;type&quot;: &quot;infinity_nexus_multiblock:multiblock&quot;</code> e adicione <code>&quot;definition&quot;: &quot;&lt;id da definição&gt;&quot;</code>.</li>
 <li>Mantenha o campo top-level <code>recipe</code> apenas se quiser gerar a receita shaped do controller.</li>
@@ -1435,7 +1443,34 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <pre><code class="language-text">/inmb give minhamod:minha_maquina
 </code></pre>
 <p><code>/inmb list</code> lista as definições e cria links clicáveis para o comando <code>give</code>.</p>
-<h3 id="92-como-o-vínculo-é-aplicado"><a class="heading-anchor" href="#92-como-o-vínculo-é-aplicado" aria-label="Link para 9.2 Como o vínculo é aplicado">#</a>9.2 Como o vínculo é aplicado</h3>
+<h3 id="92-texturas-por-definição"><a class="heading-anchor" href="#92-texturas-por-definição" aria-label="Link para 9.2 Texturas por definição">#</a>9.2 Texturas por definição</h3>
+<p>O campo top-level <code>textures</code> é opcional e sobrescreve as texturas do modelo compartilhado para uma definição. O bloco e o item continuam os mesmos; o cliente re-bakeia o modelo do controller quando a definição ou o estado <code>processing</code> muda.</p>
+<pre><code class="language-json">{
+  &quot;textures&quot;: {
+    &quot;front&quot;: &quot;minhamod:block/fornalha_front&quot;,
+    &quot;side&quot;: &quot;minhamod:block/fornalha_side&quot;,
+    &quot;top&quot;: &quot;minhamod:block/fornalha_top&quot;,
+    &quot;bottom&quot;: &quot;minhamod:block/fornalha_top&quot;,
+    &quot;particle&quot;: &quot;minhamod:block/fornalha_front&quot;,
+    &quot;active&quot;: {
+      &quot;front&quot;: &quot;minhamod:block/fornalha_front_on&quot;,
+      &quot;side&quot;: &quot;minhamod:block/fornalha_side_on&quot;
+    }
+  }
+}
+</code></pre>
+<p>Regras:</p>
+<ul>
+<li>Faces aceitas: <code>front</code>, <code>side</code>, <code>top</code>, <code>bottom</code> e <code>particle</code>.</li>
+<li>Os valores são identifiers completos, como <code>minecraft:block/stone</code>, e a textura precisa existir em <code>assets/&lt;namespace&gt;/textures/block/...</code> para entrar no atlas de blocos.</li>
+<li>Faces omitidas usam o modelo/textura padrão do controller.</li>
+<li><code>active</code> é opcional e é aplicado enquanto o controller está processando. Faces omitidas em <code>active</code> herdam a textura idle correspondente.</li>
+<li><code>particle</code> vazio usa <code>front</code>; sem <code>front</code>, usa a partícula padrão do modelo.</li>
+<li>Como os demais objetos, <code>textures</code> é mesclado recursivamente por <code>extends</code>, <code>family</code> e <code>overrides</code>; o objeto <code>active</code> é mesclado face a face.</li>
+<li>Se uma textura não estiver no atlas de blocos do cliente, o controller volta ao modelo padrão e registra um aviso no log; o JSON continua carregando no servidor.</li>
+<li>A troca idle/active não exige quebrar o bloco; ela acompanha o estado <code>processing</code> do controller.</li>
+</ul>
+<h3 id="93-como-o-vínculo-é-aplicado"><a class="heading-anchor" href="#93-como-o-vínculo-é-aplicado" aria-label="Link para 9.3 Como o vínculo é aplicado">#</a>9.3 Como o vínculo é aplicado</h3>
 <ol>
 <li>O item possui o componente com o <code>id</code> da definição.</li>
 <li>Ao colocar o bloco, o componente é copiado para o block entity.</li>
@@ -1443,8 +1478,8 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <li>Ao clicar com o bloco ainda não formado, a estrutura é validada.</li>
 <li>Se o pattern bater, o controller passa a <code>formed=true</code> e processa receitas.</li>
 </ol>
-<p>O mesmo controller pode representar qualquer máquina; não há bloco nem textura por definição.</p>
-<h3 id="93-receita-shaped-opcional-do-controller"><a class="heading-anchor" href="#93-receita-shaped-opcional-do-controller" aria-label="Link para 9.3 Receita shaped opcional do controller">#</a>9.3 Receita shaped opcional do controller</h3>
+<p>O mesmo controller pode representar qualquer máquina; o bloco é compartilhado e as texturas podem ser especializadas por definição via <code>textures</code>.</p>
+<h3 id="94-receita-shaped-opcional-do-controller"><a class="heading-anchor" href="#94-receita-shaped-opcional-do-controller" aria-label="Link para 9.4 Receita shaped opcional do controller">#</a>9.4 Receita shaped opcional do controller</h3>
 <p>O campo top-level <code>recipe</code> descreve a receita de crafting table que produz o controller já com o componente daquela definição:</p>
 <pre><code class="language-json">{
   &quot;recipe&quot;: {
@@ -1493,7 +1528,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
   }
 }
 </code></pre>
-<h3 id="94-api-java"><a class="heading-anchor" href="#94-api-java" aria-label="Link para 9.4 API Java">#</a>9.4 API Java</h3>
+<h3 id="95-api-java"><a class="heading-anchor" href="#95-api-java" aria-label="Link para 9.5 API Java">#</a>9.5 API Java</h3>
 <p>Para integrações em Java, use:</p>
 <ul>
 <li><code>ModBlocks.controllerWithDefinition(Identifier)</code> para criar o item com o componente.</li>
@@ -1726,7 +1761,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <li>Salve o JSON em <code>data/&lt;namespace&gt;/multiblock/&lt;arquivo&gt;.json</code>.</li>
 <li>Troque o <code>id</code> para <code>&lt;namespace&gt;:&lt;arquivo&gt;</code>.</li>
 <li>Troque <code>type</code> para <code>recipe</code> se a máquina processar receitas.</li>
-<li>Adicione <code>item_slots</code>, <code>capabilities</code> e <code>gui</code> conforme necessário.</li>
+<li>Adicione <code>item_slots</code>, <code>capabilities</code>, <code>textures</code> e <code>gui</code> conforme necessário.</li>
 <li>Crie as receitas com <code>type: infinity_nexus_multiblock:multiblock</code> e <code>definition</code> igual ao <code>id</code>.</li>
 <li>Rode <code>/reload</code>; o controller compartilhado já existe, então não é preciso reiniciar.</li>
 </ol>
@@ -1735,7 +1770,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <ul>
 <li>limite configurável em <code>export.pattern_scan_limit</code> (padrão 256; máximo 4096);</li>
 <li>flood-fill pode incluir blocos vizinhos que não fazem parte da máquina;</li>
-<li>não exporta capabilities, slots, GUI, receita ou vínculo de controller;</li>
+<li>não exporta capabilities, slots, texturas, GUI, receita ou vínculo de controller;</li>
 <li>o <code>id</code> precisa ser ajustado;</li>
 <li>o <code>type</code> exportado é sempre <code>storage</code>.</li>
 </ul>
@@ -1822,7 +1857,7 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
   }
 }
 </code></pre>
-<p>A receita gerada produz o controller com o componente <code>infinity_nexus_multiblock:multiblock_definition</code> igual a <code>minhamod:minha_maquina</code>. Veja a seção 9.3 para o formato completo.</p>
+<p>A receita gerada produz o controller com o componente <code>infinity_nexus_multiblock:multiblock_definition</code> igual a <code>minhamod:minha_maquina</code>. Veja a seção 9.4 para o formato completo.</p>
 <h2 id="16-erros-comuns"><a class="heading-anchor" href="#16-erros-comuns" aria-label="Link para 16. Erros comuns">#</a>16. Erros comuns</h2>
 <div class="table-wrap"><table>
 <thead>
@@ -2067,7 +2102,7 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 <h3 id="181-controller-único"><a class="heading-anchor" href="#181-controller-único" aria-label="Link para 18.1 Controller único">#</a>18.1 Controller único</h3>
 <ul>
 <li>Existe um único bloco/item controller: <code>infinity_nexus_multiblock:multiblock_controller</code>.</li>
-<li>O vínculo com a máquina vem do componente <code>infinity_nexus_multiblock:multiblock_definition</code>; não há bloco, item ou modelo por definição.</li>
+<li>O vínculo com a máquina vem do componente <code>infinity_nexus_multiblock:multiblock_definition</code>; não há bloco ou item por definição, mas o modelo do controller pode ser especializado com <code>textures</code>.</li>
 <li>A aba criativa mostra uma variante do controller para cada definição carregada.</li>
 <li><code>/reload</code> atualiza definições e receitas; não é necessário reiniciar para adicionar, remover ou sobrescrever uma definição.</li>
 <li>O antigo bloco <code>nexus_core</code> e os controllers dinâmicos foram removidos. Mundos antigos podem gerar avisos de registry; faça backup antes de atualizar.</li>
@@ -2084,7 +2119,7 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 </ul>
 <h3 id="183-assets-jei-e-reload"><a class="heading-anchor" href="#183-assets-jei-e-reload" aria-label="Link para 18.3 Assets, JEI e reload">#</a>18.3 Assets, JEI e reload</h3>
 <ul>
-<li>O controller compartilhado tem blockstate, modelo, texturas, loot e traduções próprios; não são gerados por definição.</li>
+<li>O controller compartilhado tem blockstate, modelo base, loot e traduções próprios; texturas por definição vêm de <code>textures</code> e são aplicadas em runtime.</li>
 <li>O nome exibido usa <code>multiblock.&lt;namespace&gt;.&lt;path&gt;</code> e cai no path formatado quando não há tradução.</li>
 <li>A categoria JEI de receitas é filtrada pela definição do controller.</li>
 <li>A categoria JEI de estruturas ainda usa um catalisador genérico e pode listar todas as estruturas; o filtro por definição é uma melhoria pendente.</li>
@@ -2094,7 +2129,7 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 <h3 id="184-exportação"><a class="heading-anchor" href="#184-exportação" aria-label="Link para 18.4 Exportação">#</a>18.4 Exportação</h3>
 <ul>
 <li>A exportação é limitada por <code>export.pattern_scan_limit</code> na config comum do mod (<code>config/infinity_nexus_multiblock-common.toml</code>): padrão <code>256</code>, máximo <code>4096</code>.</li>
-<li>O JSON exportado contém apenas <code>schema_version</code>, <code>id</code>, <code>type</code> e <code>pattern</code> (blocos e states); não inclui <code>item_slots</code>, <code>capabilities</code>, <code>gui</code>, receita ou prioridade, e o <code>type</code> exportado é sempre <code>storage</code>.</li>
+<li>O JSON exportado contém apenas <code>schema_version</code>, <code>id</code>, <code>type</code> e <code>pattern</code> (blocos e states); não inclui <code>item_slots</code>, <code>capabilities</code>, <code>textures</code>, <code>gui</code>, receita ou prioridade, e o <code>type</code> exportado é sempre <code>storage</code>.</li>
 </ul>
 <h3 id="185-metas-ainda-não-atendidas"><a class="heading-anchor" href="#185-metas-ainda-não-atendidas" aria-label="Link para 18.5 Metas ainda não atendidas">#</a>18.5 Metas ainda não atendidas</h3>
 <ul>

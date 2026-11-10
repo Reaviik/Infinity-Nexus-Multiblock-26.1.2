@@ -14,6 +14,7 @@ import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.QuadInstance;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import net.minecraft.client.Minecraft;
@@ -24,12 +25,15 @@ import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -53,10 +57,49 @@ public final class MultiblockPreviewRenderer {
     private static final int MISSING_ALPHA = 0x66;
     private static final int ANCHOR_ALPHA = 0x99;
     private static final float LINE_WIDTH = 2.0F;
+    private static final long PREVIEW_CACHE_MILLIS = 100L;
+
+    private static final Map<BlockMatcher, Material> materials = new IdentityHashMap<>();
+    private static @Nullable MultiblockDefinition materialDefinition;
+    private static Rotation materialRotation = Rotation.NONE;
+    private static int materialInventoryRevision = Integer.MIN_VALUE;
+    private static boolean materialInstabuild;
 
     private static @Nullable ModelBlockRenderer blockRenderer;
+    private static @Nullable Preview cachedPreview;
+    private static @Nullable PreviewKey cachedPreviewKey;
+    private static long cachedPreviewAt;
+    private static @Nullable Placement pinned;
 
     private MultiblockPreviewRenderer() {}
+
+    public static void clearCaches() {
+        materials.clear();
+        materialDefinition = null;
+        materialInventoryRevision = Integer.MIN_VALUE;
+        cachedPreview = null;
+        cachedPreviewKey = null;
+        pinned = null;
+    }
+
+    public static void onAttack() {
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        ClientLevel level = minecraft.level;
+        if (player == null || level == null || minecraft.screen != null || player.isSpectator()) {
+            return;
+        }
+        if (pinned != null) {
+            pinned = null;
+            return;
+        }
+        float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        HitResult hitResult = player.pick(player.blockInteractionRange() + 20, partialTick, false);
+        Placement placement = resolvePlacement(player, level, hitResult, partialTick);
+        if (placement != null) {
+            pinned = placement;
+        }
+    }
 
     public static void onSubmit(SubmitCustomGeometryEvent event) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -68,20 +111,29 @@ public final class MultiblockPreviewRenderer {
 
         float partialTick = minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         HitResult hitResult = player.pick(player.blockInteractionRange()+20, partialTick, false);
-        Preview preview = resolvePreview(player, level, hitResult, partialTick);
+        BlockStateModelSet modelSet = minecraft.getModelManager().getBlockStateModelSet();
+        Placement placement = resolvePlacement(player, level, hitResult, partialTick);
+        if (pinned != null && !validPin(player, level)) {
+            pinned = null;
+        }
+        if (pinned != null) {
+            placement = pinned;
+        }
+        if (placement == null) {
+            return;
+        }
+        Preview preview = previewFor(level, player, placement, modelSet);
         if (preview == null || preview.cells().isEmpty()) {
             return;
         }
 
         Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
         PoseStack poseStack = event.getPoseStack();
-        BlockStateModelSet modelSet = minecraft.getModelManager().getBlockStateModelSet();
-        ModelBlockRenderer renderer = blockRenderer(minecraft);
 
         event.getSubmitNodeCollector().submitCustomGeometry(
                 poseStack,
                 RenderTypes.translucentMovingBlock(),
-                (pose, buffer) -> renderModels(pose, buffer, preview.cells(), level, camera, renderer, modelSet));
+                (pose, buffer) -> renderModels(pose, buffer, preview.cells(), camera));
         event.getSubmitNodeCollector().order(1).submitCustomGeometry(
                 poseStack,
                 RenderTypes.debugQuads(),
@@ -99,7 +151,8 @@ public final class MultiblockPreviewRenderer {
         return blockRenderer;
     }
 
-    private static @Nullable Preview resolvePreview(LocalPlayer player, ClientLevel level, HitResult hitResult, float partialTick) {
+    private static @Nullable Placement resolvePlacement(LocalPlayer player, ClientLevel level, HitResult hitResult,
+            float partialTick) {
         if (hitResult instanceof BlockHitResult blockHit) {
             BlockState hitState = level.getBlockState(blockHit.getBlockPos());
             if (hitState.getBlock() instanceof MultiblockControllerBlock
@@ -110,7 +163,7 @@ public final class MultiblockPreviewRenderer {
                 if (definition == null) {
                     return null;
                 }
-                return buildPreview(level, player, definition, blockHit.getBlockPos(),
+                return new Placement(level.dimension(), definition.id(), blockHit.getBlockPos(),
                         MultiblockControllerBlock.rotationFromState(hitState), hitState, true);
             }
         }
@@ -120,8 +173,7 @@ public final class MultiblockPreviewRenderer {
             return null;
         }
         Identifier definitionId = held.get(ModDataComponents.MULTIBLOCK_DEFINITION.get());
-        MultiblockDefinition definition = definitionId == null ? null : MultiblockDefinitions.get(definitionId);
-        if (definition == null) {
+        if (definitionId == null || MultiblockDefinitions.get(definitionId) == null) {
             return null;
         }
         MultiblockControllerBlock controller =
@@ -140,7 +192,17 @@ public final class MultiblockPreviewRenderer {
         BlockState anchorState = controller.defaultBlockState()
                 .setValue(MultiblockControllerBlock.FACING, player.getDirection().getOpposite());
         Rotation rotation = MultiblockControllerBlock.rotationFromFacing(player.getDirection().getOpposite());
-        return buildPreview(level, player, definition, controllerPos, rotation, anchorState, false);
+        return new Placement(level.dimension(), definitionId, controllerPos, rotation, anchorState, false);
+    }
+
+    private static boolean validPin(LocalPlayer player, ClientLevel level) {
+        Placement pin = pinned;
+        if (pin == null || !pin.dimension().equals(level.dimension())
+                || MultiblockDefinitions.get(pin.definitionId()) == null) {
+            return false;
+        }
+        ItemStack held = heldController(player);
+        return held != null && pin.definitionId().equals(held.get(ModDataComponents.MULTIBLOCK_DEFINITION.get()));
     }
 
     private static @Nullable ItemStack heldController(LocalPlayer player) {
@@ -157,12 +219,44 @@ public final class MultiblockPreviewRenderer {
                 && blockItem.getBlock() instanceof MultiblockControllerBlock;
     }
 
+    private static @Nullable Preview previewFor(ClientLevel level, LocalPlayer player, Placement placement,
+            BlockStateModelSet modelSet) {
+        MultiblockDefinition definition = MultiblockDefinitions.get(placement.definitionId());
+        if (definition == null) {
+            return null;
+        }
+        PreviewKey key = new PreviewKey(level, definition, placement.controllerPos().immutable(),
+                placement.rotation(), placement.placed(), placement.anchorState(), modelSet,
+                player.getInventory().getTimesChanged(), player.getAbilities().instabuild);
+        long now = System.currentTimeMillis();
+        if (cachedPreview != null && key.equals(cachedPreviewKey)
+                && now - cachedPreviewAt < PREVIEW_CACHE_MILLIS) {
+            return cachedPreview;
+        }
+        Preview preview = buildPreview(level, player, definition, placement.controllerPos(), placement.rotation(),
+                placement.anchorState(), placement.placed(), modelSet);
+        cachedPreview = preview;
+        cachedPreviewKey = key;
+        cachedPreviewAt = now;
+        return preview;
+    }
+
     private static Preview buildPreview(ClientLevel level, LocalPlayer player, MultiblockDefinition definition,
-            BlockPos controllerPos, Rotation rotation, BlockState anchorState, boolean placed) {
+            BlockPos controllerPos, Rotation rotation, BlockState anchorState, boolean placed,
+            BlockStateModelSet modelSet) {
+        int inventoryRevision = player.getInventory().getTimesChanged();
+        boolean instabuild = player.getAbilities().instabuild;
+        if (materialDefinition != definition || materialRotation != rotation
+                || materialInventoryRevision != inventoryRevision || materialInstabuild != instabuild) {
+            materials.clear();
+            materialDefinition = definition;
+            materialRotation = rotation;
+            materialInventoryRevision = inventoryRevision;
+            materialInstabuild = instabuild;
+        }
+
         BlockPos origin = definition.origin(controllerPos, rotation);
         List<PreviewCell> cells = new ArrayList<>();
-        Map<BlockMatcher, BlockState> expectedStates = new IdentityHashMap<>();
-        Map<BlockMatcher, Boolean> itemAvailability = new IdentityHashMap<>();
 
         for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
             BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(rotation);
@@ -190,16 +284,17 @@ public final class MultiblockPreviewRenderer {
                 line = BLOCKED_LINE;
             } else {
                 BlockMatcher matcher = cell.matcher();
-                BlockState expected = expectedStates.get(matcher);
-                Boolean hasItem = itemAvailability.get(matcher);
-                if (hasItem == null) {
+                Material material = materials.get(matcher);
+                if (material == null) {
                     BlockState found = MultiblockAssemblyHelper.findPlacementState(player, matcher, rotation);
-                    hasItem = found != null || player.getAbilities().instabuild;
-                    expected = found != null ? found : MultiblockAssemblyHelper.representativeState(matcher, rotation);
-                    expectedStates.put(matcher, expected);
-                    itemAvailability.put(matcher, hasItem);
+                    boolean hasItem = found != null || instabuild;
+                    BlockState expected = found != null
+                            ? found
+                            : MultiblockAssemblyHelper.representativeState(matcher, rotation);
+                    material = new Material(expected, hasItem);
+                    materials.put(matcher, material);
                 }
-                if (hasItem) {
+                if (material.hasItem()) {
                     fill = PLACE_FILL;
                     line = PLACE_LINE;
                     alpha = PLACE_ALPHA;
@@ -208,39 +303,57 @@ public final class MultiblockPreviewRenderer {
                     line = MISSING_LINE;
                     alpha = MISSING_ALPHA;
                 }
-                modelState = expected;
+                modelState = material.state();
                 fallbackFill = modelState == null;
             }
 
-            cells.add(new PreviewCell(pos, modelState, fill, line, alpha, fallbackFill));
+            List<GhostQuad> quads = modelState != null && alpha > 0
+                    ? tessellate(level, pos, modelState, modelSet)
+                    : List.of();
+            cells.add(new PreviewCell(pos, quads, fill, line, alpha, fallbackFill));
         }
         return new Preview(cells);
     }
 
-    private static void renderModels(PoseStack.Pose pose, VertexConsumer buffer, List<PreviewCell> cells,
-            ClientLevel level, Vec3 camera, ModelBlockRenderer renderer, BlockStateModelSet modelSet) {
+    private static List<GhostQuad> tessellate(ClientLevel level, BlockPos pos, BlockState state,
+            BlockStateModelSet modelSet) {
+        List<GhostQuad> quads = new ArrayList<>();
+        BlockStateModel model = modelSet.get(state);
+        ModelBlockRenderer renderer = blockRenderer(Minecraft.getInstance());
+        renderer.tesselateBlock(
+                (offsetX, offsetY, offsetZ, quad, instance) ->
+                        quads.add(new GhostQuad(offsetX, offsetY, offsetZ, quad, instance.getColor(0))),
+                0.0F, 0.0F, 0.0F, level, pos, state, model, state.getSeed(pos));
+        return quads;
+    }
+
+    private static void renderModels(PoseStack.Pose pose, VertexConsumer buffer, List<PreviewCell> cells, Vec3 camera) {
         PoseStack stack = new PoseStack();
         stack.last().set(pose);
+        QuadInstance instance = new QuadInstance();
+        instance.setLightCoords(LightCoordsUtil.FULL_BRIGHT);
+        instance.setOverlayCoords(OverlayTexture.NO_OVERLAY);
 
         for (PreviewCell cell : cells) {
-            BlockState state = cell.modelState();
-            if (state == null || cell.alpha() <= 0) {
+            if (cell.quads().isEmpty()) {
                 continue;
             }
 
-            BlockStateModel model = modelSet.get(state);
             int alphaColor = ARGB.color(cell.alpha(), 0xFF, 0xFF, 0xFF);
             stack.pushPose();
             stack.translate(cell.pos().getX() - camera.x, cell.pos().getY() - camera.y, cell.pos().getZ() - camera.z);
-            renderer.tesselateBlock((offsetX, offsetY, offsetZ, quad, instance) -> {
-                stack.pushPose();
-                stack.translate(offsetX, offsetY, offsetZ);
-                instance.setLightCoords(LightCoordsUtil.FULL_BRIGHT);
-                instance.setOverlayCoords(OverlayTexture.NO_OVERLAY);
+            for (GhostQuad ghost : cell.quads()) {
+                instance.setColor(ghost.color());
                 instance.multiplyColor(alphaColor);
-                buffer.putBakedQuad(stack.last(), quad, instance);
-                stack.popPose();
-            }, 0.0F, 0.0F, 0.0F, level, cell.pos(), state, model, state.getSeed(cell.pos()));
+                if (ghost.x() == 0.0F && ghost.y() == 0.0F && ghost.z() == 0.0F) {
+                    buffer.putBakedQuad(stack.last(), ghost.quad(), instance);
+                } else {
+                    stack.pushPose();
+                    stack.translate(ghost.x(), ghost.y(), ghost.z());
+                    buffer.putBakedQuad(stack.last(), ghost.quad(), instance);
+                    stack.popPose();
+                }
+            }
             stack.popPose();
         }
     }
@@ -327,5 +440,16 @@ public final class MultiblockPreviewRenderer {
 
     private record Preview(List<PreviewCell> cells) {}
 
-    private record PreviewCell(BlockPos pos, @Nullable BlockState modelState, int fill, int line, int alpha, boolean fallbackFill) {}
+    private record Placement(ResourceKey<Level> dimension, Identifier definitionId, BlockPos controllerPos,
+            Rotation rotation, BlockState anchorState, boolean placed) {}
+
+    private record PreviewKey(ClientLevel level, MultiblockDefinition definition, BlockPos controllerPos,
+            Rotation rotation, boolean placed, BlockState anchorState, BlockStateModelSet modelSet,
+            int inventoryRevision, boolean instabuild) {}
+
+    private record PreviewCell(BlockPos pos, List<GhostQuad> quads, int fill, int line, int alpha, boolean fallbackFill) {}
+
+    private record GhostQuad(float x, float y, float z, BakedQuad quad, int color) {}
+
+    private record Material(@Nullable BlockState state, boolean hasItem) {}
 }

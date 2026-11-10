@@ -38,7 +38,7 @@ Para montar e validar a definição visualmente, abra o [Builder de multiblocos]
 Uma máquina é a combinação de três partes:
 
 1. **O controller único do mod.**
-   O bloco, o block entity e o item são registrados uma única vez como `infinity_nexus_multiblock:multiblock_controller`. Toda definição usa esse mesmo controller; não existe bloco controller por máquina.
+   O bloco, o block entity e o item são registrados uma única vez como `infinity_nexus_multiblock:multiblock_controller`. Toda definição usa esse mesmo controller; não existe bloco controller por máquina. Texturas por definição são opcionais no campo top-level `textures`.
 
 2. **Uma definição JSON.**
    Ela diz qual é o pattern, quais blocos formam a estrutura, quais slots existem, qual GUI usar, quais capabilities existem e qual receita processar. O vínculo com o controller é feito pelo componente `infinity_nexus_multiblock:multiblock_definition`, cujo valor é o `id` da definição.
@@ -57,7 +57,7 @@ Estrutura: pattern é validado com rotação
 Máquina: inventário, energia, fluidos, GUI e receita funcionam
 ```
 
-Não há mais `controller` nem `recipe_type` na definição. O controller compartilhado exibe o nome da definição via `MultiblockDefinition#displayName()`; a chave de tradução é `multiblock.<namespace>.<path>` e o fallback é o path formatado, como `fabrica_de_voxel_cube` -> `Fabrica De Voxel Cube`.
+Não há mais `controller` nem `recipe_type` na definição. O controller compartilhado exibe o nome da definição via `MultiblockDefinition#displayName()`; a chave de tradução é `multiblock.<namespace>.<path>` e o fallback é o path formatado, como `fabrica_de_voxel_cube` -> `Fabrica De Voxel Cube`. O campo opcional `textures` permite especializar as texturas do controller por definição; veja a seção 9.2.
 
 No JEI, a categoria de **receita** é filtrada pelo componente de definição do controller. A categoria de **estrutura** ainda usa o controller genérico como catalisador e pode listar todas as estruturas; trate isso como limitação conhecida até o filtro por definição ser implementado.
 
@@ -144,7 +144,9 @@ Datapacks e KubeJS podem adicionar ou sobrescrever definições e receitas. O co
 | `item_slots` | não | lista | `[]` | Define os slots do inventário. Veja a seção 6. |
 | `capabilities` | não | objeto | vazio | Energia e fluidos. Veja a seção 7. |
 | `capability_ports` | não | objeto | ausente | Restringe quais blocos membros expõem item, energia e fluido. Veja a seção 7.3. |
+| `textures` | não | objeto | ausente | Sobrescreve as texturas do controller por definição. Aceita `front`, `side`, `top`, `bottom`, `particle` e `active`. Veja a seção 9.2. |
 | `gui` | não | objeto | ausente | Layout padrão ou customizado. Veja a seção 8. |
+| `sounds` | não | objeto | ausente | Sons de processamento e conclusão de receitas. Veja a seção 10.11. |
 | `pattern` | sim para máquina | objeto | — | Obrigatório para uma definição registrada. Templates podem omitir. |
 
 ### 3.2 Campos de herança
@@ -202,12 +204,12 @@ Regras:
 }
 ```
 
-Esse JSON já carrega como definição em qualquer namespace. O item controller recebe o componente de definição com `minhamod:minha_maquina`; ao colocar o bloco, o block entity usa esse ID. Não é necessário criar bloco ou textura por máquina.
+Esse JSON já carrega como definição em qualquer namespace. O item controller recebe o componente de definição com `minhamod:minha_maquina`; ao colocar o bloco, o block entity usa esse ID. Não é necessário criar bloco por máquina; texturas por definição são opcionais via `textures`.
 
 ### 3.4 Migrar do schema 1
 
 1. Troque `"schema_version": 1` por `"schema_version": 2`.
-2. Remova o objeto `controller`; o bloco, as texturas e o block entity agora são compartilhados.
+2. Remova o objeto `controller`; o bloco e o block entity agora são compartilhados. Se quiser texturas por máquina, use o novo campo top-level `textures`.
 3. Remova `recipe_type` da definição; toda receita de máquina usa `infinity_nexus_multiblock:multiblock`.
 4. Em cada receita, troque o tipo antigo por `"type": "infinity_nexus_multiblock:multiblock"` e adicione `"definition": "<id da definição>"`.
 5. Mantenha o campo top-level `recipe` apenas se quiser gerar a receita shaped do controller.
@@ -907,7 +909,38 @@ Para obter uma variante:
 
 `/inmb list` lista as definições e cria links clicáveis para o comando `give`.
 
-### 9.2 Como o vínculo é aplicado
+### 9.2 Texturas por definição
+
+O campo top-level `textures` é opcional e sobrescreve as texturas do modelo compartilhado para uma definição. O bloco e o item continuam os mesmos; o cliente re-bakeia o modelo do controller quando a definição ou o estado `processing` muda.
+
+```json
+{
+  "textures": {
+    "front": "minhamod:block/fornalha_front",
+    "side": "minhamod:block/fornalha_side",
+    "top": "minhamod:block/fornalha_top",
+    "bottom": "minhamod:block/fornalha_top",
+    "particle": "minhamod:block/fornalha_front",
+    "active": {
+      "front": "minhamod:block/fornalha_front_on",
+      "side": "minhamod:block/fornalha_side_on"
+    }
+  }
+}
+```
+
+Regras:
+
+- Faces aceitas: `front`, `side`, `top`, `bottom` e `particle`.
+- Os valores são identifiers completos, como `minecraft:block/stone`, e a textura precisa existir em `assets/<namespace>/textures/block/...` para entrar no atlas de blocos.
+- Faces omitidas usam o modelo/textura padrão do controller.
+- `active` é opcional e é aplicado enquanto o controller está processando. Faces omitidas em `active` herdam a textura idle correspondente.
+- `particle` vazio usa `front`; sem `front`, usa a partícula padrão do modelo.
+- Como os demais objetos, `textures` é mesclado recursivamente por `extends`, `family` e `overrides`; o objeto `active` é mesclado face a face.
+- Se uma textura não estiver no atlas de blocos do cliente, o controller volta ao modelo padrão e registra um aviso no log; o JSON continua carregando no servidor.
+- A troca idle/active não exige quebrar o bloco; ela acompanha o estado `processing` do controller.
+
+### 9.3 Como o vínculo é aplicado
 
 1. O item possui o componente com o `id` da definição.
 2. Ao colocar o bloco, o componente é copiado para o block entity.
@@ -915,9 +948,9 @@ Para obter uma variante:
 4. Ao clicar com o bloco ainda não formado, a estrutura é validada.
 5. Se o pattern bater, o controller passa a `formed=true` e processa receitas.
 
-O mesmo controller pode representar qualquer máquina; não há bloco nem textura por definição.
+O mesmo controller pode representar qualquer máquina; o bloco é compartilhado e as texturas podem ser especializadas por definição via `textures`.
 
-### 9.3 Receita shaped opcional do controller
+### 9.4 Receita shaped opcional do controller
 
 O campo top-level `recipe` descreve a receita de crafting table que produz o controller já com o componente daquela definição:
 
@@ -976,7 +1009,7 @@ Exemplo de resultado:
 }
 ```
 
-### 9.4 API Java
+### 9.5 API Java
 
 Para integrações em Java, use:
 
@@ -1129,6 +1162,26 @@ Item com data components:
 
 `/inmb look` faz um raycast de ate 20 blocos e envia o ID puro, o matcher completo e o objeto `state` separado.
 
+### 10.11 Sons (`sounds`)
+
+O objeto `sounds` e opcional e so tem efeito em maquinas `type=recipe`. Cada valor e um identifier `namespace:path` que aponta para uma entrada em `assets/<namespace>/sounds.json`, por exemplo `minhamod:block.minha_maquina.processing`.
+
+```json
+"sounds": {
+  "processing": "minhamod:block.minha_maquina.processing",
+  "finish": "minhamod:block.minha_maquina.finish"
+}
+```
+
+| Campo | Obrigatorio | Tipo | Regras |
+|---|---|---|---|
+| `processing` | nao | identifier | Tocado no controller a cada 20 ticks enquanto a maquina avanca uma receita. |
+| `finish` | nao | identifier | Tocado uma vez quando a receita completa com sucesso. |
+
+O som e tocado no bloco do controller, no canal `blocks`, com volume e pitch `1.0`. Nao e preciso registrar o `SoundEvent` em Java: basta declarar o evento no `sounds.json` do resource pack do seu mod. Se apenas um dos campos for declarado, o outro tipo simplesmente nao toca.
+
+No builder, a etapa 08 oferece um seletor com os 1902 sound events vanilla do Minecraft 26.1.2, gerados em `docks/builder/data/minecraft_sounds.json`, e tambem aceita qualquer identifier custom digitado manualmente.
+
 ## 11. Herança e templates
 
 ### 11.1 Pai e filho
@@ -1271,7 +1324,7 @@ Ele contém apenas:
 - `type: "storage"`;
 - `pattern` com `layers`, `anchor` e `matchers` de bloco + state.
 
-Ele **não** contém `item_slots`, `capabilities`, `gui`, receita ou prioridade. Use como ponto de partida para o pattern.
+Ele **não** contém `item_slots`, `capabilities`, `textures`, `gui`, receita ou prioridade. Use como ponto de partida para o pattern.
 
 ### 13.3 Normalização
 
@@ -1282,7 +1335,7 @@ A exportação normaliza posições e states para a orientação canônica `SOUT
 1. Salve o JSON em `data/<namespace>/multiblock/<arquivo>.json`.
 2. Troque o `id` para `<namespace>:<arquivo>`.
 3. Troque `type` para `recipe` se a máquina processar receitas.
-4. Adicione `item_slots`, `capabilities` e `gui` conforme necessário.
+4. Adicione `item_slots`, `capabilities`, `textures` e `gui` conforme necessário.
 5. Crie as receitas com `type: infinity_nexus_multiblock:multiblock` e `definition` igual ao `id`.
 6. Rode `/reload`; o controller compartilhado já existe, então não é preciso reiniciar.
 
@@ -1292,7 +1345,7 @@ Não há um exemplo exportado no repositório; use o JSON do clipboard como pont
 
 - limite configurável em `export.pattern_scan_limit` (padrão 256; máximo 4096);
 - flood-fill pode incluir blocos vizinhos que não fazem parte da máquina;
-- não exporta capabilities, slots, GUI, receita ou vínculo de controller;
+- não exporta capabilities, slots, texturas, GUI, receita ou vínculo de controller;
 - o `id` precisa ser ajustado;
 - o `type` exportado é sempre `storage`.
 
@@ -1381,7 +1434,7 @@ Para que uma definição gere uma receita de crafting do controller, adicione o 
 }
 ```
 
-A receita gerada produz o controller com o componente `infinity_nexus_multiblock:multiblock_definition` igual a `minhamod:minha_maquina`. Veja a seção 9.3 para o formato completo.
+A receita gerada produz o controller com o componente `infinity_nexus_multiblock:multiblock_definition` igual a `minhamod:minha_maquina`. Veja a seção 9.4 para o formato completo.
 
 ## 16. Erros comuns
 
@@ -1465,7 +1518,7 @@ Antes de testar, confirme:
 ### 18.1 Controller único
 
 - Existe um único bloco/item controller: `infinity_nexus_multiblock:multiblock_controller`.
-- O vínculo com a máquina vem do componente `infinity_nexus_multiblock:multiblock_definition`; não há bloco, item ou modelo por definição.
+- O vínculo com a máquina vem do componente `infinity_nexus_multiblock:multiblock_definition`; não há bloco ou item por definição, mas o modelo do controller pode ser especializado com `textures`.
 - A aba criativa mostra uma variante do controller para cada definição carregada.
 - `/reload` atualiza definições e receitas; não é necessário reiniciar para adicionar, remover ou sobrescrever uma definição.
 - O antigo bloco `nexus_core` e os controllers dinâmicos foram removidos. Mundos antigos podem gerar avisos de registry; faça backup antes de atualizar.
@@ -1482,7 +1535,7 @@ Antes de testar, confirme:
 
 ### 18.3 Assets, JEI e reload
 
-- O controller compartilhado tem blockstate, modelo, texturas, loot e traduções próprios; não são gerados por definição.
+- O controller compartilhado tem blockstate, modelo base, loot e traduções próprios; texturas por definição vêm de `textures` e são aplicadas em runtime.
 - O nome exibido usa `multiblock.<namespace>.<path>` e cai no path formatado quando não há tradução.
 - A categoria JEI de receitas é filtrada pela definição do controller.
 - A categoria JEI de estruturas ainda usa um catalisador genérico e pode listar todas as estruturas; o filtro por definição é uma melhoria pendente.
@@ -1492,7 +1545,7 @@ Antes de testar, confirme:
 ### 18.4 Exportação
 
 - A exportação é limitada por `export.pattern_scan_limit` na config comum do mod (`config/infinity_nexus_multiblock-common.toml`): padrão `256`, máximo `4096`.
-- O JSON exportado contém apenas `schema_version`, `id`, `type` e `pattern` (blocos e states); não inclui `item_slots`, `capabilities`, `gui`, receita ou prioridade, e o `type` exportado é sempre `storage`.
+- O JSON exportado contém apenas `schema_version`, `id`, `type` e `pattern` (blocos e states); não inclui `item_slots`, `capabilities`, `textures`, `gui`, receita ou prioridade, e o `type` exportado é sempre `storage`.
 
 ### 18.5 Metas ainda não atendidas
 

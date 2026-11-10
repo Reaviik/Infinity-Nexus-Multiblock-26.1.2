@@ -28,6 +28,12 @@
       "spawn": "S"
     },
     {
+      "type": "item",
+      "id": "minecraft:gold_ingot",
+      "count": 1,
+      "chance": 1.0
+    },
+    {
       "type": "energy",
       "amount": 500
     }

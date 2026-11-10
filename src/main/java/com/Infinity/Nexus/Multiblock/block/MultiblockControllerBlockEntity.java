@@ -27,6 +27,7 @@ import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
+import com.Infinity.Nexus.Multiblock.client.ClientMultiblockModelData;
 import com.Infinity.Nexus.Multiblock.client.MultiblockClientCache;
 import com.Infinity.Nexus.Multiblock.data.MultiblockSavedData;
 import com.Infinity.Nexus.Multiblock.data.MultiblockStructureExporter;
@@ -55,6 +56,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.ProblemReporter;
@@ -86,6 +88,8 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
+import net.neoforged.neoforge.model.data.ModelData;
+import net.neoforged.neoforge.model.data.ModelProperty;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.ResourceHandlerUtil;
@@ -97,7 +101,9 @@ import net.neoforged.neoforge.transfer.transaction.Transaction;
 import org.jspecify.annotations.Nullable;
 
 public class MultiblockControllerBlockEntity extends BlockEntity implements WorldlyContainer, MenuProvider {
+    public static final ModelProperty<Identifier> DEFINITION_PROPERTY = new ModelProperty<>();
     private static final long AREA_ENTITY_SCAN_INTERVAL = 10L;
+    private static final int PROCESSING_SOUND_INTERVAL = 20;
 
     private RestrictedItemStackHandler inventory;
     private MultiblockMenuLayout menuLayout;
@@ -279,6 +285,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (this.level != null && !this.level.isClientSide()) {
             BlockState state = this.getBlockState();
             this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
+        } else if (this.level != null) {
+            ClientMultiblockModelData.requestRefresh(this);
         }
     }
 
@@ -881,14 +889,32 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
         this.progress++;
         if (this.progress >= this.maxProgress) {
-            this.completeRecipe(recipe);
+            boolean completed = this.completeRecipe(recipe);
             this.progress = 0;
             this.maxProgress = 0;
             this.activeRecipe = null;
             this.activeRecipeId = null;
             this.refreshActiveEntityTypes();
+            if (completed) {
+                definition.sounds().finish().ifPresent(this::playMachineSound);
+            }
+        } else if ((this.progress - 1) % PROCESSING_SOUND_INTERVAL == 0) {
+            definition.sounds().processing().ifPresent(this::playMachineSound);
         }
         this.setChanged();
+    }
+
+    private void playMachineSound(Identifier soundId) {
+        if (this.level == null) {
+            return;
+        }
+        this.level.playSound(
+                null,
+                this.worldPosition,
+                SoundEvent.createVariableRangeEvent(soundId),
+                SoundSource.BLOCKS,
+                1.0F,
+                1.0F);
     }
 
     private void resolveActiveRecipe(ServerLevel serverLevel) {
@@ -1145,29 +1171,29 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
     }
 
-    private void completeRecipe(MultiblockRecipe recipe) {
+    private boolean completeRecipe(MultiblockRecipe recipe) {
         ServerLevel serverLevel = this.serverLevel();
         if (serverLevel == null) {
-            return;
+            return false;
         }
         MultiblockRecipeInput input = this.createRecipeInput();
         List<MultiblockRecipe.ItemAllocation> itemAllocations = recipe.findItemInputs(input.items());
         if (itemAllocations == null) {
-            return;
+            return false;
         }
         int[] matchedTanks = recipe.matchFluidTanks(input.fluids());
         for (int tank : matchedTanks) {
             if (tank < 0) {
-                return;
+                return false;
             }
         }
         List<Entity> entityInputs = this.findEntityInputs(recipe);
         if (entityInputs == null) {
-            return;
+            return false;
         }
         OutputPlan plan = this.planOutputs(recipe, true, input);
         if (plan == null) {
-            return;
+            return false;
         }
         for (MultiblockRecipe.ItemAllocation allocation : itemAllocations) {
             this.inventory.removeItem(this.inputSlots[allocation.slot()], allocation.count());
@@ -1176,6 +1202,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         for (Entity entity : entityInputs) {
             entity.discard();
         }
+        return true;
     }
 
     private boolean matchesEntityInputs(MultiblockRecipe recipe) {
@@ -1754,6 +1781,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.ensureConfigured();
         if (level.isClientSide()) {
             this.updateClientCache();
+            ClientMultiblockModelData.requestRefresh(this);
+        }
+    }
+
+    @Override
+    public void onLoad() {
+        this.ensureConfigured();
+        if (this.level != null && this.level.isClientSide()) {
+            ClientMultiblockModelData.requestRefresh(this);
         }
     }
 
@@ -1875,7 +1911,14 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
         if (this.level != null && this.level.isClientSide()) {
             this.updateClientCache();
+            ClientMultiblockModelData.requestRefresh(this);
         }
+    }
+
+    @Override
+    public ModelData getModelData() {
+        Identifier definitionId = this.definitionId;
+        return definitionId == null ? ModelData.EMPTY : ModelData.of(DEFINITION_PROPERTY, definitionId);
     }
 
     @Override

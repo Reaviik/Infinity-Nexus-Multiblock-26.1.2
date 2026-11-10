@@ -118,7 +118,7 @@ configurations {
 dependencies {
     implementation 'com.nexus:infinity_nexus_core:8.0.4-26.1.2'
     implementation 'com.nexus:infinity_nexus_mod:7.0.5-26.1.2'
-    implementation 'com.nexus:infinity_nexus_cables:1.0.4-26.1.2'
+    implementation 'com.nexus:infinity_nexus_cables:1.0.5-26.1.2'
     implementation "curse.maven:geckolib-388172:8327201"
     implementation "curse.maven:jei-238222:9193052"
     implementation "curse.maven:jade-324717:8651070"

@@ -78,13 +78,16 @@ Abra `docks/builder/index.html` no navegador. O estado fica no `localStorage`; a
 5. capabilities, incluindo os filtros de `capability_ports`;
 6. controller;
 7. GUI customizada;
-8. receitas data-driven;
-9. herança/templates;
-10. revisão, checklist e exportação.
+8. sons `processing`/`finish`, com seletor de sons vanilla ou ID próprio;
+9. receitas data-driven;
+10. herança/templates;
+11. revisão, checklist e exportação.
 
-A etapa 08 edita receitas separadas em `data/<namespace>/recipe/<arquivo>.json`. Ingredientes usam uma linha por item/tag; fluidos usam `fluido quantidade`. O `type` da receita precisa ser o mesmo `recipe_type` da máquina. O JEI é gerado pelo runtime a partir do controller, não existe JSON extra de JEI.
+A etapa 08 usa o catálogo `docks/builder/data/minecraft_sounds.json`, gerado a partir do `sounds.json` do Minecraft 26.1.2, e aceita qualquer `namespace:path` custom. Sons só tocam em máquinas `type=recipe`.
 
-A etapa 09 edita `extends`/`family`, `template` e `overrides`; o pai é resolvido pelo loader, não pelo builder. A revisão mostra os caminhos de definição, receitas e assets esperados, mas o builder não cria PNGs, modelos, blockstates ou classes Java para controllers externos.
+A etapa 09 edita receitas separadas em `data/<namespace>/recipe/<arquivo>.json`. Ingredientes usam uma linha por item/tag; fluidos usam `fluido quantidade`. O `type` da receita precisa ser o mesmo `recipe_type` da máquina. O JEI é gerado pelo runtime a partir do controller, não existe JSON extra de JEI.
+
+A etapa 10 edita `extends`/`family`, `template` e `overrides`; o pai é resolvido pelo loader, não pelo builder. A revisão mostra os caminhos de definição, receitas e assets esperados, mas o builder não cria PNGs, modelos, blockstates ou classes Java para controllers externos.
 
 A exportação da definição não inclui receitas. Baixe cada receita no card correspondente ou na revisão; os nomes dos arquivos precisam bater com o caminho mostrado.
 
