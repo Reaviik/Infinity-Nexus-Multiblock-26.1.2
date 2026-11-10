@@ -1,21 +1,7 @@
 {
   "schema_version": 2,
   "id": "infinity_nexus_multiblock:fabrica_de_voxel_cube",
-  "type": "recipe",
-  "textures": {
-    "front": "minecraft:block/stone",
-    "side": "minecraft:block/oak_planks",
-    "top": "minecraft:block/oak_log_top",
-    "bottom": "minecraft:block/oak_log_top",
-    "particle": "minecraft:block/stone",
-    "active": {
-      "front": "minecraft:block/smooth_stone",
-      "side": "minecraft:block/oak_log",
-      "top": "minecraft:block/oak_log_top",
-      "bottom": "minecraft:block/oak_log_top",
-      "particle": "minecraft:block/smooth_stone"
-    }
-  },
+  "type": "recipeexemple",
   "item_slots": [
     {
       "id": "slot_0",
@@ -161,10 +147,6 @@
         "color": "0xFF00AA00"
       }
     ]
-  },
-  "sounds": {
-    "processing": "minecraft:block.blastfurnace.fire_crackle",
-    "finish": "minecraft:block.lava.extinguish"
   },
   "pattern": {
     "anchor": "C",

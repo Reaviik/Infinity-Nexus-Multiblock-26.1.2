@@ -695,7 +695,7 @@ Com `gui.elements` não vazio:
 - `entity.width`/`entity.height` precisam ser múltiplos de `18` e no mínimo `18`;
 - `title` e `text` não têm validação de limites; cuidado para não desenhar fora da tela.
 - Em `title`/`text`, `x/y` representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.
-- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,10` com `8x64`, e `entity` em `96,18` com `36x36`.
+- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,16` com `8x54`, e `entity` em `82,16` com `54x54`.
 - Slots novos começam em `8,16` e avançam `18` px por coluna, com 9 colunas por linha (ou 8 quando há barras de energia/fluido ou barra de progresso) antes de descer para a próxima linha.
 
 ### 8.3 Campos de `gui`

@@ -4,6 +4,16 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+---
+
+## <span style="color:#2DC26B;">` V: 1.0.8`</span>
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Jei recipes show incorrect items with components
+### <span style="color:#BA372A;"> **Removed**:</span>
+- Test presets
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.0.7`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Support for controller custom textures

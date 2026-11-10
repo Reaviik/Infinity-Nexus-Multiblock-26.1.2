@@ -192,8 +192,8 @@ test("gui entity exporta a area e exige type=recipe", () => {
   const state = withGuiState();
   const entity = V.buildDefinition(state).gui.elements.find((element) => element.type === "entity");
   assert.deepEqual(entity, { type: "entity", x: 120, y: 17, width: 36, height: 36 });
-  assert.equal(V.createGuiElement("entity").width, 36);
-  assert.equal(V.createGuiElement("entity").height, 36);
+  assert.equal(V.createGuiElement("entity").width, 54);
+  assert.equal(V.createGuiElement("entity").height, 54);
 
   const storage = withGuiState((value) => {
     value.type = "storage";
@@ -351,25 +351,25 @@ test("gui novos elementos começam com o layout do spawner", () => {
   const energy = V.createGuiElement("energy_bar");
   assert.deepEqual(
     { x: energy.x, y: energy.y, width: energy.width, height: energy.height, capability: energy.capability },
-    { x: 158, y: 10, width: 8, height: 64, capability: "energy" }
+    { x: 158, y: 16, width: 8, height: 54, capability: "energy" }
   );
 
   const fluid = V.createGuiElement("fluid_bar");
   assert.deepEqual(
     { x: fluid.x, y: fluid.y, width: fluid.width, height: fluid.height },
-    { x: 148, y: 10, width: 8, height: 64 }
+    { x: 148, y: 16, width: 8, height: 54 }
   );
 
   const progress = V.createGuiElement("progress_bar");
   assert.deepEqual(
     { x: progress.x, y: progress.y, width: progress.width, height: progress.height, direction: progress.direction },
-    { x: 138, y: 10, width: 8, height: 64, direction: "up" }
+    { x: 138, y: 16, width: 8, height: 54, direction: "up" }
   );
 
   const entity = V.createGuiElement("entity");
   assert.deepEqual(
     { x: entity.x, y: entity.y, width: entity.width, height: entity.height },
-    { x: 96, y: 18, width: 36, height: 36 }
+    { x: 82, y: 16, width: 54, height: 54 }
   );
 });
 

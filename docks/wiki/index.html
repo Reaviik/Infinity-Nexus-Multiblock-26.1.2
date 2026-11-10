@@ -1085,7 +1085,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <li>slots, player inventory, barras e <code>entity</code> precisam caber em <code>width</code>/<code>height</code>;</li>
 <li><code>title</code> e <code>text</code> não têm validação de limites; cuidado para não desenhar fora da tela.</li>
 <li>Em <code>title</code>/<code>text</code>, <code>x/y</code> representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.</li>
-<li>No builder, novos elementos começam com o layout do <code>spawner</code>: <code>title</code> em <code>8,4</code>, <code>text</code> em <code>8,75</code>, <code>player_inventory</code> em <code>8,84</code>, <code>energy_bar</code>/<code>fluid_bar</code>/<code>progress_bar</code> em <code>158/148/138,10</code> com <code>8x64</code>, e <code>entity</code> em <code>96,18</code> com <code>32x32</code>.</li>
+<li>No builder, novos elementos começam com o layout do <code>spawner</code>: <code>title</code> em <code>8,4</code>, <code>text</code> em <code>8,75</code>, <code>player_inventory</code> em <code>8,84</code>, <code>energy_bar</code>/<code>fluid_bar</code>/<code>progress_bar</code> em <code>158/148/138,16</code> com <code>8x54</code>, e <code>entity</code> em <code>82,16</code> com <code>54x54</code>.</li>
 <li>Slots novos começam em <code>8,16</code> e avançam <code>18</code> px por coluna, com 9 colunas por linha (ou 8 quando há barras de energia/fluido ou barra de progresso) antes de descer para a próxima linha.</li>
 </ul>
 <h3 id="83-campos-de-gui"><a class="heading-anchor" href="#83-campos-de-gui" aria-label="Link para 8.3 Campos de gui">#</a>8.3 Campos de <code>gui</code></h3>

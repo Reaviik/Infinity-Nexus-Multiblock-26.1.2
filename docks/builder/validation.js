@@ -2294,21 +2294,21 @@
       element.height = GUI_SLOT_SIZE;
     } else if (element.type === "energy_bar") {
       element.x = 158;
-      element.y = 10;
+      element.y = 16;
       element.width = 8;
-      element.height = 64;
+      element.height = 54;
       element.capability = "energy";
       element.color = "0xFFFF0000";
     } else if (element.type === "fluid_bar") {
       element.x = 148;
-      element.y = 10;
+      element.y = 16;
       element.width = 8;
-      element.height = 64;
+      element.height = 54;
     } else if (element.type === "progress_bar") {
       element.x = 138;
-      element.y = 10;
+      element.y = 16;
       element.width = 8;
-      element.height = 64;
+      element.height = 54;
       element.direction = "up";
       element.color = "0xFF00AA00";
     } else if (element.type === "arrow") {
@@ -2318,10 +2318,10 @@
       element.height = 16;
       element.direction = "right";
     } else if (element.type === "entity") {
-      element.x = 96;
-      element.y = 18;
-      element.width = GUI_ENTITY_CELL_SIZE * 2;
-      element.height = GUI_ENTITY_CELL_SIZE * 2;
+      element.x = 82;
+      element.y = 16;
+      element.width = GUI_ENTITY_CELL_SIZE * 3;
+      element.height = GUI_ENTITY_CELL_SIZE * 3;
     }
     return element;
   }

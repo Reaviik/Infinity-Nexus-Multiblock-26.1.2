@@ -52,6 +52,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.ItemLike;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.Fluid;
@@ -456,11 +457,16 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
     private static void addInputIngredient(
             IRecipeSlotBuilder slot,
             MultiblockRecipeIngredient.Item input) {
-        List<ItemStack> stacks = input.ingredient().items()
+        Ingredient ingredient = input.ingredient();
+        if (ingredient.isCustom()) {
+            slot.add(ingredient.display());
+            return;
+        }
+        List<ItemStack> stacks = ingredient.items()
                 .map(item -> new ItemStack(item.value(), input.count()))
                 .toList();
         if (stacks.isEmpty()) {
-            slot.add(input.ingredient());
+            slot.add(ingredient);
             return;
         }
         stacks.forEach(slot::add);
