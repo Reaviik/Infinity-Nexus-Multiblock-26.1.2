@@ -1,8 +1,28 @@
-## <span style="color:#2DC26B;">` V: 1.0.`</span>
+## <span style="color:#2DC26B;">` V: 1.1.`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 ### <span style="color:#F1C40F;"> **Fix**:</span>
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
+
+## <span style="color:#2DC26B;">` V: 1.1.1`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Add command /inmb reload to reload all multiblock definition and generate new multiblocks with data loaded by kubejs load server-scripts
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.1.0`</span>
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Block tags now support blockstates in multiblock structure.
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.0.9`</span>
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Default bars position in gui
+- Controller title position in gui
+### <span style="color:#E67E23;"> **Change**:</span>
+- Valid range accessor to 32 blocks range to open structure gui
+- Max size for multiblocks structures from 4096 to 40960
 
 ---
 

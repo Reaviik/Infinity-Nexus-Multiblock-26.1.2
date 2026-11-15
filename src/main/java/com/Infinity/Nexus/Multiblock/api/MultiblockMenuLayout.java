@@ -85,25 +85,22 @@ public record MultiblockMenuLayout(
         int columns = reservedRail ? 8 : 9;
 
         List<GuiElement> elements = new ArrayList<>();
-        elements.add(GuiElement.title(8, 6, "", GuiElement.DEFAULT_TEXT_COLOR, false));
+        elements.add(GuiElement.title(8, 4, "", GuiElement.DEFAULT_TEXT_COLOR, false));
 
         int barRows = Math.max(1, (barCount + 2) / 3);
-        int barHeight = Math.max(8, (64 - (barRows - 1) * 4) / barRows);
+        int barHeight = Math.max(8, (54 - (barRows - 1) * 4) / barRows);
         int barIndex = 0;
         if (hasEnergy) {
             String energyId = definition.energy().map(EnergyCapability::id).orElse("");
-            elements.add(GuiElement.energyBar(
-                    barX(barIndex), barY(barIndex, barHeight), 3, barHeight,
-                    energyId, GuiDirection.UP, GuiElement.DEFAULT_ENERGY_COLOR));
+            elements.add(GuiElement.energyBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, energyId, GuiDirection.UP, GuiElement.DEFAULT_ENERGY_COLOR));
             barIndex++;
         }
         for (FluidTank tank : tanks) {
-            elements.add(GuiElement.fluidBar(barX(barIndex), barY(barIndex, barHeight), 3, barHeight, tank.id()));
+            elements.add(GuiElement.fluidBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, tank.id()));
             barIndex++;
         }
         if (hasProgress) {
-            elements.add(GuiElement.progressBar(
-                    DEFAULT_WIDTH - 5, DEFAULT_SLOT_Y, 3, 54, GuiDirection.UP, GuiElement.DEFAULT_PROGRESS_COLOR));
+            elements.add(GuiElement.progressBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, GuiDirection.UP, GuiElement.DEFAULT_PROGRESS_COLOR));
         }
 
         List<SlotPlacement> placements = new ArrayList<>();
@@ -178,11 +175,11 @@ public record MultiblockMenuLayout(
     }
 
     private static int barX(int index) {
-        return DEFAULT_WIDTH - 11 - (index % 3) * 5;
+        return DEFAULT_WIDTH - 15 - (index % 3) * 8;
     }
 
     private static int barY(int index, int barHeight) {
-        return 5 + (index / 3) * (barHeight + 4);
+        return 16 + (index / 3) * (barHeight + 4);
     }
 
     private static MultiblockMenuLayout createCustom(MultiblockDefinition definition, MultiblockGui gui) {

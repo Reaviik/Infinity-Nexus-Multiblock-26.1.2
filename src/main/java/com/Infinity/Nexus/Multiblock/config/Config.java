@@ -4,7 +4,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class Config {
     public static final int DEFAULT_PATTERN_SCAN_LIMIT = 256;
-    public static final int MAX_PATTERN_SCAN_LIMIT = 4096;
+    public static final int MAX_PATTERN_SCAN_LIMIT = 4096*10;
 
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 

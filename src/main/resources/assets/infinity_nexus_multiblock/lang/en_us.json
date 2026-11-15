@@ -57,5 +57,7 @@
   "command.infinity_nexus_multiblock.unknown_definition": "Unknown multiblock definition: %s",
   "command.infinity_nexus_multiblock.give": "Gave a multiblock controller for %s",
   "command.infinity_nexus_multiblock.list.empty": "No multiblock definitions are loaded",
-  "command.infinity_nexus_multiblock.list.give": "Click to receive this controller"
+  "command.infinity_nexus_multiblock.list.give": "Click to receive this controller",
+  "command.infinity_nexus_multiblock.reload.success": "Reloaded %s multiblock definitions and %s recipes",
+  "command.infinity_nexus_multiblock.reload.failed": "Could not reload multiblock data: %s"
 }

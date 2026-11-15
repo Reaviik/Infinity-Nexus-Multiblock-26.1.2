@@ -492,14 +492,19 @@ test("state vazio e state duplicado são inválidos", () => {
   assert.ok(codes(result).includes("matcher.state.duplicate"));
 });
 
-test("objeto com tag e state vindo do JSON é inválido", () => {
-  const matcher = V.parseMatcherValue({ tag: "minecraft:glass", state: { a: "b" } });
-  assert.equal(matcher.kind, "invalid");
+test("objeto com tag e state vindo do JSON é aceito", () => {
+  const matcher = V.parseMatcherValue({ tag: "minecraft:glass", state: { facing: "south" } });
+  assert.equal(matcher.kind, "tag");
+  assert.deepEqual(matcher.state, [{ key: "facing", value: "south" }]);
   const state = withState((value) => {
     value.matchers.I = matcher;
   });
   const result = V.validateState(state);
-  assert.ok(codes(result).includes("matcher.object.invalid"));
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(V.buildDefinition(state).pattern.matchers.I, {
+    tag: "#minecraft:glass",
+    state: { facing: "south" }
+  });
 });
 
 test("importação preserva campos opcionais desconhecidos", () => {

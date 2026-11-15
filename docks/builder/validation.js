@@ -3072,7 +3072,7 @@
         };
       }
       if (hasTag) {
-        if (value.state !== undefined) {
+        if (value.state !== undefined && !isPlainObject(value.state)) {
           return {
             kind: "invalid",
             block: "",
@@ -3081,11 +3081,21 @@
             raw: clone(value)
           };
         }
+        var tagRows = [];
+        if (isPlainObject(value.state)) {
+          Object.keys(value.state).forEach(function (key) {
+            var rawValue = value.state[key];
+            tagRows.push({
+              key: key,
+              value: typeof rawValue === "string" ? rawValue : String(rawValue)
+            });
+          });
+        }
         return {
           kind: "tag",
           block: "",
           tag: value.tag,
-          state: [],
+          state: tagRows,
           raw: null
         };
       }
@@ -3348,7 +3358,21 @@
     }
     if (matcher.kind === "tag") {
       var tag = stripTagPrefix(matcher.tag);
-      return "#" + tag;
+      var tagStateValues = {};
+      var tagRows = Array.isArray(matcher.state) ? matcher.state : [];
+      tagRows.forEach(function (row) {
+        var key = trimString(row && row.key);
+        if (key) {
+          tagStateValues[key] = typeof row.value === "string" ? row.value : String(row.value === undefined ? "" : row.value);
+        }
+      });
+      if (Object.keys(tagStateValues).length === 0) {
+        return "#" + tag;
+      }
+      return {
+        tag: "#" + tag,
+        state: tagStateValues
+      };
     }
     if (matcher.kind === "state") {
       var stateValues = {};
@@ -3971,6 +3995,37 @@
       }
     });
 
+    function validateMatcherState(matcher, symbol) {
+      if (!Array.isArray(matcher.state)) {
+        matchersOk = false;
+        add("matcher.state.invalid", "error", "matchers", "matcher:" + symbol,
+          "A lista de propriedades do matcher \"" + symbol + "\" é inválida.");
+        return;
+      }
+      var seenKeys = new Set();
+      matcher.state.forEach(function (row) {
+        var key = trimString(row && row.key);
+        var value = trimString(row && row.value);
+        if (!key) {
+          matchersOk = false;
+          add("matcher.state.key.required", "error", "matchers", "matcher:" + symbol,
+            "Toda propriedade de state do matcher \"" + symbol + "\" precisa de nome.");
+          return;
+        }
+        if (!value) {
+          matchersOk = false;
+          add("matcher.state.value.required", "error", "matchers", "matcher:" + symbol,
+            "A propriedade \"" + key + "\" do matcher \"" + symbol + "\" precisa de valor.");
+        }
+        if (seenKeys.has(key)) {
+          matchersOk = false;
+          add("matcher.state.duplicate", "error", "matchers", "matcher:" + symbol,
+            "A propriedade \"" + key + "\" aparece mais de uma vez no matcher \"" + symbol + "\".");
+        }
+        seenKeys.add(key);
+      });
+    }
+
     matcherKeys.forEach(function (symbol) {
       var matcher = matcherSource[symbol];
       if (!matcher || typeof matcher !== "object") {
@@ -3983,7 +4038,7 @@
       if (matcher.kind === "invalid") {
         matchersOk = false;
         add("matcher.object.invalid", "error", "matchers", "matcher:" + symbol,
-          "O matcher \"" + symbol + "\" precisa ter exatamente um de block ou tag, e state só é aceito com block.");
+          "O matcher \"" + symbol + "\" precisa ter exatamente um de block ou tag.");
         return;
       }
 
@@ -3998,6 +4053,7 @@
           add("matcher.tag.invalid", "error", "matchers", "matcher:" + symbol,
             "A tag do matcher \"" + symbol + "\" não é um identifier válido.");
         }
+        validateMatcherState(matcher, symbol);
       } else if (matcher.kind === "block" || matcher.kind === "state") {
         var block = trimString(matcher.block);
         if (!block) {
@@ -4010,34 +4066,7 @@
             "O bloco do matcher \"" + symbol + "\" não é um identifier válido.");
         }
         if (matcher.kind === "state") {
-          if (!Array.isArray(matcher.state)) {
-            matchersOk = false;
-            add("matcher.state.invalid", "error", "matchers", "matcher:" + symbol,
-              "A lista de propriedades do matcher \"" + symbol + "\" é inválida.");
-          } else {
-            var seenKeys = new Set();
-            matcher.state.forEach(function (row) {
-              var key = trimString(row && row.key);
-              var value = trimString(row && row.value);
-              if (!key) {
-                matchersOk = false;
-                add("matcher.state.key.required", "error", "matchers", "matcher:" + symbol,
-                  "Toda propriedade de state do matcher \"" + symbol + "\" precisa de nome.");
-                return;
-              }
-              if (!value) {
-                matchersOk = false;
-                add("matcher.state.value.required", "error", "matchers", "matcher:" + symbol,
-                  "A propriedade \"" + key + "\" do matcher \"" + symbol + "\" precisa de valor.");
-              }
-              if (seenKeys.has(key)) {
-                matchersOk = false;
-                add("matcher.state.duplicate", "error", "matchers", "matcher:" + symbol,
-                  "A propriedade \"" + key + "\" aparece mais de uma vez no matcher \"" + symbol + "\".");
-              }
-              seenKeys.add(key);
-            });
-          }
+          validateMatcherState(matcher, symbol);
         }
       } else {
         matchersOk = false;
@@ -4455,15 +4484,39 @@
       return "Matcher inválido.";
     }
     if (matcher.kind === "invalid") {
-      return "Use block ou tag (exatamente um); state só vale com block.";
+      return "Use block ou tag (exatamente um).";
     }
     if (matcher.kind === "tag") {
-      return isValidIdentifier(stripTagPrefix(matcher.tag)) ? "" : "Tag inválida.";
+      if (!isValidIdentifier(stripTagPrefix(matcher.tag))) {
+        return "Tag inválida.";
+      }
+    } else if (matcher.kind === "block" || matcher.kind === "state") {
+      if (!isValidIdentifier(matcher.block)) {
+        return "Bloco inválido.";
+      }
+    } else {
+      return "Formato desconhecido.";
     }
-    if (matcher.kind === "block" || matcher.kind === "state") {
-      return isValidIdentifier(matcher.block) ? "" : "Bloco inválido.";
+    if (matcher.kind === "tag" || matcher.kind === "state") {
+      return stateRowsProblem(matcher.state);
     }
-    return "Formato desconhecido.";
+    return "";
+  }
+
+  function stateRowsProblem(rows) {
+    if (!Array.isArray(rows)) {
+      return "Propriedades de state inválidas.";
+    }
+    var seen = new Set();
+    for (var index = 0; index < rows.length; index += 1) {
+      var key = trimString(rows[index] && rows[index].key);
+      var value = trimString(rows[index] && rows[index].value);
+      if (!key || !value || seen.has(key)) {
+        return "Propriedades de state inválidas.";
+      }
+      seen.add(key);
+    }
+    return "";
   }
 
   return {

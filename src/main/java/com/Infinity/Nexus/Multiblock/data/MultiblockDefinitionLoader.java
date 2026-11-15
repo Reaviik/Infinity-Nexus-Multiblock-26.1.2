@@ -1,5 +1,6 @@
 package com.Infinity.Nexus.Multiblock.data;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
@@ -25,30 +27,37 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockSounds;
 import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
+import org.jspecify.annotations.Nullable;
 
 public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadListener<JsonObject> {
     private static volatile Map<Identifier, JsonObject> resolvedFiles = Map.of();
+    private static volatile @Nullable MultiblockDefinitionLoader instance;
 
     private static final Codec<JsonObject> JSON_CODEC = Codec.PASSTHROUGH.xmap(
             dynamic -> dynamic.convert(JsonOps.INSTANCE).getValue().getAsJsonObject(),
@@ -92,6 +101,7 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
 
     public MultiblockDefinitionLoader() {
         super(JSON_CODEC, FileToIdConverter.json("multiblock"));
+        instance = this;
     }
 
     private static DataResult<BlockMatcher> parseMatcher(String value) {
@@ -171,6 +181,22 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
 
     @Override
     protected void apply(Map<Identifier, JsonObject> prepared, ResourceManager resourceManager, ProfilerFiller profiler) {
+        applyDefinitions(prepared);
+    }
+
+    public static int reloadFrom(ResourceManager resourceManager) {
+        Map<Identifier, JsonObject> prepared = new LinkedHashMap<>();
+        SimpleJsonResourceReloadListener.scanDirectory(
+                resourceManager, FileToIdConverter.json("multiblock"), conditionalOps(), JSON_CODEC, prepared);
+        return applyDefinitions(prepared);
+    }
+
+    public static DynamicOps<JsonElement> conditionalOps() {
+        MultiblockDefinitionLoader loader = instance;
+        return loader == null ? JsonOps.INSTANCE : loader.makeConditionalOps();
+    }
+
+    private static int applyDefinitions(Map<Identifier, JsonObject> prepared) {
         Set<Identifier> referencedTemplates = new HashSet<>();
         for (JsonObject file : prepared.values()) {
             try {
@@ -204,6 +230,7 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
         MultiblockDefinitions.replaceAll(definitions);
         resolvedFiles = Map.copyOf(synced);
         InfinityNexusMultiblock.LOGGER.info("Loaded {} multiblock definitions", definitions.size());
+        return definitions.size();
     }
 
     public static Map<Identifier, JsonObject> resolvedFiles() {
@@ -402,13 +429,15 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 return DataResult.error(() -> "Matcher objects need exactly one of 'block' or 'tag'");
             }
             if (this.tag.isPresent()) {
-                if (!this.state.isEmpty()) {
-                    return DataResult.error(() -> "Block state properties are only supported for block matchers");
-                }
                 String rawTag = this.tag.get();
                 String tagId = rawTag.startsWith("#") ? rawTag.substring(1) : rawTag;
                 return Identifier.read(tagId)
-                        .map(id -> BlockMatcher.tag(TagKey.create(Registries.BLOCK, id)));
+                        .map(id -> {
+                            TagKey<Block> tag = TagKey.create(Registries.BLOCK, id);
+                            return this.state.isEmpty()
+                                    ? BlockMatcher.tag(tag)
+                                    : tagStateMatcher(tag, this.state);
+                        });
             }
 
             return Identifier.read(this.block.get()).flatMap(id -> BuiltInRegistries.BLOCK.getOptional(id)
@@ -475,6 +504,99 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
         @SuppressWarnings({ "rawtypes", "unchecked" })
         private static BlockState setProperty(BlockState state, Property property, Comparable value) {
             return state.setValue(property, value);
+        }
+
+        private static BlockMatcher tagStateMatcher(TagKey<Block> tag, Map<String, String> values) {
+            return new TagStateMatcher(tag, Map.copyOf(values));
+        }
+
+        private static final class TagStateMatcher implements BlockMatcher {
+            private final TagKey<Block> tag;
+            private final Map<String, String> values;
+            private final Map<Block, BlockState[]> rotated = new ConcurrentHashMap<>();
+            private volatile @Nullable Display cached;
+
+            private TagStateMatcher(TagKey<Block> tag, Map<String, String> values) {
+                this.tag = tag;
+                this.values = values;
+            }
+
+            @Override
+            public boolean matches(BlockState state) {
+                return matches(state, Rotation.NONE);
+            }
+
+            @Override
+            public boolean matches(BlockState state, Rotation rotation) {
+                if (!state.is(this.tag)) {
+                    return false;
+                }
+                BlockState expected = this.expected(state.getBlock(), rotation);
+                if (expected == null) {
+                    return false;
+                }
+                for (String name : this.values.keySet()) {
+                    Property<?> property = state.getBlock().getStateDefinition().getProperty(name);
+                    if (property == null || !state.getValue(property).equals(expected.getValue(property))) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            private @Nullable BlockState expected(Block block, Rotation rotation) {
+                BlockState[] states = this.rotated.computeIfAbsent(block, this::rotateStates);
+                return states.length == 0 ? null : states[rotation.ordinal()];
+            }
+
+            private BlockState[] rotateStates(Block block) {
+                BlockState expected = block.defaultBlockState();
+                for (Map.Entry<String, String> entry : this.values.entrySet()) {
+                    Property<?> property = block.getStateDefinition().getProperty(entry.getKey());
+                    if (property == null) {
+                        return new BlockState[0];
+                    }
+                    Optional<? extends Comparable<?>> parsed = property.getValue(entry.getValue());
+                    if (parsed.isEmpty()) {
+                        return new BlockState[0];
+                    }
+                    expected = setProperty(expected, property, parsed.get());
+                }
+                BlockState[] states = new BlockState[Rotation.values().length];
+                for (Rotation rotation : Rotation.values()) {
+                    states[rotation.ordinal()] = expected.rotate(rotation);
+                }
+                return states;
+            }
+
+            @Override
+            public Optional<Display> display() {
+                Display current = this.cached;
+                if (current == null) {
+                    List<BlockState> states = new ArrayList<>();
+                    List<ItemStack> stacks = new ArrayList<>();
+                    for (Holder<Block> holder : BuiltInRegistries.BLOCK.getTagOrEmpty(this.tag)) {
+                        Block block = holder.value();
+                        BlockState[] candidates = this.rotated.computeIfAbsent(block, this::rotateStates);
+                        if (candidates.length == 0) {
+                            continue;
+                        }
+                        states.add(candidates[Rotation.NONE.ordinal()]);
+                        Item item = block.asItem();
+                        if (item != Items.AIR && stacks.stream().noneMatch(stack -> stack.is(item))) {
+                            stacks.add(new ItemStack(item));
+                        }
+                    }
+                    current = new Display(
+                            List.copyOf(states),
+                            List.copyOf(stacks),
+                            Component.literal("#" + this.tag.location()));
+                    if (!states.isEmpty() || !stacks.isEmpty()) {
+                        this.cached = current;
+                    }
+                }
+                return Optional.of(current);
+            }
         }
     }
 

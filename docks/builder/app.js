@@ -966,7 +966,7 @@
   }
 
   function matcherStateHtml(symbol, matcher) {
-    if (matcher.kind !== "state") {
+    if (matcher.kind !== "state" && matcher.kind !== "tag") {
       return "";
     }
     var rows = Array.isArray(matcher.state) ? matcher.state : [];
@@ -1025,7 +1025,9 @@
       "</div></div><p class='matcher-feedback" + (feedback ? " " + feedback.tone : "") + "'" +
       (feedback ? "" : " hidden") + ">" + (feedback ? esc(feedback.text) : "") +
       "</p><details class='card-advanced'><summary>Estado e JSON<span class='card-advanced-hint'>" +
-      (matcher.kind === "state" ? "blockstate e exportação" : "exportação") +
+      (matcher.kind === "state" || (matcher.kind === "tag" && Array.isArray(matcher.state) && matcher.state.length > 0)
+        ? "blockstate e exportação"
+        : "exportação") +
       "</span></summary><div class='card-advanced-body'>" + matcherStateHtml(symbol, matcher) +
       "<code class='matcher-json'>" + esc(serialized) + "</code></div></details></div>";
   }

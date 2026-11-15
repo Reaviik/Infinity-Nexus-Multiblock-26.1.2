@@ -59,5 +59,7 @@
   "command.infinity_nexus_multiblock.unknown_definition": "Definição de multibloco desconhecida: %s",
   "command.infinity_nexus_multiblock.give": "Controlador de multibloco para %s entregue",
   "command.infinity_nexus_multiblock.list.empty": "Nenhuma definição de multibloco carregada",
-  "command.infinity_nexus_multiblock.list.give": "Clique para receber este controlador"
+  "command.infinity_nexus_multiblock.list.give": "Clique para receber este controlador",
+  "command.infinity_nexus_multiblock.reload.success": "%s definições de multibloco e %s receitas recarregadas",
+  "command.infinity_nexus_multiblock.reload.failed": "Não foi possível recarregar os dados de multibloco: %s"
 }

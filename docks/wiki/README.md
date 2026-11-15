@@ -334,7 +334,7 @@ O `#` é obrigatório nesse formato. A tag é resolvida no registro de blocos.
 |---|---:|---|---|
 | `block` | um dos dois | string | ID de bloco. Não use junto com `tag`. |
 | `tag` | um dos dois | string | ID de tag. Pode ter `#` ou não. Não use junto com `block`. |
-| `state` | não | objeto | Mapa de propriedade para valor, ambos strings. Só pode ser usado com `block`. |
+| `state` | não | objeto | Mapa de propriedade para valor, ambos strings. Funciona com `block` ou `tag`. |
 
 Exatamente um entre `block` e `tag` precisa existir.
 
@@ -364,15 +364,30 @@ Exemplo com tag:
 }
 ```
 
+Exemplo com tag e state:
+
+```json
+"matchers": {
+  "S": {
+    "tag": "#minecraft:stairs",
+    "state": {
+      "facing": "south"
+    }
+  }
+}
+```
+
+Com `tag` + `state`, o bloco precisa pertencer à tag **e** ter as propriedades informadas; membros da tag que não têm essas propriedades são ignorados no match.
+
 ### 5.4 Como o state funciona
 
 - Apenas as propriedades listadas em `state` são verificadas.
 - Propriedades omitidas são ignoradas.
-- Um objeto sem `state` aceita qualquer state do bloco.
+- Um objeto sem `state` aceita qualquer state do bloco (ou de qualquer membro da tag).
 - Um objeto com `state` aceita qualquer combinação que bata com as propriedades informadas.
-- O nome da propriedade e o valor precisam existir no bloco.
+- Com `tag`, cada membro é avaliado individualmente: o bloco precisa estar na tag e ter todas as propriedades informadas.
+- O nome da propriedade e o valor precisam existir no bloco. Em um matcher de tag, membros sem a propriedade ou sem o valor válido não casam.
 - Valores são strings: `"true"`, `"false"`, `"north"`, `"1"`, etc.
-- `state` com `tag` é inválido.
 - O state é relativo à orientação canônica `SOUTH` e é rotacionado junto com a estrutura.
 
 Exemplo de matcher parcial para escada:
@@ -1451,7 +1466,6 @@ A receita gerada produz o controller com o componente `infinity_nexus_multiblock
 | `Unknown block` | ID de bloco inexistente. | Confira o registro. |
 | `Unknown block state property` | Propriedade não existe no bloco. | Confira o blockstate do bloco. |
 | `Invalid value ... for block state property` | Valor inválido para a propriedade. | Use um valor válido. |
-| `Block state properties are only supported for block matchers` | `state` junto com `tag`. | Remova `state` ou use `block`. |
 | `No matcher registered for pattern symbol` | Símbolo sem matcher. | Adicione o matcher. |
 | `needs exactly one anchor` | Nenhuma ou mais de uma âncora. | Deixe exatamente um `C`. |
 | `same number of rows` | Camadas com quantidades diferentes de linhas. | Alinhe as camadas. |

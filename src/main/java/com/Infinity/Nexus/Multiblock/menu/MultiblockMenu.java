@@ -123,7 +123,7 @@ public class MultiblockMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        return Container.stillValidBlockEntity(this.blockEntity, player);
+        return Container.stillValidBlockEntity(this.blockEntity, player, 32);
     }
 
     @Override

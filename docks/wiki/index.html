@@ -571,7 +571,7 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
 <td><code>state</code></td>
 <td align="right">não</td>
 <td>objeto</td>
-<td>Mapa de propriedade para valor, ambos strings. Só pode ser usado com <code>block</code>.</td>
+<td>Mapa de propriedade para valor, ambos strings. Funciona com <code>block</code> ou <code>tag</code>.</td>
 </tr>
 </tbody></table></div>
 <p>Exatamente um entre <code>block</code> e <code>tag</code> precisa existir.</p>
@@ -595,15 +595,26 @@ Máquina: inventário, energia, fluidos, GUI e receita funcionam
   }
 }
 </code></pre>
+<p>Exemplo com tag e state:</p>
+<pre><code class="language-json">&quot;matchers&quot;: {
+  &quot;S&quot;: {
+    &quot;tag&quot;: &quot;#minecraft:stairs&quot;,
+    &quot;state&quot;: {
+      &quot;facing&quot;: &quot;south&quot;
+    }
+  }
+}
+</code></pre>
+<p>Com <code>tag</code> + <code>state</code>, o bloco precisa pertencer à tag <strong>e</strong> ter as propriedades informadas; membros da tag que não têm essas propriedades são ignorados no match.</p>
 <h3 id="54-como-o-state-funciona"><a class="heading-anchor" href="#54-como-o-state-funciona" aria-label="Link para 5.4 Como o state funciona">#</a>5.4 Como o state funciona</h3>
 <ul>
 <li>Apenas as propriedades listadas em <code>state</code> são verificadas.</li>
 <li>Propriedades omitidas são ignoradas.</li>
-<li>Um objeto sem <code>state</code> aceita qualquer state do bloco.</li>
+<li>Um objeto sem <code>state</code> aceita qualquer state do bloco (ou de qualquer membro da tag).</li>
 <li>Um objeto com <code>state</code> aceita qualquer combinação que bata com as propriedades informadas.</li>
-<li>O nome da propriedade e o valor precisam existir no bloco.</li>
+<li>Com <code>tag</code>, cada membro é avaliado individualmente: o bloco precisa estar na tag e ter todas as propriedades informadas.</li>
+<li>O nome da propriedade e o valor precisam existir no bloco. Em um matcher de tag, membros sem a propriedade ou sem o valor válido não casam.</li>
 <li>Valores são strings: <code>&quot;true&quot;</code>, <code>&quot;false&quot;</code>, <code>&quot;north&quot;</code>, <code>&quot;1&quot;</code>, etc.</li>
-<li><code>state</code> com <code>tag</code> é inválido.</li>
 <li>O state é relativo à orientação canônica <code>SOUTH</code> e é rotacionado junto com a estrutura.</li>
 </ul>
 <p>Exemplo de matcher parcial para escada:</p>
@@ -1922,11 +1933,6 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 <td><code>Invalid value ... for block state property</code></td>
 <td>Valor inválido para a propriedade.</td>
 <td>Use um valor válido.</td>
-</tr>
-<tr>
-<td><code>Block state properties are only supported for block matchers</code></td>
-<td><code>state</code> junto com <code>tag</code>.</td>
-<td>Remova <code>state</code> ou use <code>block</code>.</td>
 </tr>
 <tr>
 <td><code>No matcher registered for pattern symbol</code></td>

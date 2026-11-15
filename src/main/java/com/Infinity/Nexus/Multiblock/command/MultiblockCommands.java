@@ -1,6 +1,7 @@
 package com.Infinity.Nexus.Multiblock.command;
 
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
+import com.Infinity.Nexus.Multiblock.data.MultiblockDataReloader;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.data.MultiblockStructureExporter;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
@@ -63,6 +64,7 @@ public final class MultiblockCommands {
                 .then(Commands.literal("hand").executes(MultiblockCommands::hand))
                 .then(Commands.literal("look").executes(MultiblockCommands::look))
                 .then(Commands.literal("list").executes(MultiblockCommands::list))
+                .then(Commands.literal("reload").executes(MultiblockCommands::reload))
                 .then(Commands.literal("give")
                         .then(Commands.argument("definition", IdentifierArgument.id())
                                 .suggests((context, builder) -> {
@@ -96,6 +98,22 @@ public final class MultiblockCommands {
         source.sendSuccess(() -> Component.translatable(
                 "command.infinity_nexus_multiblock.give", definitionId.toString()), false);
         return 1;
+    }
+
+    private static int reload(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        try {
+            MultiblockDataReloader.Result result = MultiblockDataReloader.reload(source.getServer());
+            source.sendSuccess(() -> Component.translatable(
+                    "command.infinity_nexus_multiblock.reload.success",
+                    result.definitions(), result.recipes()), true);
+            return 1;
+        } catch (RuntimeException exception) {
+            LOGGER.error("Failed to reload multiblock data", exception);
+            source.sendFailure(Component.translatable(
+                    "command.infinity_nexus_multiblock.reload.failed", exception.getMessage()));
+            return 0;
+        }
     }
 
     private static int list(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
