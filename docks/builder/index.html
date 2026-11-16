@@ -382,7 +382,7 @@
               <button type="button" class="btn btn-tiny btn-danger" id="resetTexturesBtn">limpar texturas</button>
             </div>
           </div>
-          <p class="field-hint">Ids completos como <code>minecraft:block/stone</code>. Faces omitidas caem no modelo padrão. <code>particle</code> cai em <code>front</code> quando vazio.</p>
+          <p class="field-hint">Ids completos como <code>minecraft:block/stone</code>. Faces omitidas caem no modelo padrão. <code>particle</code> cai em <code>front</code> quando vazio. Building herda idle/active; sem texturas por definicao, usa o modelo padrao com <code>front_on_building</code>.</p>
           <div id="texturesForm" autocomplete="off">
             <h3 class="controller-section-title">Idle <span class="controller-optional">controller parado</span></h3>
             <div class="controller-texture-grid">
@@ -430,6 +430,29 @@
                 <input id="textureActiveParticle" type="text" data-texture-set="active" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="herda idle">
               </div>
             </div>
+            <h3 class="controller-section-title">Building <span class="controller-optional">opcional, controller montando a estrutura</span></h3>
+            <div class="controller-texture-grid">
+              <div class="field">
+                <label for="textureBuildingFront">front</label>
+                <input id="textureBuildingFront" type="text" data-texture-set="building" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="herda active">
+              </div>
+              <div class="field">
+                <label for="textureBuildingSide">side</label>
+                <input id="textureBuildingSide" type="text" data-texture-set="building" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="herda active">
+              </div>
+              <div class="field">
+                <label for="textureBuildingTop">top</label>
+                <input id="textureBuildingTop" type="text" data-texture-set="building" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="herda active">
+              </div>
+              <div class="field">
+                <label for="textureBuildingBottom">bottom</label>
+                <input id="textureBuildingBottom" type="text" data-texture-set="building" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="herda active">
+              </div>
+              <div class="field">
+                <label for="textureBuildingParticle">particle</label>
+                <input id="textureBuildingParticle" type="text" data-texture-set="building" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="herda active">
+              </div>
+            </div>
           </div>
           <code class="matcher-json slot-json controller-json" id="texturesJson"></code>
           <p class="matcher-feedback controller-feedback" id="texturesFeedback" hidden></p>
@@ -467,7 +490,7 @@
         </div>
 
         <div class="callout callout-info">
-          O bloco, o item e o block entity são compartilhados; o campo <code>textures</code> permite sobrescrever as texturas por definição (idle/active). O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
+          O bloco, o item e o block entity são compartilhados; o campo <code>textures</code> permite sobrescrever as texturas por definição (idle/active/building). O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
         </div>
       </section>
 

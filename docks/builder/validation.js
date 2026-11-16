@@ -1715,7 +1715,8 @@
   function createTextures() {
     return {
       idle: createTextureSet(),
-      active: createTextureSet()
+      active: createTextureSet(),
+      building: createTextureSet()
     };
   }
 
@@ -1764,6 +1765,9 @@
     if (value.active !== undefined && value.active !== null) {
       textures.active = parseTextureSet(value.active, notes, path + ".active");
     }
+    if (value.building !== undefined && value.building !== null) {
+      textures.building = parseTextureSet(value.building, notes, path + ".building");
+    }
     return textures;
   }
 
@@ -1777,7 +1781,8 @@
   }
 
   function hasTextures(textures) {
-    return isPlainObject(textures) && (hasTextureSet(textures.idle) || hasTextureSet(textures.active));
+    return isPlainObject(textures) && (hasTextureSet(textures.idle) || hasTextureSet(textures.active)
+      || hasTextureSet(textures.building));
   }
 
   function buildTextureSet(textures) {
@@ -1807,6 +1812,10 @@
     if (Object.keys(active).length > 0) {
       result.active = active;
     }
+    var building = buildTextureSet(textures.building);
+    if (Object.keys(building).length > 0) {
+      result.building = building;
+    }
     return result;
   }
 
@@ -1835,7 +1844,8 @@
       return "textures precisa ser um objeto.";
     }
     return textureSetProblem(textures.idle, "textures") ||
-      textureSetProblem(textures.active, "textures.active");
+      textureSetProblem(textures.active, "textures.active") ||
+      textureSetProblem(textures.building, "textures.building");
   }
 
   function createController() {

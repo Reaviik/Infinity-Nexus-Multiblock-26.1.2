@@ -40,6 +40,7 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final BooleanProperty FORMED = BooleanProperty.create("formed");
     public static final BooleanProperty PROCESSING = BooleanProperty.create("processing");
+    public static final BooleanProperty BUILDING = BooleanProperty.create("building");
 
     private final Supplier<BlockEntityType<?>> blockEntityType;
 
@@ -49,7 +50,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(FACING, Direction.NORTH)
                 .setValue(FORMED, false)
-                .setValue(PROCESSING, false));
+                .setValue(PROCESSING, false)
+                .setValue(BUILDING, false));
     }
 
     @Override
@@ -59,7 +61,7 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, FORMED, PROCESSING);
+        builder.add(FACING, FORMED, PROCESSING, BUILDING);
     }
 
     @Override
@@ -70,7 +72,8 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
         return this.defaultBlockState()
                 .setValue(FACING, context.getHorizontalDirection().getOpposite())
                 .setValue(FORMED, false)
-                .setValue(PROCESSING, false);
+                .setValue(PROCESSING, false)
+                .setValue(BUILDING, false);
     }
 
     @Override

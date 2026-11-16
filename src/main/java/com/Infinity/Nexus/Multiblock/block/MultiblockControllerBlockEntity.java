@@ -15,7 +15,6 @@ import java.util.Set;
 import com.Infinity.Nexus.Core.itemStackHandler.RestrictedItemStackHandler;
 import com.mojang.serialization.Codec;
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
-import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
 import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
 import com.Infinity.Nexus.Multiblock.api.FluidTank;
 import com.Infinity.Nexus.Multiblock.api.ItemSlot;
@@ -29,8 +28,10 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.client.ClientMultiblockModelData;
 import com.Infinity.Nexus.Multiblock.client.MultiblockClientCache;
+import com.Infinity.Nexus.Multiblock.config.Config;
 import com.Infinity.Nexus.Multiblock.data.MultiblockSavedData;
 import com.Infinity.Nexus.Multiblock.data.MultiblockStructureExporter;
+import com.Infinity.Nexus.Multiblock.network.MultiblockBlockedHighlightPayload;
 import com.Infinity.Nexus.Multiblock.network.MultiblockExportPayload;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
@@ -136,6 +137,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private final Map<String, SlotLock> slotLocks = new LinkedHashMap<>();
     private final Map<String, String> fluidSlotTanks = new LinkedHashMap<>();
     private final Set<String> drainedFluidSlots = new HashSet<>();
+    private @Nullable MultiblockAssemblyJob assemblyJob;
 
     public MultiblockControllerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -277,6 +279,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             return;
         }
         this.definitionId = definitionId;
+        this.assemblyJob = null;
         MultiblockDefinition definition = this.definition();
         if (definition != null) {
             this.configure(definition);
@@ -796,11 +799,28 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             BlockState state = this.getBlockState();
             this.level.sendBlockUpdated(this.worldPosition, state, state, Block.UPDATE_CLIENTS);
         }
-        if (!this.structureValidated || this.level.getGameTime() % 20L == 0L) {
+        if (!this.isAssembling() && (!this.structureValidated || this.level.getGameTime() % 20L == 0L)) {
             this.validateStructure();
         }
         this.tickRecipe();
+        this.tickAssembly();
+        this.updateBuildingState();
         this.updateProcessingState();
+    }
+
+    private void updateBuildingState() {
+        if (this.level == null || this.level.isClientSide()) {
+            return;
+        }
+        boolean building = this.assemblyJob != null;
+        BlockState state = this.getBlockState();
+        if (!state.hasProperty(MultiblockControllerBlock.BUILDING)
+                || state.getValue(MultiblockControllerBlock.BUILDING) == building) {
+            return;
+        }
+        BlockState updated = state.setValue(MultiblockControllerBlock.BUILDING, building);
+        this.level.setBlock(this.worldPosition, updated, Block.UPDATE_CLIENTS | Block.UPDATE_NEIGHBORS);
+        this.level.sendBlockUpdated(this.worldPosition, state, updated, Block.UPDATE_CLIENTS);
     }
 
     private void updateProcessingState() {
@@ -822,6 +842,77 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             return;
         }
         this.ensureConfigured();
+    }
+
+    public boolean isAssembling() {
+        return this.assemblyJob != null;
+    }
+
+    public float assemblyProgress() {
+        return this.assemblyJob == null ? 0.0F : this.assemblyJob.progress();
+    }
+
+    private void tickAssembly() {
+        MultiblockAssemblyJob job = this.assemblyJob;
+        if (job == null) {
+            return;
+        }
+        ServerLevel serverLevel = this.serverLevel();
+        if (serverLevel == null) {
+            return;
+        }
+        ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(job.playerId());
+        MultiblockAssemblyJob.TickResult result = job.tick(
+                serverLevel,
+                player,
+                Config.ASSEMBLY_BLOCKS_PER_TICK.get(),
+                Config.ASSEMBLY_MAX_FAILED_SCANS_PER_TICK.get());
+        if (result == MultiblockAssemblyJob.TickResult.RUNNING) {
+            return;
+        }
+        this.assemblyJob = null;
+        this.validateStructure();
+        if (player != null) {
+            this.sendAssemblyResult(player, job);
+            this.sendBlockedHighlight(serverLevel, player, job);
+        }
+    }
+
+    private void sendBlockedHighlight(ServerLevel level, ServerPlayer player, MultiblockAssemblyJob job) {
+        PacketDistributor.sendToPlayer(player, new MultiblockBlockedHighlightPayload(
+                level.dimension().identifier(),
+                this.worldPosition,
+                job.blockedPositions(),
+                Config.ASSEMBLY_BLOCKED_HIGHLIGHT_SECONDS.get() * 1000L));
+    }
+
+    private void sendAssemblyResult(ServerPlayer player, MultiblockAssemblyJob job) {
+        if (this.formed) {
+            player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembled"));
+            return;
+        }
+        int remaining = job.pendingCount() + job.blocked() + job.failed();
+        if (job.placed() > 0) {
+            player.sendOverlayMessage(Component.translatable(
+                    "message.infinity_nexus_multiblock.partially_assembled", job.placed(), remaining));
+            return;
+        }
+        if (job.pendingCount() > 0) {
+            player.sendOverlayMessage(Component.translatable(
+                    "message.infinity_nexus_multiblock.missing_blocks", job.pendingCount()));
+            return;
+        }
+        if (job.blocked() > 0) {
+            player.sendOverlayMessage(Component.translatable(
+                    "message.infinity_nexus_multiblock.blocked_cells_highlighted", job.blocked() + job.failed()));
+            return;
+        }
+        if (job.failed() > 0) {
+            player.sendOverlayMessage(Component.translatable(
+                    "message.infinity_nexus_multiblock.blocked_cells", job.failed()));
+            return;
+        }
+        player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembly_failed"));
     }
 
     private void tickRecipe() {
@@ -1387,7 +1478,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     }
 
     public void onNeighborChanged() {
-        if (this.level == null || this.level.isClientSide()) {
+        if (this.level == null || this.level.isClientSide() || this.isAssembling()) {
             return;
         }
         long gameTime = this.level.getGameTime();
@@ -1507,6 +1598,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (serverLevel == null || this.formed || player.isSpectator()) {
             return false;
         }
+        if (this.assemblyJob != null) {
+            player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembly_in_progress"));
+            return false;
+        }
         this.ensureConfigured();
         MultiblockDefinition definition = this.definition();
         if (definition == null) {
@@ -1514,107 +1609,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
 
         Rotation rotation = MultiblockControllerBlock.rotationFromState(this.getBlockState());
-        BlockPos origin = definition.origin(this.worldPosition, rotation);
-        List<AssemblyRequirement> requirements = new ArrayList<>();
-        int blocked = 0;
-        for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
-            if (cell.anchor()) {
-                continue;
-            }
-            BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(rotation);
-            BlockPos pos = origin.offset(offset.getX(), offset.getY(), offset.getZ());
-            BlockState current = serverLevel.getBlockState(pos);
-            if (cell.matcher().matches(current, rotation)) {
-                continue;
-            }
-            if (!current.canBeReplaced()) {
-                blocked++;
-                continue;
-            }
-            requirements.add(new AssemblyRequirement(pos, cell.matcher()));
-        }
-
-        boolean creative = player.getAbilities().instabuild;
-        List<ItemStack> available = new ArrayList<>();
-        if (!creative) {
-            available.addAll(player.getInventory().getNonEquipmentItems());
-            available.add(player.getOffhandItem());
-        }
-        int[] remaining = new int[available.size()];
-        for (int i = 0; i < available.size(); i++) {
-            remaining[i] = available.get(i).getCount();
-        }
-
-        int placedCount = 0;
-        int missing = 0;
-        int failed = 0;
-        boolean inventoryChanged = false;
-        for (AssemblyRequirement requirement : requirements) {
-            BlockState placement = null;
-            int stackIndex = -1;
-            if (creative) {
-                placement = MultiblockAssemblyHelper.representativeState(requirement.matcher(), rotation);
-            } else {
-                for (int i = 0; i < available.size(); i++) {
-                    if (remaining[i] <= 0) {
-                        continue;
-                    }
-                    BlockState candidate = MultiblockAssemblyHelper.placementState(available.get(i), requirement.matcher(), rotation);
-                    if (candidate == null) {
-                        continue;
-                    }
-                    placement = candidate;
-                    stackIndex = i;
-                    break;
-                }
-            }
-            if (placement == null) {
-                missing++;
-                continue;
-            }
-            if (!serverLevel.setBlock(requirement.pos(), placement, Block.UPDATE_ALL)) {
-                failed++;
-                continue;
-            }
-
-            placedCount++;
-            if (!creative && stackIndex >= 0) {
-                remaining[stackIndex]--;
-                available.get(stackIndex).shrink(1);
-                inventoryChanged = true;
-            }
-        }
-        if (inventoryChanged) {
-            player.getInventory().setChanged();
-        }
-
-        this.validateStructure();
-        if (this.formed) {
-            player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembled"));
-            return true;
-        }
-
-        if (placedCount > 0) {
-            int remainingBlocks = missing + blocked + failed;
-            if (remainingBlocks > 0) {
-                player.sendOverlayMessage(Component.translatable(
-                        "message.infinity_nexus_multiblock.partially_assembled", placedCount, remainingBlocks));
-            } else {
-                player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembly_failed"));
-            }
-            return false;
-        }
-        if (missing > 0) {
-            player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.missing_blocks", missing));
-            return false;
-        }
-        if (blocked > 0 || failed > 0) {
-            player.sendOverlayMessage(Component.translatable(
-                    "message.infinity_nexus_multiblock.blocked_cells", blocked + failed));
-            return false;
-        }
-        player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembly_failed"));
-        return false;
+        this.assemblyJob = new MultiblockAssemblyJob(
+                definition,
+                this.worldPosition,
+                rotation,
+                player.getUUID(),
+                player.getAbilities().instabuild);
+        player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.assembly_started"));
+        this.updateBuildingState();
+        this.setChanged();
+        return true;
     }
 
     public void exportStructure(Player player) {
@@ -2023,6 +2027,4 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 .getOrThrow(message -> new IllegalStateException("Failed to encode multiblock gui layout: " + message));
         buffer.writeNbt(tag);
     }
-
-    private record AssemblyRequirement(BlockPos pos, BlockMatcher matcher) {}
 }

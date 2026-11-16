@@ -4,6 +4,34 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+---
+
+## <span style="color:#2DC26B;">` V: 1.1.2`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Incremental multiblock assembly with configurable blocks per tick and failed scans per tick.
+- Item collection from the player inventory and 6 adjacent containers, with consumption at the end of each tick.
+- Jade assembly status with progress (`Building`, `Formed`, `Unformed`).
+- Red highlights for blocked assembly positions, with configurable duration.
+- Place sound while blocks are assembled.
+- `Building` controller state with per-definition dynamic textures.
+- `textures.building` support in the multiblock builder.
+- Default `front_on_building` animated fallback model and texture.
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Blocked highlights now disappear when the blocking block is broken.
+- `front_on_building.png.mcmeta` renamed so the texture animation plays.
+### <span style="color:#E67E23;"> **Change**:</span>
+- Assembly no longer happens instantly; it runs over multiple ticks and reports `assembly_in_progress` while active.
+- Structure validation is suppressed during assembly, and a new click restarts a partial assembly from zero.
+- Creative assembly places blocks incrementally without consuming items.
+- If the player goes offline, only adjacent containers are used.
+- The controller emits light while building.
+- Building textures fall back to the controller idle/active textures and then to the mod default textures.
+- Multiblock textures now accept an optional `building` set (schema 2 unchanged).
+- Updated the builder.
+### <span style="color:#BA372A;"> **Removed**:</span>
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.1.1`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Add command /inmb reload to reload all multiblock definition and generate new multiblocks with data loaded by kubejs load server-scripts

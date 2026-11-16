@@ -27,7 +27,7 @@ Implementado:
 - barra de progresso na GUI padrão e em GUIs customizadas;
 - abertura do controller ao clicar em um membro;
 - preview do pattern ao segurar um controller ou ao mirar em um controller não formado;
-- montagem automática ao clicar em um controller não formado, usando blocos compatíveis do inventário;
+- montagem automática incremental ao clicar em um controller não formado, usando blocos do inventário do jogador e de containers adjacentes;
 - exportação da estrutura conectada para JSON no clipboard com `shift+click` no criativo, limitada ao `export.pattern_scan_limit` (padrão 256);
 - matchers com blockstate específico, além de bloco e tag;
 - assets gerados em memória para controllers dinâmicos: blockstate, modelo de bloco, modelo de item, item definition e lang `en_us`/`pt_br`;
@@ -618,7 +618,11 @@ Ao mirar em um controller ainda não formado, a preview é ancorada na posição
 - contorno apenas: posição já correta ou bloqueada por um bloco não substituível;
 - modelo do controller: célula do controller.
 
-Clicar em um controller não formado monta o máximo possível usando blocos do inventário principal e da mão secundária. Blocos já corretos são mantidos, posições bloqueadas ou sem item são puladas e itens são consumidos apenas para os blocos realmente colocados. A estrutura permanece parcial se ainda faltar algo e forma assim que todas as células estiverem corretas. Agachar evita a montagem automática e mantém o comportamento normal de colocação.
+Clicar em um controller não formado inicia a montagem incremental (padrão 32 operações por tick, configurável em `assembly.blocks_per_tick`), usando blocos do inventário principal, da mão secundária e dos seis containers adjacentes ao controller. Blocos já corretos são mantidos, posições bloqueadas ou sem item são puladas e itens são consumidos apenas para os blocos realmente colocados, no fim de cada tick. A montagem continua nos ticks seguintes e a estrutura forma assim que todas as células estiverem corretas; se o jogador estiver offline, apenas os containers adjacentes são usados. No criativo a montagem também é incremental, mas não consome itens. Agachar evita a montagem automática e mantém o comportamento normal de colocação.
+
+Se uma posição estiver bloqueada por um bloco não substituível, o jogador que iniciou a montagem vê essas posições destacadas em vermelho por 5 minutos (configurável em `assembly.blocked_highlight_seconds`), para localizar e remover o bloqueio. O destaque de cada posição some assim que o bloco é quebrado, ou após o tempo configurado.
+
+Com o Jade instalado, o controller mostra `Building [||||||||====]x%` durante a montagem e `Formed`/`Unformed` quando nenhuma montagem está ativa.
 
 ### Exportação no criativo
 

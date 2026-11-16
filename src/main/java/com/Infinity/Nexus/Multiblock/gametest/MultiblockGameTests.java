@@ -20,6 +20,7 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.Infinity.Nexus.Multiblock.block.MultiblockAssemblyJob;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
@@ -34,6 +35,8 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.MapCodec;
 import java.util.EnumSet;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -50,14 +53,17 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.EntityTypeTags;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -148,6 +154,7 @@ public final class MultiblockGameTests {
             assertControllerRecipe(helper);
             assertMultiblockRecipeLoads(helper);
             assertEntityOnlyOutputRecipe(helper);
+            assertIncrementalAssembly(helper);
             helper.succeed();
         }
 
@@ -253,6 +260,7 @@ public final class MultiblockGameTests {
             Identifier oakLog = Identifier.parse("minecraft:block/oak_log");
             Map<String, Identifier> idle = textures.resolve(false);
             Map<String, Identifier> active = textures.resolve(true);
+            Map<String, Identifier> building = textures.resolve(MultiblockTextures.State.BUILDING);
             if (!stone.equals(idle.get("front"))
                     || !oakPlanks.equals(idle.get("side"))
                     || !stone.equals(idle.get("particle"))) {
@@ -264,6 +272,11 @@ public final class MultiblockGameTests {
                 throw helper.assertionException(Component.literal(
                         "Active textures did not overlay the idle textures: " + active));
             }
+            if (!smoothStone.equals(building.get("front"))
+                    || !oakLog.equals(building.get("side"))) {
+                throw helper.assertionException(Component.literal(
+                        "Building textures must fall back to the active textures: " + building));
+            }
 
             Identifier front = Identifier.parse("minecraft:block/front_test");
             MultiblockTextures particleFallback = new MultiblockTextures(
@@ -273,10 +286,46 @@ public final class MultiblockGameTests {
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty()),
+                    Optional.empty(),
                     Optional.empty());
             if (!front.equals(particleFallback.resolve(false).get("particle"))) {
                 throw helper.assertionException(Component.literal(
                         "Resolved textures must fall back from particle to front"));
+            }
+
+            Identifier buildingFront = Identifier.parse("minecraft:block/building_front_test");
+            MultiblockTextures explicitBuilding = new MultiblockTextures(
+                    new MultiblockTextures.TextureSet(
+                            Optional.of(stone),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty()),
+                    Optional.empty(),
+                    Optional.of(new MultiblockTextures.TextureSet(
+                            Optional.of(buildingFront),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty())));
+            if (!buildingFront.equals(explicitBuilding.resolve(MultiblockTextures.State.BUILDING).get("front"))) {
+                throw helper.assertionException(Component.literal(
+                        "Explicit building textures must override the idle/active fallback"));
+            }
+            if (!stone.equals(explicitBuilding.resolve(MultiblockTextures.State.IDLE).get("front"))) {
+                throw helper.assertionException(Component.literal(
+                        "Building textures must not leak into the idle state"));
+            }
+            var buildingEncoded = MultiblockTextures.CODEC.codec()
+                    .encodeStart(JsonOps.INSTANCE, explicitBuilding)
+                    .getOrThrow();
+            MultiblockTextures buildingDecoded = MultiblockTextures.CODEC.codec()
+                    .parse(JsonOps.INSTANCE, buildingEncoded)
+                    .getOrThrow();
+            if (!explicitBuilding.equals(buildingDecoded)) {
+                throw helper.assertionException(Component.literal(
+                        "Building textures failed to round-trip through their codec: "
+                                + explicitBuilding + " != " + buildingDecoded));
             }
 
             var encoded = MultiblockTextures.CODEC.codec()
@@ -369,6 +418,110 @@ public final class MultiblockGameTests {
                 throw helper.assertionException(Component.literal(
                         "Entity-only output recipe must match an energy-only input"));
             }
+        }
+
+        private static void assertIncrementalAssembly(GameTestHelper helper) {
+            MultiblockDefinition definition = MultiblockDefinition.builder(Identifier.fromNamespaceAndPath(
+                            InfinityNexusMultiblock.MOD_ID, "incremental_assembly_test"))
+                    .type(MultiblockType.STORAGE)
+                    .pattern(MultiblockPattern.builder()
+                            .matcher('S', Blocks.STONE)
+                            .layer("CSSS")
+                            .build())
+                    .build();
+
+            BlockPos controller = helper.absolutePos(new BlockPos(1, 2, 1));
+            BlockPos[] targets = {
+                    controller.offset(1, 0, 0),
+                    controller.offset(2, 0, 0),
+                    controller.offset(3, 0, 0)
+            };
+            for (BlockPos target : targets) {
+                helper.getLevel().setBlock(target, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+
+            BlockPos chestPos = controller.relative(Direction.NORTH);
+            helper.getLevel().setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (!(helper.getLevel().getBlockEntity(chestPos) instanceof ChestBlockEntity chest)) {
+                throw helper.assertionException(Component.literal("Assembly test chest was not created"));
+            }
+            chest.setItem(0, new ItemStack(Items.STONE, 3));
+            chest.setChanged();
+
+            MultiblockAssemblyJob job = new MultiblockAssemblyJob(
+                    definition, controller, Rotation.NONE, UUID.randomUUID(), false);
+            int previousPlaced = 0;
+            MultiblockAssemblyJob.TickResult result = MultiblockAssemblyJob.TickResult.RUNNING;
+            for (int tick = 0; tick < 32 && result == MultiblockAssemblyJob.TickResult.RUNNING; tick++) {
+                result = job.tick(helper.getLevel(), null, 1, 10);
+                if (job.placed() - previousPlaced > 1) {
+                    throw helper.assertionException(Component.literal(
+                            "Assembly job placed more than one block in a single tick"));
+                }
+                previousPlaced = job.placed();
+                if (countStone(chest) != 3 - job.placed()) {
+                    throw helper.assertionException(Component.literal(
+                            "Assembly job must consume exactly the placed blocks at the end of each tick"));
+                }
+            }
+            if (result != MultiblockAssemblyJob.TickResult.COMPLETE || job.placed() != targets.length) {
+                throw helper.assertionException(Component.literal(
+                        "Adjacent container assembly did not complete: " + result + " / " + job.placed()));
+            }
+            for (BlockPos target : targets) {
+                if (!helper.getLevel().getBlockState(target).is(Blocks.STONE)) {
+                    throw helper.assertionException(Component.literal(
+                            "Assembly job did not place stone at " + target));
+                }
+            }
+
+            helper.getLevel().setBlock(targets[1], Blocks.DIRT.defaultBlockState(), Block.UPDATE_ALL);
+            MultiblockAssemblyJob blockedJob = new MultiblockAssemblyJob(
+                    definition, controller, Rotation.NONE, UUID.randomUUID(), false);
+            blockedJob.tick(helper.getLevel(), null, 16, 10);
+            if (!blockedJob.blockedPositions().equals(List.of(targets[1]))) {
+                throw helper.assertionException(Component.literal(
+                        "Blocked assembly positions were not collected: " + blockedJob.blockedPositions()));
+            }
+
+            BlockPos creativeController = helper.absolutePos(new BlockPos(1, 2, 5));
+            for (int x = 1; x <= 3; x++) {
+                helper.getLevel().setBlock(
+                        creativeController.offset(x, 0, 0), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            BlockPos creativeChestPos = creativeController.relative(Direction.NORTH);
+            helper.getLevel().setBlock(creativeChestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            if (!(helper.getLevel().getBlockEntity(creativeChestPos) instanceof ChestBlockEntity creativeChest)) {
+                throw helper.assertionException(Component.literal("Creative assembly test chest was not created"));
+            }
+            creativeChest.setItem(0, new ItemStack(Items.STONE, 3));
+            creativeChest.setChanged();
+
+            MultiblockAssemblyJob creativeJob = new MultiblockAssemblyJob(
+                    definition, creativeController, Rotation.NONE, UUID.randomUUID(), true);
+            result = MultiblockAssemblyJob.TickResult.RUNNING;
+            for (int tick = 0; tick < 32 && result == MultiblockAssemblyJob.TickResult.RUNNING; tick++) {
+                result = creativeJob.tick(helper.getLevel(), null, 1, 10);
+            }
+            if (result != MultiblockAssemblyJob.TickResult.COMPLETE || creativeJob.placed() != 3) {
+                throw helper.assertionException(Component.literal(
+                        "Creative assembly did not complete: " + result + " / " + creativeJob.placed()));
+            }
+            if (countStone(creativeChest) != 3) {
+                throw helper.assertionException(Component.literal(
+                        "Creative assembly must not consume items"));
+            }
+        }
+
+        private static int countStone(Container container) {
+            int count = 0;
+            for (int index = 0; index < container.getContainerSize(); index++) {
+                ItemStack stack = container.getItem(index);
+                if (stack.is(Items.STONE)) {
+                    count += stack.getCount();
+                }
+            }
+            return count;
         }
 
         private static void assertSlotLockBehavior(GameTestHelper helper) {

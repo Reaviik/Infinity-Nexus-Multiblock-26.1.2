@@ -47,6 +47,7 @@ public final class ClientMultiblockEvents {
     @SubscribeEvent
     public static void onSubmitCustomGeometry(SubmitCustomGeometryEvent event) {
         MultiblockPreviewRenderer.onSubmit(event);
+        MultiblockPreviewRenderer.onSubmitBlockedHighlights(event);
     }
 
     @SubscribeEvent
@@ -67,6 +68,7 @@ public final class ClientMultiblockEvents {
         recipes = RecipeMap.EMPTY;
         MultiblockClientCache.clear();
         MultiblockPreviewRenderer.clearCaches();
+        MultiblockBlockedHighlights.clear();
         MultiblockDefinitions.replaceAll(java.util.Map.of());
     }
 

@@ -39,7 +39,8 @@ public final class ModBlocks {
                     .mapColor(MapColor.METAL)
                     .strength(4.0F)
                     .requiresCorrectToolForDrops()
-                    .lightLevel(state -> state.getValue(MultiblockControllerBlock.PROCESSING) ? 15 : 0));
+                    .lightLevel(state -> state.getValue(MultiblockControllerBlock.PROCESSING)
+                            || state.getValue(MultiblockControllerBlock.BUILDING) ? 15 : 0));
 
     public static final DeferredItem<BlockItem> CONTROLLER_ITEM =
             ITEMS.registerItem("multiblock_controller",

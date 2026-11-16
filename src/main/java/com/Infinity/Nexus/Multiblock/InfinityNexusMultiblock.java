@@ -7,6 +7,7 @@ import com.Infinity.Nexus.Multiblock.config.Config;
 import com.Infinity.Nexus.Multiblock.data.MultiblockReloadListeners;
 import com.Infinity.Nexus.Multiblock.data.MultiblockSavedData;
 import com.Infinity.Nexus.Multiblock.gametest.MultiblockGameTests;
+import com.Infinity.Nexus.Multiblock.network.MultiblockBlockedHighlightPayload;
 import com.Infinity.Nexus.Multiblock.network.MultiblockDefinitionSyncPayload;
 import com.Infinity.Nexus.Multiblock.network.MultiblockExportPayload;
 import com.Infinity.Nexus.Multiblock.network.SetFluidSlotTankPayload;
@@ -154,6 +155,10 @@ public class InfinityNexusMultiblock {
                 MultiblockExportPayload.TYPE,
                 MultiblockExportPayload.CODEC,
                 MultiblockExportPayload::handle);
+        event.registrar("1").playToClient(
+                MultiblockBlockedHighlightPayload.TYPE,
+                MultiblockBlockedHighlightPayload.CODEC,
+                MultiblockBlockedHighlightPayload::handle);
         event.registrar("1").playToServer(
                 SetSlotLockPayload.TYPE,
                 SetSlotLockPayload.CODEC,

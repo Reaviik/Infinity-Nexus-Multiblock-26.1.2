@@ -377,6 +377,10 @@
       V.createTextureSet(),
       isPlainObject(state.textures.active) ? state.textures.active : {}
     );
+    state.textures.building = Object.assign(
+      V.createTextureSet(),
+      isPlainObject(state.textures.building) ? state.textures.building : {}
+    );
     delete state.extras.textures;
     delete state.controller;
     delete state.recipeType;
@@ -2233,8 +2237,9 @@
     }
     var idle = textureSetCount(textures.idle);
     var active = textureSetCount(textures.active);
-    if (idle === 0 && active === 0) {
-      return "Sem texturas por definição; usa o modelo padrão do controller.";
+    var building = textureSetCount(textures.building);
+    if (idle === 0 && active === 0 && building === 0) {
+      return "Sem texturas por defini��ǜo; usa o modelo padrǜo do controller.";
     }
     var parts = [];
     if (idle > 0) {
@@ -2242,6 +2247,9 @@
     }
     if (active > 0) {
       parts.push(active + (active === 1 ? " face active" : " faces active"));
+    }
+    if (building > 0) {
+      parts.push(building + (building === 1 ? " face building" : " faces building"));
     }
     return parts.join(" + ") + " configurada(s).";
   }

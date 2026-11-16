@@ -144,6 +144,35 @@ public final class MultiblockPreviewRenderer {
                 (pose, buffer) -> renderOutline(pose, buffer, preview.cells(), camera));
     }
 
+    public static void onSubmitBlockedHighlights(SubmitCustomGeometryEvent event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        ClientLevel level = minecraft.level;
+        if (player == null || level == null || minecraft.screen != null) {
+            return;
+        }
+        List<BlockPos> positions = MultiblockBlockedHighlights.active(level);
+        if (positions.isEmpty()) {
+            return;
+        }
+
+        List<PreviewCell> cells = new ArrayList<>(positions.size());
+        for (BlockPos pos : positions) {
+            cells.add(new PreviewCell(pos, List.of(), BLOCKED_FILL, BLOCKED_LINE, 0, true));
+        }
+
+        Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
+        PoseStack poseStack = event.getPoseStack();
+        event.getSubmitNodeCollector().order(1).submitCustomGeometry(
+                poseStack,
+                RenderTypes.debugQuads(),
+                (pose, buffer) -> renderFill(pose, buffer, cells, camera));
+        event.getSubmitNodeCollector().order(1).submitCustomGeometry(
+                poseStack,
+                RenderTypes.linesTranslucent(),
+                (pose, buffer) -> renderOutline(pose, buffer, cells, camera));
+    }
+
     private static ModelBlockRenderer blockRenderer(Minecraft minecraft) {
         if (blockRenderer == null) {
             blockRenderer = new ModelBlockRenderer(false, false, minecraft.getBlockColors());
