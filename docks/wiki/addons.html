@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Guia para criar addons de recursos para o Infinity Nexus Multiblock: registro, storage, JSON, receitas, GUI e JEI.">
+  <title>Criando Addons | Infinity Nexus Multiblock</title>
+  <link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+  <header class="topbar">
+    <a class="brand" href="../builder/index.html" aria-label="Voltar ao Infinity Nexus Multiblock Builder">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" role="img">
+          <path d="M24 3 44 14v20L24 45 4 34V14Z" fill="#0d1a12" stroke="#6bd64a" stroke-width="2"></path>
+          <path d="M24 3 44 14 24 25 4 14Z" fill="#6bd64a" opacity="0.92"></path>
+          <path d="M4 14 24 25v20L4 34Z" fill="#2d7a24"></path>
+          <path d="M44 14 24 25v20l20-11Z" fill="#4aa937"></path>
+          <path d="M16 20 24 24l8-4" fill="none" stroke="#0d1a12" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+      </span>
+      <span class="brand-copy">
+        <strong>Infinity Nexus</strong>
+        <small>Guia de Addons</small>
+      </span>
+    </a>
+
+    <nav class="topbar-actions" aria-label="Links da wiki">
+      <a class="source-link" href="index.html">Wiki principal</a>
+      <a class="btn" href="../builder/index.html">Voltar ao builder</a>
+    </nav>
+  </header>
+
+  <div class="wiki-shell">
+    <aside class="wiki-sidebar" aria-label="Índice do guia de addons">
+      <div class="sidebar-head">
+        <span class="eyebrow">Documentação</span>
+        <strong>SPI de recursos</strong>
+        <small>Guia para modders</small>
+      </div>
+      <nav class="toc" aria-label="Seções do guia">
+        <ul class="toc-list">
+          <li class="toc-item toc-level-2"><a href="#visao-geral">Visão geral</a></li>
+          <li class="toc-item toc-level-2"><a href="#o-que-o-base-faz">O que o base faz</a></li>
+          <li class="toc-item toc-level-2"><a href="#contrato-do-addon">Contrato do addon</a></li>
+          <li class="toc-item toc-level-3"><a href="#resource-type">MultiblockResourceType</a></li>
+          <li class="toc-item toc-level-3"><a href="#storage">MultiblockResourceStorage</a></li>
+          <li class="toc-item toc-level-2"><a href="#registro">Registro do tipo</a></li>
+          <li class="toc-item toc-level-2"><a href="#json">JSON da definição</a></li>
+          <li class="toc-item toc-level-2"><a href="#receitas">Receitas</a></li>
+          <li class="toc-item toc-level-2"><a href="#gui">GUI</a></li>
+          <li class="toc-item toc-level-2"><a href="#jei">JEI</a></li>
+          <li class="toc-item toc-level-2"><a href="#checklist">Checklist</a></li>
+          <li class="toc-item toc-level-2"><a href="#limitacoes">Limitações atuais</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="conteudo" class="wiki-content">
+      <div class="doc-meta">
+        <span class="doc-tag">Guia de addons</span>
+        <span>Minecraft 26.1.2</span>
+        <span>API <code>api.addon</code></span>
+      </div>
+
+      <article class="markdown">
+        <h1 id="criando-addons">Criando addons</h1>
+        <p>O <strong>Infinity Nexus Multiblock</strong> possui um SPI para que addons registrem novos tipos de recurso, como <code>chemical</code>, <code>mana</code>, <code>aura</code> ou <code>essentia</code>, sem que o mod base importe classes do mod dono do recurso.</p>
+
+        <p>O addon é responsável por traduzir o seu mod para o contrato genérico do base. O base é responsável por carregar definições, criar storages, expor portas, renderizar barras, executar receitas e persistir os recursos.</p>
+
+        <h2 id="visao-geral">Visão geral</h2>
+        <p>Um addon de recurso normalmente faz quatro coisas:</p>
+        <ol>
+          <li>Implementa <code>MultiblockResourceType</code> para descrever o tipo.</li>
+          <li>Implementa <code>MultiblockResourceStorage</code> para manipular os tanques.</li>
+          <li>Registra o tipo em <code>MultiblockAddons</code> durante a construção do mod.</li>
+          <li>Opcionalmente registra uma ponte JEI no cliente.</li>
+        </ol>
+
+        <blockquote>
+          <p><strong>O base não valida os campos internos do seu mod.</strong> Ele entrega o objeto JSON bruto do <code>capabilities.&lt;kind&gt;</code> para o addon. Quem valida os campos específicos é o seu <code>createStorage</code> e o seu <code>describeTanks</code>.</p>
+        </blockquote>
+
+        <h2 id="o-que-o-base-faz">O que o base faz</h2>
+        <div class="table-wrap"><table>
+          <thead>
+            <tr><th>Área</th><th>Comportamento genérico</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>capabilities.&lt;kind&gt;</code></td><td>Captura o JSON bruto e chama <code>describeTanks</code> / <code>createStorage</code> do tipo registrado.</td></tr>
+            <tr><td><code>capability_ports.&lt;kind&gt;</code></td><td>Lê uma lista de seletores de porta.</td></tr>
+            <tr><td>GUI</td><td>Renderiza <code>resource_bar</code> com <code>capability</code> e <code>slot</code>.</td></tr>
+            <tr><td>Receitas</td><td>Despacha o campo <code>type</code> para o codec do addon.</td></tr>
+            <tr><td>Persistência</td><td>Salva e restaura <code>StoredResource</code> por <code>kind</code>, <code>tank</code>, <code>id</code> e <code>amount</code>.</td></tr>
+            <tr><td>JEI</td><td>Usa o <code>JeiResourceBridge</code> registrado pelo addon.</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Se uma definição declarar um <code>kind</code> que não está registrado, o loader falha com uma mensagem parecida com:</p>
+        <pre><code class="language-text">Unknown multiblock resource kind 'aura': is the addon installed?</code></pre>
+
+        <h2 id="contrato-do-addon">Contrato do addon</h2>
+
+        <h3 id="resource-type">MultiblockResourceType</h3>
+        <p>Interface principal em <code>com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType</code>.</p>
+        <div class="table-wrap"><table>
+          <thead>
+            <tr><th>Método</th><th>Responsabilidade</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>id()</code></td><td>Nome do tipo. Use apenas <code>[a-z][a-z0-9_]*</code>, por exemplo <code>aura</code>.</td></tr>
+            <tr><td><code>createStorage(...)</code></td><td>Cria o storage real a partir do JSON de <code>capabilities.&lt;kind&gt;</code>.</td></tr>
+            <tr><td><code>describeTanks(...)</code></td><td>Retorna os tanques declarados no JSON como <code>ResourceTankInfo(id, capacity)</code>.</td></tr>
+            <tr><td><code>ingredientCodec()</code></td><td>Codec de entrada de receita para o seu <code>type</code>.</td></tr>
+            <tr><td><code>outputCodec()</code></td><td>Codec de saída de receita para o seu <code>type</code>.</td></tr>
+            <tr><td><code>validateResourceId(String)</code></td><td>Valida um id de recurso do seu mod.</td></tr>
+            <tr><td><code>displayName(String)</code></td><td>Nome exibido em tooltip.</td></tr>
+            <tr><td><code>color(String)</code></td><td>Cor ARGB usada pela barra.</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Exemplo mínimo para um recurso <code>aura</code>:</p>
+        <pre><code class="language-java">public final class AuraResourceType implements MultiblockResourceType {
+    public static final String KIND = "aura";
+
+    @Override
+    public String id() {
+        return KIND;
+    }
+
+    @Override
+    public MultiblockResourceStorage createStorage(
+            MultiblockDefinition definition,
+            JsonElement config,
+            Runnable onChanged) {
+        return new AuraStorage(config, onChanged);
+    }
+
+    @Override
+    public List&lt;ResourceTankInfo&gt; describeTanks(JsonElement config) {
+        return AuraStorage.describe(config);
+    }
+
+    @Override
+    public MapCodec&lt;? extends MultiblockRecipeIngredient&gt; ingredientCodec() {
+        return MultiblockRecipeIngredient.Resource.codec(KIND);
+    }
+
+    @Override
+    public MapCodec&lt;? extends MultiblockRecipeOutput&gt; outputCodec() {
+        return MultiblockRecipeOutput.Resource.codec(KIND);
+    }
+
+    @Override
+    public DataResult&lt;String&gt; validateResourceId(String resourceId) {
+        Identifier id = AuraIds.parse(resourceId);
+        if (id == null || !AuraRegistry.contains(id)) {
+            return DataResult.error(() -&gt; "Unknown aura: " + resourceId);
+        }
+        return DataResult.success(resourceId);
+    }
+
+    @Override
+    public Component displayName(String resourceId) {
+        return AuraRegistry.displayName(resourceId);
+    }
+
+    @Override
+    public int color(String resourceId) {
+        return AuraRegistry.color(resourceId);
+    }
+}</code></pre>
+
+        <h3 id="storage">MultiblockResourceStorage</h3>
+        <p>O storage é a ponte entre o seu sistema de recurso e os tanques genéricos do multibloco. Ele deve manter uma ordem estável de índices, porque essa ordem é usada pela GUI, pelas receitas e pela persistência.</p>
+        <div class="table-wrap"><table>
+          <thead>
+            <tr><th>Método</th><th>Responsabilidade</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>kind()</code></td><td>Retorna o mesmo <code>id()</code> do tipo.</td></tr>
+            <tr><td><code>size()</code></td><td>Quantidade de tanques.</td></tr>
+            <tr><td><code>tankId(index)</code></td><td>Id estável do tanque, igual ao usado no JSON e na GUI.</td></tr>
+            <tr><td><code>capacity(index)</code></td><td>Capacidade do tanque.</td></tr>
+            <tr><td><code>amount(index)</code></td><td>Quantidade atual.</td></tr>
+            <tr><td><code>resourceId(index)</code></td><td>Id do recurso armazenado, ou string vazia.</td></tr>
+            <tr><td><code>accepts(index, id)</code></td><td>Se o tanque aceita aquele recurso.</td></tr>
+            <tr><td><code>insert(...)</code></td><td>Insere e retorna quanto foi movido.</td></tr>
+            <tr><td><code>extract(...)</code></td><td>Extrai e retorna quanto foi movido.</td></tr>
+            <tr><td><code>set(...)</code></td><td>Define recurso e quantidade diretamente.</td></tr>
+            <tr><td><code>allowsPort(...)</code></td><td>Restringe a porta do tanque.</td></tr>
+            <tr><td><code>snapshot()</code></td><td>Lista de <code>StoredResource</code> para drops e persistência.</td></tr>
+            <tr><td><code>restore(...)</code></td><td>Restaura o snapshot, ignorando ou limitando valores inválidos.</td></tr>
+            <tr><td><code>serialize(...)</code></td><td>Salva no block entity.</td></tr>
+            <tr><td><code>deserialize(...)</code></td><td>Carrega do block entity.</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Regras práticas:</p>
+        <ul>
+          <li><code>describeTanks</code> e <code>createStorage</code> devem produzir os mesmos ids e capacidades.</li>
+          <li><code>insert</code> e <code>extract</code> com <code>simulate = true</code> não podem alterar estado.</li>
+          <li><code>snapshot</code> e <code>restore</code> devem ser simétricos.</li>
+          <li>Capacidade inválida no JSON deve ser rejeitada com log claro.</li>
+          <li>Tanque vazio pode usar <code>id = ""</code> e <code>amount = 0</code>.</li>
+        </ul>
+
+        <h2 id="registro">Registro do tipo</h2>
+        <p>Registre o tipo na construção do mod, antes das definições de multibloco serem carregadas. Registre só quando o mod dono do recurso estiver presente.</p>
+        <pre><code class="language-java">@Mod(MyAddon.MOD_ID)
+public final class MyAddon {
+    public MyAddon(IEventBus modBus, ModContainer container) {
+        if (ModList.get().isLoaded("my_mod")) {
+            MultiblockAddons.register(new AuraResourceType());
+        }
+    }
+}</code></pre>
+
+        <p>Para JEI, use uma classe client-only e registre a ponte apenas quando JEI estiver disponível:</p>
+        <pre><code class="language-java">@Mod(value = MyAddon.MOD_ID, dist = Dist.CLIENT)
+public final class MyAddonClient {
+    public MyAddonClient(ModContainer container, IEventBus modBus) {
+        if (ModList.get().isLoaded("jei")) {
+            MultiblockAddons.registerJeiBridge(
+                    AuraResourceType.KIND,
+                    new AuraJeiBridge());
+        }
+    }
+}</code></pre>
+
+        <h2 id="json">JSON da definição</h2>
+        <p>O base não impõe o formato interno de <code>capabilities.&lt;kind&gt;</code>. O exemplo abaixo é o formato que o addon de <code>chemical</code> usa; um addon de <code>aura</code> pode definir outro schema, desde que <code>describeTanks</code> e <code>createStorage</code> leiam esse schema.</p>
+
+        <pre><code class="language-json">"capabilities": {
+  "aura": {
+    "tanks": [
+      {
+        "id": "input",
+        "capacity": 100000,
+        "max_receive": 100,
+        "max_extract": 0,
+        "filter": "mymod:ignis"
+      }
+    ]
+  }
+},
+"capability_ports": {
+  "aura": ["A"]
+}</code></pre>
+
+        <p>O campo <code>capability_ports.aura</code> precisa ser uma lista de seletores. Cada seletor pode ser um símbolo do pattern, um id de bloco ou uma tag, conforme o comportamento do seu storage.</p>
+
+        <p>Uma barra de aura na GUI usa o tipo genérico <code>resource_bar</code>:</p>
+        <pre><code class="language-json">"gui": {
+  "elements": [
+    {
+      "type": "resource_bar",
+      "x": 8,
+      "y": 8,
+      "width": 8,
+      "height": 54,
+      "capability": "aura",
+      "slot": "input"
+    }
+  ]
+}</code></pre>
+
+        <p><code>capability</code> é o id do tipo (<code>aura</code>) e <code>slot</code> é o id do tanque retornado por <code>describeTanks</code>. O base rejeita a GUI se o tipo não estiver registrado ou se o tanque não existir.</p>
+
+        <blockquote>
+          <p><code>chemical_bar</code> é apenas um alias específico para o tipo <code>chemical</code> e é redirecionado para <code>resource_bar</code>. Para outros recursos, use <code>resource_bar</code>.</p>
+        </blockquote>
+
+        <h2 id="receitas">Receitas</h2>
+        <p>O campo <code>type</code> da receita é o <code>id</code> do recurso. O codec padrão de <code>Resource</code> usa <code>id</code> e <code>amount</code>:</p>
+        <pre><code class="language-json">"inputs": [
+  {
+    "type": "aura",
+    "id": "mymod:ignis",
+    "amount": 100
+  }
+],
+"outputs": [
+  {
+    "type": "aura",
+    "id": "mymod:ignis",
+    "amount": 50,
+    "tank": "input",
+    "chance": 1.0
+  }
+]</code></pre>
+
+        <p>Se quiser um nome de campo específico, use o overload do codec:</p>
+        <pre><code class="language-java">@Override
+public MapCodec&lt;? extends MultiblockRecipeIngredient&gt; ingredientCodec() {
+    return MultiblockRecipeIngredient.Resource.codec(KIND, "aura", true);
+}
+
+@Override
+public MapCodec&lt;? extends MultiblockRecipeOutput&gt; outputCodec() {
+    return MultiblockRecipeOutput.Resource.codec(KIND, "aura", true);
+}</code></pre>
+
+        <p>Isso permite JSON assim:</p>
+        <pre><code class="language-json">{
+  "type": "aura",
+  "aura": "mymod:ignis",
+  "amount": 100
+}</code></pre>
+
+        <p>O <code>tank</code> de saída é opcional; quando informado, precisa existir e aceitar o recurso.</p>
+
+        <h2 id="gui">GUI</h2>
+        <p>Para cada tanque que deve aparecer na GUI, crie um <code>resource_bar</code>. A ordem e a posição são livres; o vínculo é feito por <code>capability</code> e <code>slot</code>.</p>
+        <p>O addon também define o nome e a cor exibidos pela barra através de <code>displayName(String)</code> e <code>color(String)</code>. Se o recurso não existir, retorne um nome vazio e uma cor segura em vez de lançar exceção.</p>
+
+        <h2 id="jei">JEI</h2>
+        <p>A ponte é opcional, mas recomendada. Implemente <code>JeiResourceBridge</code> para desenhar a entrada e a saída no formato do seu mod.</p>
+        <div class="table-wrap"><table>
+          <thead>
+            <tr><th>Método</th><th>Uso</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>addInput</code> / <code>addOutput</code></td><td>Desenha o recurso em um slot visível.</td></tr>
+            <tr><td><code>addInvisibleInput</code> / <code>addInvisibleOutput</code></td><td>Registra o recurso para busca e receitas sem ocupar um slot visual.</td></tr>
+            <tr><td>Overloads com <code>width</code>/<code>height</code></td><td>Permitem renderizadores que dependem do tamanho da barra.</td></tr>
+          </tbody>
+        </table></div>
+
+        <p>Registre a ponte somente no cliente, depois que JEI e o mod dono do recurso estiverem disponíveis.</p>
+
+        <h2 id="checklist">Checklist</h2>
+        <ul>
+          <li>O <code>id()</code> usa apenas <code>[a-z][a-z0-9_]*</code>.</li>
+          <li>O tipo é registrado apenas se o mod dono do recurso estiver carregado.</li>
+          <li><code>describeTanks</code> e <code>createStorage</code> concordam em ids, capacidades e filtros.</li>
+          <li><code>validateResourceId</code> é usado pelo codec de receita e rejeita ids desconhecidos.</li>
+          <li><code>snapshot</code> / <code>restore</code> e <code>serialize</code> / <code>deserialize</code> são simétricos.</li>
+          <li>A GUI usa <code>resource_bar</code> com um tanque que existe.</li>
+          <li>A ponte JEI é registrada apenas no cliente.</li>
+          <li>Testar sem o mod dono do recurso: a definição deve falhar com uma mensagem clara, não corromper o save.</li>
+        </ul>
+
+        <h2 id="limitacoes">Limitações atuais</h2>
+        <ul>
+          <li>O base não valida os campos internos de <code>capabilities.&lt;kind&gt;</code>; essa validação pertence ao addon.</li>
+          <li>O builder visual ainda só edita <code>energy</code>, <code>fluid</code> e <code>chemical</code>. Para um recurso novo, edite o JSON manualmente ou estenda o builder.</li>
+          <li>O builder ainda converte <code>resource_bar</code> importado para <code>chemical_bar</code>; isso precisa ser ajustado antes de usar o builder para outros recursos.</li>
+          <li>Definições que declaram um tipo ausente precisam ficar em um datapack ou jar separado, ou ser protegidas por condições de carregamento.</li>
+          <li>O codec de rede de receitas usa o formato genérico <code>id</code> + <code>amount</code>; campos extras do seu codec podem não sobreviver à sincronização.</li>
+        </ul>
+
+        <p>Para o exemplo completo de um addon real, consulte o addon de Mekanism incluído no projeto e a wiki principal em <a href="index.html">Wiki do desenvolvedor</a>.</p>
+      </article>
+    </main>
+  </div>
+
+  <footer class="page-footer">
+    <span>Infinity Nexus Multiblock</span>
+    <a href="../builder/index.html">Voltar ao builder</a>
+  </footer>
+</body>
+</html>
