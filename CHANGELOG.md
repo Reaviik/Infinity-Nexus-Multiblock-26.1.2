@@ -5,7 +5,7 @@
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
 
-## <span style="color:#2DC26B;">` V: 1.1.`</span>
+## <span style="color:#2DC26B;">` V: 1.1.4`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Implemented addons support
 
