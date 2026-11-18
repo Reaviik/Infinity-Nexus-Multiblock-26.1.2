@@ -1,7 +1,2 @@
 [build]
   publish = "docks"
-
-[[redirects]]
-  from = "/"
-  to = "/builder/"
-  status = 301
