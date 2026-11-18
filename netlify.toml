@@ -1,0 +1,8 @@
+[build]
+  base = "/"
+  publish = "docks"
+
+[[redirects]]
+  from = "/"
+  to = "/builder/"
+  status = 301
