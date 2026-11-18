@@ -4,6 +4,19 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+
+## <span style="color:#2DC26B;">` V: 1.1.`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Implemented addons support
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.1.3`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- New multiblock definition type  `recipe_exemple` and `storage_exemple` for dev uses.
+### <span style="color:#E67E23;"> **Change**:</span>
+- Empty controller now can be placed
+
 ---
 
 ## <span style="color:#2DC26B;">` V: 1.1.2`</span>
@@ -34,7 +47,7 @@
 
 ## <span style="color:#2DC26B;">` V: 1.1.1`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
-- Add command /inmb reload to reload all multiblock definition and generate new multiblocks with data loaded by kubejs load server-scripts
+- Add command /inmb reload to reload all multiblock definition and generate new multiblocks with data loaded by kubejs load server-scripts  
 
 ---
 

@@ -3,6 +3,7 @@ package com.Infinity.Nexus.Multiblock.block;
 import java.util.List;
 import java.util.function.Supplier;
 
+import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.serialization.MapCodec;
 
@@ -66,9 +67,6 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
 
     @Override
     public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
-        if (!context.getItemInHand().has(ModDataComponents.MULTIBLOCK_DEFINITION.get())) {
-            return null;
-        }
         return this.defaultBlockState()
                 .setValue(FACING, context.getHorizontalDirection().getOpposite())
                 .setValue(FORMED, false)
@@ -81,9 +79,14 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
             ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         Identifier definitionId = stack.get(ModDataComponents.MULTIBLOCK_DEFINITION.get());
-        if (definitionId != null
-                && level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller) {
-            controller.setDefinitionId(definitionId);
+        if (level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller) {
+            if (definitionId != null) {
+                controller.setDefinitionId(definitionId);
+            }
+            List<StoredResource> resources = stack.get(ModDataComponents.MULTIBLOCK_RESOURCES.get());
+            if (resources != null) {
+                controller.restoreResources(resources);
+            }
         }
     }
 
@@ -190,6 +193,10 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
         if (level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller
                 && controller.definitionId() != null) {
             stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), controller.definitionId());
+            List<StoredResource> resources = controller.resourceSnapshot();
+            if (!resources.isEmpty()) {
+                stack.set(ModDataComponents.MULTIBLOCK_RESOURCES.get(), resources);
+            }
         }
         return stack;
     }
@@ -201,6 +208,10 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
                 && controller.definitionId() != null) {
             ItemStack stack = new ItemStack(this);
             stack.set(ModDataComponents.MULTIBLOCK_DEFINITION.get(), controller.definitionId());
+            List<StoredResource> resources = controller.resourceSnapshot();
+            if (!resources.isEmpty()) {
+                stack.set(ModDataComponents.MULTIBLOCK_RESOURCES.get(), resources);
+            }
             return List.of(stack);
         }
         return List.of(new ItemStack(this));

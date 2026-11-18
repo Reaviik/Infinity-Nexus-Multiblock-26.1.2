@@ -14,7 +14,8 @@ public enum ItemSlotRole implements StringRepresentable {
     UPGRADE("upgrade"),
     COMPONENT("component"),
     STORAGE("storage"),
-    FLUID("fluid");
+    FLUID("fluid"),
+    RESOURCE("resource");
 
     public static final Codec<ItemSlotRole> CODEC = StringRepresentable.fromEnum(ItemSlotRole::values);
 
@@ -31,7 +32,7 @@ public enum ItemSlotRole implements StringRepresentable {
 
     public Set<Direction> defaultInsertFaces() {
         return switch (this) {
-            case OUTPUT, FLUID -> Set.of();
+            case OUTPUT, FLUID, RESOURCE -> Set.of();
             default -> Set.copyOf(EnumSet.allOf(Direction.class));
         };
     }

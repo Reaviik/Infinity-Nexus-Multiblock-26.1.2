@@ -139,6 +139,11 @@ public record GuiElement(
         return new GuiElement(GuiElementType.FLUID_BAR, x, y, width, height, "", "", capability, DEFAULT_TEXT_COLOR, false, GuiDirection.UP, -1, -1);
     }
 
+    public static GuiElement resourceBar(int x, int y, int width, int height, String kind, String tank) {
+        return new GuiElement(GuiElementType.RESOURCE_BAR, x, y, width, height, "", tank, kind,
+                DEFAULT_TEXT_COLOR, false, GuiDirection.UP, -1, -1);
+    }
+
     public static GuiElement progressBar(int x, int y, int width, int height, GuiDirection direction, int color) {
         return new GuiElement(GuiElementType.PROGRESS_BAR, x, y, width, height, "", "", "", color, false, direction, -1, -1);
     }

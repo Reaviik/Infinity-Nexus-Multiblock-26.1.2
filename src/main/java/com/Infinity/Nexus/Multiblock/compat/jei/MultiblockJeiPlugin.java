@@ -10,7 +10,6 @@ import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.api.GuiElement;
 import com.Infinity.Nexus.Multiblock.api.GuiElementType;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
-import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.client.ClientMultiblockEvents;
 import com.Infinity.Nexus.Multiblock.client.MultiblockScreen;
 import com.Infinity.Nexus.Multiblock.client.preview.MultiblockStructureData;
@@ -136,7 +135,7 @@ public final class MultiblockJeiPlugin implements IModPlugin {
                     MultiblockScreen screen, double mouseX, double mouseY) {
                 MultiblockMenu menu = screen.getMenu();
                 MultiblockDefinition definition = menu.blockEntity().definition();
-                if (definition == null || definition.type() != MultiblockType.RECIPE) {
+                if (definition == null || !definition.type().isRecipe()) {
                     return List.of();
                 }
                 List<IGuiClickableArea> areas = new ArrayList<>();
@@ -336,7 +335,7 @@ public final class MultiblockJeiPlugin implements IModPlugin {
                 continue;
             }
             MultiblockDefinition definition = MultiblockDefinitions.get(recipe.definition());
-            if (definition == null || definition.type() != MultiblockType.RECIPE) {
+            if (definition == null || !definition.type().isRecipe()) {
                 continue;
             }
             recipes.computeIfAbsent(definition.id(), key -> new ArrayList<>())

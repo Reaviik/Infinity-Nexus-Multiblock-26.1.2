@@ -41,23 +41,34 @@ public final class MultiblockSlot extends Slot {
         return this.role == ItemSlotRole.FLUID;
     }
 
+    public boolean isResource() {
+        return this.role == ItemSlotRole.RESOURCE;
+    }
+
     @Override
     public void setByPlayer(ItemStack stack) {
         super.setByPlayer(stack);
-        if (!stack.isEmpty()
-                && this.role == ItemSlotRole.FLUID
-                && this.container instanceof MultiblockControllerBlockEntity controller) {
+        if (stack.isEmpty() || !(this.container instanceof MultiblockControllerBlockEntity controller)) {
+            return;
+        }
+        if (this.role == ItemSlotRole.FLUID) {
             controller.onFluidSlotPlaced(this.getSlotIndex());
+        } else if (this.role == ItemSlotRole.RESOURCE) {
+            controller.onResourceSlotPlaced(this.getSlotIndex());
         }
     }
 
     @Override
     public ItemStack remove(int amount) {
         ItemStack removed = super.remove(amount);
-        if (!removed.isEmpty()
-                && this.role == ItemSlotRole.FLUID
-                && this.container instanceof MultiblockControllerBlockEntity controller) {
+        if (removed.isEmpty() || !(this.container instanceof MultiblockControllerBlockEntity controller)) {
+            return removed;
+        }
+        if (this.role == ItemSlotRole.FLUID) {
             return controller.onFluidSlotTaken(this.getSlotIndex(), removed);
+        }
+        if (this.role == ItemSlotRole.RESOURCE) {
+            return controller.onResourceSlotTaken(this.getSlotIndex(), removed);
         }
         return removed;
     }

@@ -13,6 +13,7 @@ import com.Infinity.Nexus.Multiblock.api.GuiElementType;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceStorage;
 import com.Infinity.Nexus.Multiblock.block.MultiblockEnergyStorage;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
@@ -365,6 +366,21 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                                 ItemStack.EMPTY, mouseX, mouseY);
                     }
                 }
+            } else if (element.type() == GuiElementType.RESOURCE_BAR) {
+                MultiblockResourceStorage storage = blockEntity.resourceStorage(element.capability());
+                if (storage != null) {
+                    int index = storage.indexOf(element.slot());
+                    if (index >= 0) {
+                        Component name = storage.displayName(index);
+                        List<Component> lines = name.getString().isEmpty()
+                                ? List.of(Component.literal(
+                                        storage.amount(index) + " / " + storage.capacity(index)))
+                                : List.of(name, Component.literal(
+                                        storage.amount(index) + " / " + storage.capacity(index)));
+                        graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(),
+                                ItemStack.EMPTY, mouseX, mouseY);
+                    }
+                }
             } else if (element.type() == GuiElementType.PROGRESS_BAR || element.type() == GuiElementType.ARROW) {
                 int max = this.menu.maxProgress();
                 int progress = this.menu.progress();
@@ -407,6 +423,8 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                 drawEnergyBar(graphics, layout, blockEntity, element, originX + element.x(), originY + element.y());
             } else if (element.type() == GuiElementType.FLUID_BAR) {
                 drawFluidBar(graphics, layout, blockEntity, element, originX + element.x(), originY + element.y());
+            } else if (element.type() == GuiElementType.RESOURCE_BAR) {
+                drawResourceBar(graphics, layout, blockEntity, element, originX + element.x(), originY + element.y());
             } else if (element.type() == GuiElementType.PROGRESS_BAR) {
                 drawProgressBar(graphics, layout, element, originX + element.x(), originY + element.y());
             } else if (element.type() == GuiElementType.ARROW) {
@@ -553,6 +571,45 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         }
         this.fluidRenderer(element, fluids.tank(index).capacity(), innerWidth, innerHeight)
                 .render(graphics, x + BAR_INSET, y + BAR_INSET, stack);
+    }
+
+    private void drawResourceBar(GuiGraphicsExtractor graphics, MultiblockMenuLayout layout,
+            MultiblockControllerBlockEntity blockEntity, GuiElement element, int x, int y) {
+        if (drawsBarBackground(layout)) {
+            drawBarBackground(graphics, x, y, element.width(), element.height());
+        }
+        MultiblockResourceStorage storage = blockEntity.resourceStorage(element.capability());
+        if (storage == null) {
+            return;
+        }
+        int index = storage.indexOf(element.slot());
+        long capacity = index < 0 ? 0L : storage.capacity(index);
+        if (index < 0 || capacity <= 0L) {
+            return;
+        }
+        int innerX = x + BAR_INSET;
+        int innerY = y + BAR_INSET;
+        int innerWidth = Math.max(0, element.width() - BAR_INSET * 2);
+        int innerHeight = Math.max(0, element.height() - BAR_INSET * 2);
+        int filled = (int) Math.min(
+                element.direction() == GuiDirection.LEFT || element.direction() == GuiDirection.RIGHT
+                        ? innerWidth
+                        : innerHeight,
+                storage.amount(index) * (long) (element.direction() == GuiDirection.LEFT
+                                || element.direction() == GuiDirection.RIGHT
+                        ? innerWidth
+                        : innerHeight) / capacity);
+        int color = storage.amount(index) > 0L ? storage.color(index) : element.color();
+        switch (element.direction()) {
+            case UP -> graphics.fill(innerX, innerY + innerHeight - filled,
+                    innerX + innerWidth, innerY + innerHeight, color);
+            case DOWN -> graphics.fill(innerX, innerY,
+                    innerX + innerWidth, innerY + filled, color);
+            case LEFT -> graphics.fill(innerX + innerWidth - filled, innerY,
+                    innerX + innerWidth, innerY + innerHeight, color);
+            case RIGHT -> graphics.fill(innerX, innerY,
+                    innerX + filled, innerY + innerHeight, color);
+        }
     }
 
     private void drawProgressBar(GuiGraphicsExtractor graphics, MultiblockMenuLayout layout,

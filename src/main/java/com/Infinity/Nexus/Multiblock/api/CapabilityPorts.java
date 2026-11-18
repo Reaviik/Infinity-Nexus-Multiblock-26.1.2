@@ -1,7 +1,9 @@
 package com.Infinity.Nexus.Multiblock.api;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -16,17 +18,26 @@ import net.minecraft.world.level.block.state.BlockState;
 public record CapabilityPorts(
         Optional<List<PortSelector>> item,
         Optional<List<PortSelector>> energy,
-        Optional<List<PortSelector>> fluid) {
+        Optional<List<PortSelector>> fluid,
+        Map<String, List<PortSelector>> resources) {
 
     public static final CapabilityPorts ALL = new CapabilityPorts(
             Optional.empty(),
             Optional.empty(),
             Optional.empty());
 
+    public CapabilityPorts(
+            Optional<List<PortSelector>> item,
+            Optional<List<PortSelector>> energy,
+            Optional<List<PortSelector>> fluid) {
+        this(item, energy, fluid, Map.of());
+    }
+
     public CapabilityPorts {
         item = copy(item, "item");
         energy = copy(energy, "energy");
         fluid = copy(fluid, "fluid");
+        resources = copyResources(resources);
     }
 
     public boolean isDefined(CapabilityType type) {
@@ -54,23 +65,71 @@ public record CapabilityPorts(
         };
     }
 
+    public boolean isDefined(String kind) {
+        return this.selectors(kind).isPresent();
+    }
+
+    public boolean allows(String kind, char symbol, BlockState state, Rotation rotation) {
+        Optional<List<PortSelector>> selectors = this.selectors(kind);
+        if (selectors.isEmpty()) {
+            return true;
+        }
+        for (PortSelector selector : selectors.get()) {
+            if (selector.matches(symbol, state, rotation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Optional<List<PortSelector>> selectors(String kind) {
+        return kind == null ? Optional.empty() : Optional.ofNullable(this.resources.get(kind));
+    }
+
+    public Set<String> resourceKinds() {
+        return this.resources.keySet();
+    }
+
     public void validate(MultiblockPattern pattern) {
         Set<Character> symbols = new HashSet<>();
         for (MultiblockPattern.PatternCell cell : pattern.cells()) {
             symbols.add(cell.symbol());
         }
         for (CapabilityType type : CapabilityType.values()) {
-            this.selectors(type).ifPresent(selectors -> {
-                for (PortSelector selector : selectors) {
-                    selector.symbol().ifPresent(symbol -> {
-                        if (!symbols.contains(symbol)) {
-                            throw new IllegalStateException("Capability port symbol '" + symbol
-                                    + "' is not used by the pattern");
-                        }
-                    });
-                }
-            });
+            validateSelectors(this.selectors(type), symbols);
         }
+        for (Map.Entry<String, List<PortSelector>> entry : this.resources.entrySet()) {
+            validateSelectors(Optional.of(entry.getValue()), symbols);
+        }
+    }
+
+    private static void validateSelectors(Optional<List<PortSelector>> selectors, Set<Character> symbols) {
+        selectors.ifPresent(list -> {
+            for (PortSelector selector : list) {
+                selector.symbol().ifPresent(symbol -> {
+                    if (!symbols.contains(symbol)) {
+                        throw new IllegalStateException("Capability port symbol '" + symbol
+                                + "' is not used by the pattern");
+                    }
+                });
+            }
+        });
+    }
+
+    private static Map<String, List<PortSelector>> copyResources(Map<String, List<PortSelector>> resources) {
+        Objects.requireNonNull(resources, "resources");
+        if (resources.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<PortSelector>> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, List<PortSelector>> entry : resources.entrySet()) {
+            String kind = Objects.requireNonNull(entry.getKey(), "resource kind");
+            if (kind.isBlank()) {
+                throw new IllegalArgumentException("Resource port kind cannot be blank");
+            }
+            copy.put(kind, List.copyOf(Objects.requireNonNull(entry.getValue(), kind)));
+        }
+        return Map.copyOf(copy);
     }
 
     private static Optional<List<PortSelector>> copy(Optional<List<PortSelector>> selectors, String name) {

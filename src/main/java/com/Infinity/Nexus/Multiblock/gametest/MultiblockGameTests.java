@@ -198,9 +198,9 @@ public final class MultiblockGameTests {
 
         private static void assertControllerRecipe(GameTestHelper helper) {
             Identifier definitionId = Identifier.fromNamespaceAndPath(
-                    InfinityNexusMultiblock.MOD_ID, "fabrica_de_voxel_cube1");
+                    InfinityNexusMultiblock.MOD_ID, "fabrica_de_voxel_cube");
             Identifier recipeId = Identifier.fromNamespaceAndPath(
-                    InfinityNexusMultiblock.MOD_ID, "controller/fabrica_de_voxel_cube1");
+                    InfinityNexusMultiblock.MOD_ID, "controller/fabrica_de_voxel_cube");
             ResourceKey<net.minecraft.world.item.crafting.Recipe<?>> recipeKey =
                     ResourceKey.create(Registries.RECIPE, recipeId);
             RecipeHolder<?> holder = helper.getLevel().getServer().getRecipeManager()

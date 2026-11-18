@@ -34,6 +34,7 @@
 
     <div class="header-actions">
       <a class="btn btn-ghost" href="../wiki/index.html" title="Wiki do desenvolvedor">Wiki</a>
+      <a class="btn btn-ghost" href="../wiki/addons.html" title="Guia para criar addons de recursos">Addon</a>
       <button type="button" class="btn btn-ghost" id="loadExampleBtn">Carregar exemplo</button>
       <button type="button" class="btn btn-ghost" id="importBtn">Importar JSON</button>
       <button type="button" class="btn btn-ghost btn-danger" id="resetBtn">Novo</button>
@@ -289,8 +290,8 @@
         <div class="view-head">
           <div>
             <p class="eyebrow">Etapa 05 · opcional</p>
-            <h1 id="capabilitiesTitle">Energia e fluidos</h1>
-            <p class="view-subtitle">Define <code>capabilities.energy</code>, <code>capabilities.fluids</code> e os filtros de bloco em <code>capability_ports</code>. Itens usam o inventário da máquina; energia e tanques são opcionais.</p>
+            <h1 id="capabilitiesTitle">Energia, fluidos e chemicals</h1>
+            <p class="view-subtitle">Define <code>capabilities.energy</code>, <code>capabilities.fluids</code>, <code>capabilities.chemical</code> e os filtros de bloco em <code>capability_ports</code>. Itens usam o inventário da máquina; energia e tanques são opcionais.</p>
           </div>
           <span class="badge badge-neutral" id="capabilitiesBadge">Pendente</span>
         </div>
@@ -299,12 +300,17 @@
           <div class="panel-head panel-head-wrap">
             <div>
               <h2>capabilities</h2>
-              <p class="panel-subtitle" id="capabilitiesSummary">Sem capabilities; a máquina não expõe energia/fluidos.</p>
+              <p class="panel-subtitle" id="capabilitiesSummary">Sem capabilities; a máquina não expõe energia/fluidos/chemicals.</p>
             </div>
             <div class="button-row">
-              <button type="button" class="btn btn-tiny" id="addEnergyBtn">+ energia</button>
-              <button type="button" class="btn btn-tiny" id="addFluidBtn">+ tanque</button>
-              <button type="button" class="btn btn-tiny btn-danger" id="removeCapabilitiesBtn">remover capabilities</button>
+              <button type="button" class="btn btn-tiny" id="addEnergyBtn"
+                title="Adiciona energia (FE) à máquina. Define capabilities.energy e permite energy_bar.">+ energia</button>
+              <button type="button" class="btn btn-tiny" id="addFluidBtn"
+                title="Adiciona um tanque de fluido. Define capabilities.fluids e permite fluid_bar.">+ tanque</button>
+              <button type="button" class="btn btn-tiny" id="addChemicalBtn"
+                title="Adiciona um tanque de chemical. Requer Mekanism para funcionar.">+ chemical</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="removeCapabilitiesBtn"
+                title="Remove energia, fluidos e chemicals. Portas e receitas que dependem deles serão ignoradas.">remover capabilities</button>
             </div>
           </div>
           <div class="missing-empty" id="capabilitiesEmpty"></div>
@@ -335,6 +341,12 @@
               <input id="capabilityPortFluid" type="text" data-capability-port="fluid"
                 spellcheck="false" autocomplete="off" placeholder="F ou #minecraft:glass">
             </div>
+            <div class="field">
+              <label for="capabilityPortChemical">chemical</label>
+              <input id="capabilityPortChemical" type="text" data-capability-port="chemical"
+                spellcheck="false" autocomplete="off" placeholder="F ou #mekanism:chemicals"
+                title="Requer Mekanism para funcionar.">
+            </div>
           </div>
           <p class="field-hint" id="capabilityPortAvailability" hidden></p>
           <p class="field-hint" id="capabilityPortSymbols">Símbolos disponíveis no pattern: C, I.</p>
@@ -345,6 +357,8 @@
           <code>energy.id</code> é o identificador usado por uma <code>energy_bar</code>; <code>fluids[].id</code> identifica cada tanque e não é o tipo do fluido.
           <code>filter</code> aceita um fluido ou tag, como <code>minecraft:water</code> ou <code>#c:water</code>.
           <code>fluids[].port</code> limita o tanque a uma key do pattern (ex.: <code>Z</code>); sem ela, todos os ports de fluido acessam o tanque.
+          <code>chemical.tanks[].filter</code> aceita um chemical ou tag e pode listar vários separados por vírgula; portas chemical não usam <code>port</code> por tanque.
+          Chemical exige o addon Mekanism e aparece em <code>chemical_bar</code> com <code>capability: "chemical"</code> e <code>slot</code> igual ao id do tanque.
         </div>
       </section>
 

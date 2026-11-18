@@ -1,24 +1,18 @@
 {
   "type": "infinity_nexus_multiblock:multiblock",
-  "definition": "infinity_nexus_multiblock:fabrica_de_voxel_cube1",
+  "definition": "infinity_nexus_multiblock:obsidian_furnace",
   "inputs": [
     {
       "type": "item",
       "ingredient": "minecraft:raw_gold"
-    },
-    {
-      "type": "fluid",
-      "ingredient": "minecraft:lava",
-      "amount": 50
     }
   ],
   "outputs": [
     {
       "type": "item",
       "id": "minecraft:gold_ingot",
-      "count": 1,
-      "chance": 1.0
+      "count": 1
     }
   ],
-  "time": 100
+  "time": 50
 }

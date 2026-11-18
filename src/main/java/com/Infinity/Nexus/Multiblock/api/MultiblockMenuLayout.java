@@ -9,6 +9,8 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.Identifier;
@@ -79,8 +81,14 @@ public record MultiblockMenuLayout(
         int slotCount = itemSlots.isEmpty() ? configuredRows * 9 : itemSlots.size();
         boolean hasEnergy = definition != null && definition.energy().isPresent();
         List<FluidTank> tanks = definition == null ? List.of() : definition.fluidTanks();
-        boolean hasProgress = definition != null && definition.type() == MultiblockType.RECIPE;
-        int barCount = (hasEnergy ? 1 : 0) + tanks.size();
+        List<ResourceTankInfo> resourceTanks = new ArrayList<>();
+        if (definition != null) {
+            for (String kind : definition.resourceKinds()) {
+                resourceTanks.addAll(definition.resourceTanks(kind));
+            }
+        }
+        boolean hasProgress = definition != null && definition.type().isRecipe();
+        int barCount = (hasEnergy ? 1 : 0) + tanks.size() + resourceTanks.size();
         boolean reservedRail = barCount > 0 || hasProgress;
         int columns = reservedRail ? 8 : 9;
 
@@ -98,6 +106,15 @@ public record MultiblockMenuLayout(
         for (FluidTank tank : tanks) {
             elements.add(GuiElement.fluidBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, tank.id()));
             barIndex++;
+        }
+        if (definition != null) {
+            for (String kind : definition.resourceKinds()) {
+                for (ResourceTankInfo tank : definition.resourceTanks(kind)) {
+                    elements.add(GuiElement.resourceBar(
+                            barX(barIndex), barY(barIndex, barHeight), 8, barHeight, kind, tank.id()));
+                    barIndex++;
+                }
+            }
         }
         if (hasProgress) {
             elements.add(GuiElement.progressBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, GuiDirection.UP, GuiElement.DEFAULT_PROGRESS_COLOR));
@@ -265,8 +282,22 @@ public record MultiblockMenuLayout(
                     requireBarInside(element, gui.width(), gui.height());
                     elements.add(element);
                 }
+                case RESOURCE_BAR -> {
+                    if (MultiblockAddons.get(element.capability()) == null) {
+                        throw new IllegalArgumentException(
+                                "Unknown resource kind in gui: " + element.capability());
+                    }
+                    boolean knownTank = definition.resourceTanks(element.capability()).stream()
+                            .anyMatch(tank -> tank.id().equals(element.slot()));
+                    if (element.slot().isBlank() || !knownTank) {
+                        throw new IllegalArgumentException(
+                                "Unknown resource tank id in gui: " + element.slot());
+                    }
+                    requireBarInside(element, gui.width(), gui.height());
+                    elements.add(element);
+                }
                 case PROGRESS_BAR, ARROW -> {
-                    if (definition.type() != MultiblockType.RECIPE) {
+                    if (!definition.type().isRecipe()) {
                         throw new IllegalArgumentException("gui has a " + element.type().getSerializedName()
                                 + " but the multiblock is not a recipe multiblock");
                     }
@@ -274,7 +305,7 @@ public record MultiblockMenuLayout(
                     elements.add(element);
                 }
                 case ENTITY -> {
-                    if (definition.type() != MultiblockType.RECIPE) {
+                    if (!definition.type().isRecipe()) {
                         throw new IllegalArgumentException("gui has an entity element but the multiblock is not a recipe multiblock");
                     }
                     requireEntityElement(element, gui.width(), gui.height());

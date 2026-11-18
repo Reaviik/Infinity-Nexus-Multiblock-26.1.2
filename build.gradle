@@ -121,9 +121,8 @@ dependencies {
     implementation 'com.nexus:infinity_nexus_cables:1.0.5-26.1.2'
     implementation "curse.maven:geckolib-388172:8327201"
     implementation "curse.maven:jei-238222:9193052"
-    implementation "curse.maven:jade-324717:8651070"
+    implementation "curse.maven:jade-324717:9156414"
     implementation "curse.maven:guideme-1173950:9022838"
-
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html

@@ -1829,8 +1829,146 @@ test("textures invalidas na importacao sao ignoradas com nota", () => {
   assert.ok(imported.notes.some((note) => note.message.includes("textures.active")));
 });
 
+test("capabilities chemical exportam tanques, portas e gui tipada", () => {
+  const state = withState((value) => {
+    value.type = "recipe";
+    value.capabilities = V.createCapabilities();
+    const input = V.createChemicalTank();
+    input.id = "input";
+    input.capacity = 16000;
+    input.maxReceive = 4000;
+    input.filter = "mekanism:hydrogen";
+    const output = V.createChemicalTank();
+    output.id = "output";
+    output.capacity = 8000;
+    output.maxExtract = 2000;
+    output.filter = "#c:chemicals";
+    value.capabilities.chemical = { tanks: [input, output], extras: {} };
+    value.capabilityPorts = V.createCapabilityPorts();
+    value.capabilityPorts.chemical = ["I"];
+    value.gui = V.createGui();
+    value.gui.elements.push(V.createGuiElement("chemical_bar"));
+    value.gui.elements[0].capability = "chemical";
+    value.gui.elements[0].slot = "input";
+    value.gui.elements[0].x = 8;
+    value.gui.elements[0].y = 8;
+    value.gui.elements.push(V.createGuiElement("player_inventory"));
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  const built = V.buildDefinition(state);
+  assert.equal(built.capabilities.chemical.tanks.length, 2);
+  assert.equal(built.capabilities.chemical.tanks[0].id, "input");
+  assert.equal(built.capabilities.chemical.tanks[1].filter, "#c:chemicals");
+  assert.deepEqual(built.capability_ports.chemical, ["I"]);
+  assert.equal(built.gui.elements[0].type, "chemical_bar");
+  assert.equal(built.gui.elements[0].slot, "input");
+});
+
+test("resource_bar legado e convertido para chemical_bar", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:chemical_gui",
+    type: "storage",
+    capabilities: {
+      chemical: {
+        tanks: [{ id: "input", capacity: 16000, filter: ["mekanism:hydrogen"] }]
+      }
+    },
+    gui: {
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "chemical_bar", x: 8, y: 8, width: 8, height: 54, capability: "chemical", slot: "input" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+  assert.equal(imported.state.capabilities.chemical.tanks[0].filter, "mekanism:hydrogen");
+  assert.equal(V.buildDefinition(imported.state).gui.elements[0].type, "chemical_bar");
+
+  const legacy = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:chemical_legacy",
+    type: "storage",
+    capabilities: {
+      chemical: {
+        tanks: [{ id: "input", capacity: 16000 }]
+      }
+    },
+    gui: {
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "resource_bar", x: 8, y: 8, width: 8, height: 54, capability: "chemical", slot: "input" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.equal(legacy.state.gui.elements[0].type, "chemical_bar");
+  assert.ok(legacy.notes.some((note) => note.message.includes("resource_bar")));
+  assert.equal(V.createGuiElement("resource_bar").type, "chemical_bar");
+});
+
+test("receita chemical exporta chemical e tank tipados", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    const input = V.createChemicalTank();
+    input.id = "input";
+    input.capacity = 16000;
+    const output = V.createChemicalTank();
+    output.id = "output";
+    output.capacity = 16000;
+    value.capabilities.chemical = { tanks: [input, output], extras: {} };
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "chemical_reactor";
+    recipe.inputRows = [V.createRecipeInputRow("chemical")];
+    recipe.inputRows[0].resource = "mekanism:hydrogen";
+    recipe.inputRows[0].amount = "1000";
+    recipe.outputRows = [V.createRecipeOutputRow("chemical")];
+    recipe.outputRows[0].resource = "mekanism:oxygen";
+    recipe.outputRows[0].amount = "500";
+    recipe.outputRows[0].tank = "output";
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.ok(result.checks.find((check) => check.id === "recipes").ok);
+  const built = V.buildRecipe(state.recipes[0], {
+    definitionId: state.namespace + ":" + state.path
+  });
+  assert.deepEqual(built.inputs, [
+    { type: "chemical", chemical: "mekanism:hydrogen", amount: 1000 }
+  ]);
+  assert.deepEqual(built.outputs, [
+    { type: "chemical", chemical: "mekanism:oxygen", amount: 500, tank: "output" }
+  ]);
+});
+
+test("receita chemical rejeita tank desconhecido e falta de capability", () => {
+  const state = withState((value) => {
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "chemical_invalida";
+    recipe.inputRows = [V.createRecipeInputRow("chemical")];
+    recipe.inputRows[0].resource = "mekanism:hydrogen";
+    recipe.outputRows = [V.createRecipeOutputRow("chemical")];
+    recipe.outputRows[0].resource = "mekanism:oxygen";
+    recipe.outputRows[0].tank = "output";
+  });
+  const result = V.validateState(state);
+  const found = codes(result);
+  assert.ok(found.includes("recipe.input.chemical_tank"));
+  assert.ok(found.includes("recipe.output.chemical_tank"));
+  assert.equal(result.checks.find((check) => check.id === "recipes").ok, false);
+});
+
 if (process.exitCode) {
   console.error("Falhas encontradas.");
 } else {
   console.log(passed + " testes passaram.");
 }
+

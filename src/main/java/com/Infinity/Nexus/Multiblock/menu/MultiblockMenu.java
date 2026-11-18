@@ -134,7 +134,8 @@ public class MultiblockMenu extends AbstractContainerMenu {
         }
 
         int machineSlots = this.layout.slots().size();
-        if (slot instanceof MultiblockSlot multiblockSlot && multiblockSlot.isFluid()) {
+        if (slot instanceof MultiblockSlot multiblockSlot
+                && (multiblockSlot.isFluid() || multiblockSlot.isResource())) {
             return this.quickMoveFluidSlot(player, multiblockSlot);
         }
 

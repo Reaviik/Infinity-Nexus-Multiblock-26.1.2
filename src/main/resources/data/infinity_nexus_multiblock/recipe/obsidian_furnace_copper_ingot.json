@@ -1,0 +1,18 @@
+{
+  "type": "infinity_nexus_multiblock:multiblock",
+  "definition": "infinity_nexus_multiblock:obsidian_furnace",
+  "inputs": [
+    {
+      "type": "item",
+      "ingredient": "minecraft:raw_copper"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "item",
+      "id": "minecraft:copper_ingot",
+      "count": 1
+    }
+  ],
+  "time": 50
+}

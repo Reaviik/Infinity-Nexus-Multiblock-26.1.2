@@ -1,12 +1,16 @@
 package com.Infinity.Nexus.Multiblock.api;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
+import com.google.gson.JsonElement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -31,6 +35,8 @@ public final class MultiblockDefinition {
     private final MultiblockSounds sounds;
     private final MultiblockTextures textures;
     private final CapabilityPorts capabilityPorts;
+    private final Map<String, JsonElement> resourceConfigs;
+    private final Map<String, List<ResourceTankInfo>> resourceTanks;
 
     private MultiblockDefinition(
             Identifier id,
@@ -46,7 +52,9 @@ public final class MultiblockDefinition {
             Optional<MultiblockGui> gui,
             MultiblockSounds sounds,
             MultiblockTextures textures,
-            CapabilityPorts capabilityPorts) {
+            CapabilityPorts capabilityPorts,
+            Map<String, JsonElement> resourceConfigs,
+            Map<String, List<ResourceTankInfo>> resourceTanks) {
         this.id = id;
         this.schemaVersion = schemaVersion;
         this.type = type;
@@ -61,6 +69,8 @@ public final class MultiblockDefinition {
         this.sounds = sounds;
         this.textures = textures;
         this.capabilityPorts = capabilityPorts;
+        this.resourceConfigs = Map.copyOf(resourceConfigs);
+        this.resourceTanks = Map.copyOf(resourceTanks);
     }
 
     public static Builder builder(Identifier id) {
@@ -148,6 +158,22 @@ public final class MultiblockDefinition {
         return this.capabilityPorts;
     }
 
+    public Map<String, JsonElement> resourceConfigs() {
+        return this.resourceConfigs;
+    }
+
+    public List<ResourceTankInfo> resourceTanks(String kind) {
+        return this.resourceTanks.getOrDefault(kind, List.of());
+    }
+
+    public Map<String, List<ResourceTankInfo>> resourceTanks() {
+        return this.resourceTanks;
+    }
+
+    public Set<String> resourceKinds() {
+        return this.resourceTanks.keySet();
+    }
+
     public BlockPos origin(BlockPos controllerPos, Rotation rotation) {
         return this.pattern.origin(controllerPos, rotation);
     }
@@ -180,6 +206,8 @@ public final class MultiblockDefinition {
         private MultiblockSounds sounds = MultiblockSounds.EMPTY;
         private MultiblockTextures textures = MultiblockTextures.EMPTY;
         private CapabilityPorts capabilityPorts = CapabilityPorts.ALL;
+        private Map<String, JsonElement> resourceConfigs = Map.of();
+        private Map<String, List<ResourceTankInfo>> resourceTanks = Map.of();
 
         private Builder(Identifier id) {
             this.id = Objects.requireNonNull(id, "id");
@@ -259,6 +287,23 @@ public final class MultiblockDefinition {
             return this;
         }
 
+        public Builder resourceConfigs(Map<String, JsonElement> resourceConfigs) {
+            this.resourceConfigs = Map.copyOf(Objects.requireNonNull(resourceConfigs, "resourceConfigs"));
+            return this;
+        }
+
+        public Builder resourceTanks(Map<String, List<ResourceTankInfo>> resourceTanks) {
+            Map<String, List<ResourceTankInfo>> copy = new LinkedHashMap<>();
+            Objects.requireNonNull(resourceTanks, "resourceTanks").forEach((kind, tanks) -> {
+                if (kind == null || kind.isBlank()) {
+                    throw new IllegalArgumentException("Resource kind cannot be blank");
+                }
+                copy.put(kind, List.copyOf(Objects.requireNonNull(tanks, kind)));
+            });
+            this.resourceTanks = Map.copyOf(copy);
+            return this;
+        }
+
         public MultiblockDefinition build() {
             if (this.pattern == null) {
                 throw new IllegalStateException("A multiblock definition needs a pattern");
@@ -278,6 +323,22 @@ public final class MultiblockDefinition {
             if (this.energy != null && tankIds.contains(this.energy.id())) {
                 throw new IllegalStateException("Energy capability id conflicts with a fluid tank id: " + this.energy.id());
             }
+            for (Map.Entry<String, List<ResourceTankInfo>> entry : this.resourceTanks.entrySet()) {
+                String kind = entry.getKey();
+                if (!this.resourceConfigs.containsKey(kind)) {
+                    throw new IllegalStateException("Missing resource config for kind: " + kind);
+                }
+                for (ResourceTankInfo tank : entry.getValue()) {
+                    if (!tankIds.add(tank.id())) {
+                        throw new IllegalStateException("Duplicate resource tank id: " + tank.id());
+                    }
+                }
+            }
+            for (String kind : this.resourceConfigs.keySet()) {
+                if (!this.resourceTanks.containsKey(kind)) {
+                    throw new IllegalStateException("Missing resource tanks for kind: " + kind);
+                }
+            }
             this.capabilityPorts.validate(this.pattern);
             return new MultiblockDefinition(
                     this.id,
@@ -293,7 +354,9 @@ public final class MultiblockDefinition {
                     Optional.ofNullable(this.gui),
                     this.sounds,
                     this.textures,
-                    this.capabilityPorts);
+                    this.capabilityPorts,
+                    this.resourceConfigs,
+                    this.resourceTanks);
         }
     }
 }

@@ -14,20 +14,21 @@
   var KNOWN_RECIPE_TYPES = [RECIPE_TYPE];
   var NAMESPACE_PATTERN = /^[a-z0-9_.-]+$/;
   var PATH_PATTERN = /^[a-z0-9_./-]+$/;
-  var ITEM_SLOT_ROLES = ["input", "output", "fuel", "upgrade", "component", "storage", "fluid"];
+  var ITEM_SLOT_ROLES = ["input", "output", "fuel", "upgrade", "component", "storage", "fluid", "resource"];
   var ITEM_SLOT_KEYS = ["id", "role", "filter", "limit", "faces", "x", "y"];
   var DIRECTIONS = ["north", "south", "east", "west", "up", "down"];
   var CAPABILITY_MAX = 2147483647;
-  var CAPABILITY_PORT_KEYS = ["item", "energy", "fluid"];
+  var CAPABILITY_PORT_KEYS = ["item", "energy", "fluid", "chemical"];
   var ENERGY_KEYS = ["id", "capacity", "max_receive", "max_extract"];
   var FLUID_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter", "port"];
+  var CHEMICAL_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter"];
   var CONTROLLER_FACES = ["front", "back", "left", "right", "top", "bottom"];
   var CONTROLLER_KEYS = ["block", "textures", "formed_textures", "particle", "light_level"];
   var TEXTURE_SET_KEYS = ["front", "side", "top", "bottom", "particle"];
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
   var CONTROLLER_RECIPE_MAX_SIZE = 3;
   var MAX_LIGHT_LEVEL = 15;
-  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "progress_bar", "arrow", "entity"];
+  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow", "entity"];
   var GUI_ELEMENT_KEYS = ["type", "x", "y", "width", "height", "text", "slot", "capability", "color", "shadow", "direction", "u", "v"];
   var GUI_DIRECTIONS = ["up", "down", "left", "right"];
   var GUI_KEYS = ["texture", "width", "height", "texture_width", "texture_height", "elements"];
@@ -412,6 +413,9 @@
     if (kind === "fluid") {
       return { kind: "fluid", resource: "", amount: "1000" };
     }
+    if (kind === "chemical") {
+      return { kind: "chemical", resource: "", amount: "1000" };
+    }
     if (kind === "entity") {
       return { kind: "entity", resource: "", spawn: "", count: "1" };
     }
@@ -424,6 +428,9 @@
   function createRecipeOutputRow(kind) {
     if (kind === "fluid") {
       return { kind: "fluid", resource: "", amount: "1000", chance: "1" };
+    }
+    if (kind === "chemical") {
+      return { kind: "chemical", resource: "", amount: "1000", tank: "", chance: "1" };
     }
     if (kind === "entity") {
       return { kind: "entity", resource: "", spawn: "", count: "1", chance: "1" };
@@ -446,7 +453,7 @@
 
   function recipeRowKind(value) {
     var kind = trimString(value) || "item";
-    return ["item", "fluid", "entity", "energy"].indexOf(kind) === -1 ? "item" : kind;
+    return ["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1 ? "item" : kind;
   }
 
   function parseRecipe(raw, notes) {
@@ -482,6 +489,11 @@
           }
         } else if (kind === "fluid") {
           row.resource = parseRecipeResource(entry.ingredient);
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+        } else if (kind === "chemical") {
+          row.resource = entry.chemical === undefined
+            ? parseRecipeResource(entry.ingredient)
+            : parseRecipeResource(entry.chemical);
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
         } else if (kind === "entity") {
           row.resource = entityResourceFromEntry(entry);
@@ -545,6 +557,13 @@
           row.resource = typeof entry.id === "string" ? entry.id : "";
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
           row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        } else if (kind === "chemical") {
+          row.resource = typeof entry.chemical === "string"
+            ? entry.chemical
+            : (typeof entry.id === "string" ? entry.id : "");
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+          row.tank = typeof entry.tank === "string" ? entry.tank : "";
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
         } else if (kind === "entity") {
           row.resource = entityResourceFromEntry(entry);
           if (typeof entry.id === "string" && typeof entry.tag === "string"
@@ -565,9 +584,16 @@
       var outputRow = createRecipeOutputRow(outputKind);
       outputRow.resource = outputKind === "entity"
         ? entityResourceFromEntry(raw.output)
-        : (typeof raw.output.id === "string" ? raw.output.id : "");
+        : outputKind === "chemical"
+          ? (typeof raw.output.chemical === "string"
+            ? raw.output.chemical
+            : (typeof raw.output.id === "string" ? raw.output.id : ""))
+          : (typeof raw.output.id === "string" ? raw.output.id : "");
       if (outputKind === "fluid") {
         outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
+      } else if (outputKind === "chemical") {
+        outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
+        outputRow.tank = typeof raw.output.tank === "string" ? raw.output.tank : "";
       } else if (outputKind === "entity") {
         outputRow.spawn = typeof raw.output.spawn === "string" ? raw.output.spawn : "";
         outputRow.count = raw.output.count === undefined ? "1" : String(raw.output.count);
@@ -702,6 +728,8 @@
     var source = isPlainObject(state) ? state : {};
     var capabilities = isPlainObject(source.capabilities) ? source.capabilities : null;
     var fluids = capabilities && Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
+    var chemical = capabilities && isPlainObject(capabilities.chemical) ? capabilities.chemical : null;
+    var chemicalTanks = chemical && Array.isArray(chemical.tanks) ? chemical.tanks : [];
     var slots = Array.isArray(source.itemSlots) ? source.itemSlots : [];
     var inputSlots = slots.filter(function (slot) {
       return isPlainObject(slot) && slot.role === "input";
@@ -716,12 +744,19 @@
     return {
       energy: !!(capabilities && isPlainObject(capabilities.energy)),
       fluid: fluids.length > 0,
+      chemical: chemicalTanks.length > 0,
       itemInput: inputSlots.length > 0,
       itemOutput: outputSlots.length > 0,
       symbols: recipePatternSymbols(source),
       inputSlots: inputSlots,
       outputSlots: outputSlots,
       fluidCapacities: fluids.map(function (tank) {
+        return isPlainObject(tank) ? toIntOr(tank.capacity, 0) : 0;
+      }),
+      chemicalTankIds: chemicalTanks.map(function (tank) {
+        return isPlainObject(tank) ? trimString(tank.id) : "";
+      }),
+      chemicalCapacities: chemicalTanks.map(function (tank) {
         return isPlainObject(tank) ? toIntOr(tank.capacity, 0) : 0;
       }),
       energyCapacity: capabilities && isPlainObject(capabilities.energy)
@@ -822,6 +857,13 @@
           return;
         }
         inputs.push({ type: "fluid", ingredient: fluidId, amount: amount });
+      } else if (kind === "chemical") {
+        var chemicalId = trimString(row.resource);
+        var chemicalAmount = toIntOr(row.amount, 1000);
+        if (!chemicalId || chemicalAmount < 1) {
+          return;
+        }
+        inputs.push({ type: "chemical", chemical: chemicalId, amount: chemicalAmount });
       } else if (kind === "entity") {
         var entitySelector = parseEntitySelector(row.resource);
         if (entitySelector === null) {
@@ -884,6 +926,21 @@
           fluidOutput.chance = chance;
         }
         outputs.push(fluidOutput);
+      } else if (kind === "chemical") {
+        var chemicalId = trimString(row.resource);
+        var chemicalAmount = toIntOr(row.amount, 1000);
+        if (!chemicalId || chemicalAmount < 1) {
+          return;
+        }
+        var chemicalOutput = { type: "chemical", chemical: chemicalId, amount: chemicalAmount };
+        var chemicalTank = trimString(row.tank);
+        if (chemicalTank) {
+          chemicalOutput.tank = chemicalTank;
+        }
+        if (chance !== 1) {
+          chemicalOutput.chance = chance;
+        }
+        outputs.push(chemicalOutput);
       } else if (kind === "entity") {
         var entitySelector = parseEntitySelector(row.resource);
         var spawn = trimString(row.spawn);
@@ -952,6 +1009,8 @@
     var inputSlots = Array.isArray(settings.inputSlots) ? settings.inputSlots : null;
     var outputSlots = Array.isArray(settings.outputSlots) ? settings.outputSlots : null;
     var fluidCapacities = Array.isArray(settings.fluidCapacities) ? settings.fluidCapacities : null;
+    var chemicalCapacities = Array.isArray(settings.chemicalCapacities) ? settings.chemicalCapacities : null;
+    var chemicalTankIds = Array.isArray(settings.chemicalTankIds) ? settings.chemicalTankIds : [];
     var energyCapacity = toInt(settings.energyCapacity);
 
     function addRecipeIssue(code, severity, index, field, message) {
@@ -1018,6 +1077,8 @@
       var itemInputTotal = 0;
       var fluidInputRows = 0;
       var fluidInputTotal = 0;
+      var chemicalInputRows = 0;
+      var chemicalInputTotal = 0;
       inputRows.forEach(function (row, rowIndex) {
         var field = "input:" + rowIndex + ":";
         if (!isPlainObject(row)) {
@@ -1025,9 +1086,9 @@
           return;
         }
         var kind = trimString(row.kind) || "item";
-        if (["item", "fluid", "entity", "energy"].indexOf(kind) === -1) {
+        if (["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1) {
           addRecipeIssue("recipe.input.type", "error", index, field + "kind",
-            "input.kind precisa ser item, fluid, entity ou energy.");
+            "input.kind precisa ser item, fluid, chemical, entity ou energy.");
           return;
         }
         if (kind === "item") {
@@ -1079,6 +1140,29 @@
                 "A quantidade do input de fluido excede a capacidade de um unico tanque.");
             }
           }
+        } else if (kind === "chemical") {
+          if (!availabilityAllowed(settings, "chemical")) {
+            addRecipeIssue("recipe.input.chemical_tank", "error", index, field + "kind",
+              "Esta maquina nao tem tanque de chemical.");
+          }
+          var chemicalId = trimString(row.resource);
+          if (!chemicalId || !isValidIdentifier(chemicalId)) {
+            addRecipeIssue("recipe.input.chemical_invalid", "error", index, field + "resource",
+              "O chemical precisa ser um id valido.");
+          }
+          var chemicalAmount = toInt(row.amount);
+          if (chemicalAmount === null || chemicalAmount < 1 || chemicalAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.input.amount", "error", index, field + "amount",
+              "A quantidade de chemical precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            chemicalInputRows += 1;
+            chemicalInputTotal += chemicalAmount;
+            if (chemicalCapacities !== null
+                && chemicalAmount > Math.max.apply(null, chemicalCapacities.concat([0]))) {
+              addRecipeIssue("recipe.input.chemical_tank_capacity", "error", index, field + "amount",
+                "A quantidade do input de chemical excede a capacidade de um unico tanque.");
+            }
+          }
         } else if (kind === "entity") {
           var entityId = trimString(row.resource);
           if (parseEntitySelector(entityId) === null) {
@@ -1115,6 +1199,8 @@
       var itemOutputTotal = 0;
       var fluidOutputRows = 0;
       var fluidOutputTotal = 0;
+      var chemicalOutputRows = 0;
+      var chemicalOutputTotal = 0;
       outputRows.forEach(function (row, rowIndex) {
         var field = "output:" + rowIndex + ":";
         if (!isPlainObject(row)) {
@@ -1122,9 +1208,9 @@
           return;
         }
         var kind = trimString(row.kind) || "item";
-        if (["item", "fluid", "entity", "energy"].indexOf(kind) === -1) {
+        if (["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1) {
           addRecipeIssue("recipe.output.type", "error", index, field + "kind",
-            "output.kind precisa ser item, fluid, entity ou energy.");
+            "output.kind precisa ser item, fluid, chemical, entity ou energy.");
           return;
         }
         var chance = recipeChance(row.chance);
@@ -1171,6 +1257,36 @@
           } else {
             fluidOutputRows += 1;
             fluidOutputTotal += amount;
+          }
+        } else if (kind === "chemical") {
+          if (!availabilityAllowed(settings, "chemical")) {
+            addRecipeIssue("recipe.output.chemical_tank", "error", index, field + "kind",
+              "Esta maquina nao tem tanque de chemical.");
+          }
+          var chemicalId = trimString(row.resource);
+          if (!chemicalId || !isValidIdentifier(chemicalId)) {
+            addRecipeIssue("recipe.output.chemical_invalid", "error", index, field + "resource",
+              "O chemical precisa ser um id valido.");
+          }
+          var chemicalAmount = toInt(row.amount);
+          if (chemicalAmount === null || chemicalAmount < 1 || chemicalAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.output.amount", "error", index, field + "amount",
+              "A quantidade de chemical precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            chemicalOutputRows += 1;
+            chemicalOutputTotal += chemicalAmount;
+            var chemicalTank = trimString(row.tank);
+            if (chemicalTank) {
+              var tankIndex = chemicalTankIds.indexOf(chemicalTank);
+              if (tankIndex === -1) {
+                addRecipeIssue("recipe.output.chemical_tank_unknown", "error", index, field + "tank",
+                  "O tank do output precisa ser o id de um tanque chemical.");
+              } else if (chemicalCapacities !== null
+                  && chemicalAmount > toIntOr(chemicalCapacities[tankIndex], 0)) {
+                addRecipeIssue("recipe.output.chemical_tank_capacity", "error", index, field + "amount",
+                  "A quantidade do output excede a capacidade do tanque \"" + chemicalTank + "\".");
+              }
+            }
           }
         } else if (kind === "entity") {
           var entityId = trimString(row.resource);
@@ -1247,6 +1363,29 @@
             "A receita tem mais fluidos de entrada e saida do que tanques disponiveis.");
         }
       }
+      if (chemicalCapacities !== null) {
+        var chemicalCapacity = sum(chemicalCapacities);
+        if (chemicalInputRows > chemicalCapacities.length) {
+          addRecipeIssue("recipe.input.chemical_slots", "error", index, "inputs",
+            "Ha mais inputs de chemical do que tanques.");
+        }
+        if (chemicalInputTotal > chemicalCapacity) {
+          addRecipeIssue("recipe.input.chemical_capacity", "error", index, "inputs",
+            "A quantidade total de chemicals de input excede a capacidade dos tanques.");
+        }
+        if (chemicalOutputRows > chemicalCapacities.length) {
+          addRecipeIssue("recipe.output.chemical_slots", "error", index, "outputs",
+            "Ha mais outputs de chemical do que tanques.");
+        }
+        if (chemicalOutputTotal > chemicalCapacity) {
+          addRecipeIssue("recipe.output.chemical_capacity", "error", index, "outputs",
+            "A quantidade total de chemicals de output excede a capacidade dos tanques.");
+        }
+        if (chemicalInputRows + chemicalOutputRows > chemicalCapacities.length) {
+          addRecipeIssue("recipe.chemical_slots", "error", index, "inputs+outputs",
+            "A receita tem mais chemicals de entrada e saida do que tanques disponiveis.");
+        }
+      }
 
       var time = toInt(recipe.time);
       if (time === null || time < 1 || time > CAPABILITY_MAX) {
@@ -1262,6 +1401,7 @@
     return {
       energy: null,
       fluids: null,
+      chemical: null,
       extras: {}
     };
   }
@@ -1271,6 +1411,7 @@
       item: null,
       energy: null,
       fluid: null,
+      chemical: null,
       extras: {}
     };
   }
@@ -1280,7 +1421,9 @@
     return {
       item: true,
       energy: Boolean(caps && isPlainObject(caps.energy)),
-      fluid: Boolean(caps && Array.isArray(caps.fluids) && caps.fluids.length > 0)
+      fluid: Boolean(caps && Array.isArray(caps.fluids) && caps.fluids.length > 0),
+      chemical: Boolean(caps && isPlainObject(caps.chemical)
+        && Array.isArray(caps.chemical.tanks) && caps.chemical.tanks.length > 0)
     };
   }
 
@@ -1322,6 +1465,17 @@
       maxExtract: 0,
       filter: "",
       port: "",
+      extras: {}
+    };
+  }
+
+  function createChemicalTank() {
+    return {
+      id: "",
+      capacity: 16000,
+      maxReceive: 1000,
+      maxExtract: 0,
+      filter: "",
       extras: {}
     };
   }
@@ -1437,6 +1591,97 @@
     return fluids;
   }
 
+  function parseChemicalTank(value, notes, path) {
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: path + " inválido foi ignorado."
+      });
+      return null;
+    }
+    var chemical = createChemicalTank();
+    chemical.id = trimString(value.id);
+    if (!chemical.id) {
+      notes.push({
+        severity: "warning",
+        message: path + " está sem id."
+      });
+    }
+    if (value.capacity === undefined) {
+      notes.push({
+        severity: "warning",
+        message: path + " está sem capacity."
+      });
+    }
+    chemical.capacity = parseCapabilityNumber(value.capacity, 0);
+    chemical.maxReceive = parseCapabilityNumber(value.max_receive, 0);
+    chemical.maxExtract = parseCapabilityNumber(value.max_extract, 0);
+    if (typeof value.filter === "string") {
+      chemical.filter = value.filter;
+    } else if (Array.isArray(value.filter)) {
+      chemical.filter = value.filter.filter(function (entry) {
+        return typeof entry === "string" && trimString(entry);
+      }).map(function (entry) {
+        return trimString(entry);
+      }).join(", ");
+    } else if (value.filter !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: path + ".filter inválido foi ignorado."
+      });
+    }
+    Object.keys(value).forEach(function (key) {
+      if (!CHEMICAL_KEYS.includes(key)) {
+        chemical.extras[key] = clone(value[key]);
+      }
+    });
+    return chemical;
+  }
+
+  function parseChemical(value, notes) {
+    if (value === undefined) {
+      return null;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.chemical inválido foi ignorado."
+      });
+      return null;
+    }
+    var tanks = value.tanks;
+    if (tanks === undefined || tanks === null) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.chemical está sem tanks."
+      });
+      return null;
+    }
+    if (!Array.isArray(tanks)) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.chemical.tanks inválido foi ignorado."
+      });
+      return null;
+    }
+    var chemical = {
+      tanks: [],
+      extras: {}
+    };
+    tanks.forEach(function (entry, index) {
+      var tank = parseChemicalTank(entry, notes, "capabilities.chemical.tanks[" + index + "]");
+      if (tank) {
+        chemical.tanks.push(tank);
+      }
+    });
+    Object.keys(value).forEach(function (key) {
+      if (key !== "tanks") {
+        chemical.extras[key] = clone(value[key]);
+      }
+    });
+    return chemical;
+  }
+
   function parseCapabilities(value, notes) {
     if (value === undefined) {
       return null;
@@ -1453,8 +1698,9 @@
       capabilities.energy = parseEnergy(value.energy, notes, "capabilities.energy");
     }
     capabilities.fluids = parseFluids(value.fluids, notes);
+    capabilities.chemical = parseChemical(value.chemical, notes);
     Object.keys(value).forEach(function (key) {
-      if (key !== "energy" && key !== "fluids") {
+      if (key !== "energy" && key !== "fluids" && key !== "chemical") {
         capabilities.extras[key] = clone(value[key]);
       }
     });
@@ -1593,6 +1839,47 @@
     return "";
   }
 
+  function chemicalProblem(chemical) {
+    if (!isPlainObject(chemical)) {
+      return "Chemical inválido.";
+    }
+    if (!trimString(chemical.id)) {
+      return "Informe o id do tanque de chemical.";
+    }
+    var problem = capabilityNumberProblem(chemical.capacity, 1, "capacity do tanque de chemical");
+    if (problem) {
+      return problem;
+    }
+    problem = capabilityNumberProblem(chemical.maxReceive, 0, "max_receive do tanque de chemical");
+    if (problem) {
+      return problem;
+    }
+    problem = capabilityNumberProblem(chemical.maxExtract, 0, "max_extract do tanque de chemical");
+    if (problem) {
+      return problem;
+    }
+    var filters = chemicalFilterList(chemical.filter);
+    for (var index = 0; index < filters.length; index += 1) {
+      if (!isValidIdentifier(stripTagPrefix(filters[index]))) {
+        return "O filtro do tanque de chemical precisa ser um chemical ou tag válido.";
+      }
+    }
+    return "";
+  }
+
+  function chemicalFilterList(value) {
+    if (Array.isArray(value)) {
+      return value.map(function (entry) {
+        return trimString(entry);
+      }).filter(function (entry) {
+        return entry !== "";
+      });
+    }
+    return trimString(value).split(/[\s,]+/).filter(function (entry) {
+      return entry !== "";
+    });
+  }
+
   function validFluidPortText(value) {
     var text = trimString(value);
     if (!text) {
@@ -1672,6 +1959,42 @@
     return result;
   }
 
+  function buildChemicalTank(chemical) {
+    if (!isPlainObject(chemical)) {
+      return clone(chemical);
+    }
+    var result = {};
+    var id = trimString(chemical.id);
+    var capacity = toInt(chemical.capacity);
+    var maxReceive = toInt(chemical.maxReceive);
+    var maxExtract = toInt(chemical.maxExtract);
+    var filters = chemicalFilterList(chemical.filter);
+    if (id) {
+      result.id = id;
+    }
+    if (capacity !== null) {
+      result.capacity = capacity;
+    }
+    if (maxReceive !== null && maxReceive !== 0) {
+      result.max_receive = maxReceive;
+    }
+    if (maxExtract !== null && maxExtract !== 0) {
+      result.max_extract = maxExtract;
+    }
+    if (filters.length === 1) {
+      result.filter = filters[0];
+    } else if (filters.length > 1) {
+      result.filter = filters;
+    }
+    var extras = isPlainObject(chemical.extras) ? chemical.extras : {};
+    Object.keys(extras).forEach(function (key) {
+      if (!CHEMICAL_KEYS.includes(key)) {
+        result[key] = clone(extras[key]);
+      }
+    });
+    return result;
+  }
+
   function buildCapabilities(capabilities) {
     if (!isPlainObject(capabilities)) {
       return clone(capabilities);
@@ -1685,9 +2008,24 @@
     } else if (capabilities.fluids !== null && capabilities.fluids !== undefined) {
       result.fluids = clone(capabilities.fluids);
     }
+    if (isPlainObject(capabilities.chemical) && Array.isArray(capabilities.chemical.tanks)) {
+      result.chemical = {
+        tanks: capabilities.chemical.tanks.map(buildChemicalTank)
+      };
+      var chemicalExtras = isPlainObject(capabilities.chemical.extras)
+        ? capabilities.chemical.extras
+        : {};
+      Object.keys(chemicalExtras).forEach(function (key) {
+        if (key !== "tanks") {
+          result.chemical[key] = clone(chemicalExtras[key]);
+        }
+      });
+    } else if (capabilities.chemical !== null && capabilities.chemical !== undefined) {
+      result.chemical = clone(capabilities.chemical);
+    }
     var extras = isPlainObject(capabilities.extras) ? capabilities.extras : {};
     Object.keys(extras).forEach(function (key) {
-      if (key !== "energy" && key !== "fluids") {
+      if (key !== "energy" && key !== "fluids" && key !== "chemical") {
         result[key] = clone(extras[key]);
       }
     });
@@ -2266,6 +2604,9 @@
   }
 
   function createGuiElement(type) {
+    if (type === "resource_bar") {
+      type = "chemical_bar";
+    }
     var element = {
       type: GUI_ELEMENT_TYPES.indexOf(type) === -1 ? "title" : type,
       x: 0,
@@ -2314,6 +2655,12 @@
       element.y = 16;
       element.width = 8;
       element.height = 54;
+    } else if (element.type === "chemical_bar") {
+      element.x = 158;
+      element.y = 16;
+      element.width = 8;
+      element.height = 54;
+      element.capability = "chemical";
     } else if (element.type === "progress_bar") {
       element.x = 138;
       element.y = 16;
@@ -2360,6 +2707,13 @@
       return null;
     }
     var type = trimString(value.type);
+    if (type === "resource_bar") {
+      type = "chemical_bar";
+      notes.push({
+        severity: "warning",
+        message: "gui.elements[" + index + "].type resource_bar foi convertido para chemical_bar."
+      });
+    }
     if (GUI_ELEMENT_TYPES.indexOf(type) === -1) {
       notes.push({
         severity: "warning",
@@ -2732,7 +3086,8 @@
         return "player_inventory excede os limites da GUI.";
       }
     } else if (type === "energy_bar" || type === "fluid_bar"
-        || type === "progress_bar" || type === "arrow" || type === "entity") {
+        || type === "chemical_bar" || type === "progress_bar"
+        || type === "arrow" || type === "entity") {
       if (width <= 0 || height <= 0) {
         return "Elementos size-dependentes de GUI precisam de width e height positivos.";
       }
@@ -3762,7 +4117,8 @@
                   "player_inventory excede os limites da GUI.");
               }
             } else if (type === "energy_bar" || type === "fluid_bar"
-                || type === "progress_bar" || type === "arrow" || type === "entity") {
+                || type === "chemical_bar" || type === "progress_bar"
+                || type === "arrow" || type === "entity") {
               if (width === null || width <= 0 || height === null || height <= 0) {
                 add("gui.element.size.invalid", "error", "gui", field,
                   "Elementos size-dependentes de GUI precisam de width e height positivos.");
@@ -3808,6 +4164,11 @@
             var guiTanks = isPlainObject(state.capabilities) && Array.isArray(state.capabilities.fluids)
               ? state.capabilities.fluids
               : [];
+            var guiChemicalTanks = isPlainObject(state.capabilities)
+              && isPlainObject(state.capabilities.chemical)
+              && Array.isArray(state.capabilities.chemical.tanks)
+              ? state.capabilities.chemical.tanks
+              : [];
             guiElements.forEach(function (element, index) {
               if (!isPlainObject(element)) {
                 return;
@@ -3835,6 +4196,19 @@
                 if (!knownTank) {
                   add("gui.fluid.unknown", "error", "gui", field,
                     "fluid_bar.capability precisa ser o id de um tanque.");
+                }
+              } else if (type === "chemical_bar") {
+                if (guiChemicalTanks.length === 0 || trimString(element.capability) !== "chemical") {
+                  add("gui.chemical.required", "error", "gui", field,
+                    "chemical_bar exige capability=chemical e capabilities.chemical.tanks.");
+                } else {
+                  var knownChemicalTank = guiChemicalTanks.some(function (tank) {
+                    return isPlainObject(tank) && trimString(tank.id) === trimString(element.slot);
+                  });
+                  if (!knownChemicalTank) {
+                    add("gui.chemical.unknown", "error", "gui", field,
+                      "chemical_bar.slot precisa ser o id de um tanque chemical.");
+                  }
                 }
               } else if ((type === "progress_bar" || type === "arrow" || type === "entity")
                   && state.type !== "recipe") {
@@ -4164,6 +4538,7 @@
     var capabilities = state.capabilities;
     var energyId = "";
     var fluidIds = new Set();
+    var chemicalIds = new Set();
     var capabilityPatternSymbols = recipePatternSymbols(state);
     if (capabilities !== null && capabilities !== undefined) {
       if (!isPlainObject(capabilities)) {
@@ -4280,7 +4655,72 @@
           }
         }
 
-        if (energyId && fluidIds.has(energyId)) {
+        var chemical = capabilities.chemical;
+        if (chemical !== null && chemical !== undefined) {
+          if (!isPlainObject(chemical)) {
+            capabilitiesOk = false;
+            add("capability.chemical.invalid", "error", "capabilities", "chemical",
+              "capabilities.chemical precisa ser um objeto.");
+          } else {
+            var chemicalTanks = chemical.tanks;
+            if (chemicalTanks !== null && chemicalTanks !== undefined) {
+              if (!Array.isArray(chemicalTanks)) {
+                capabilitiesOk = false;
+                add("capability.chemical.tanks.invalid", "error", "capabilities", "chemical",
+                  "capabilities.chemical.tanks precisa ser uma lista ou ficar ausente.");
+              } else {
+                chemicalTanks.forEach(function (tank, index) {
+                  var field = "chemical:" + index;
+                  if (!isPlainObject(tank)) {
+                    capabilitiesOk = false;
+                    add("chemical.invalid", "error", "capabilities", field,
+                      "O tanque chemical " + index + " precisa ser um objeto.");
+                    return;
+                  }
+                  var chemicalId = trimString(tank.id);
+                  if (!chemicalId) {
+                    capabilitiesOk = false;
+                    add("chemical.id.required", "error", "capabilities", field,
+                      "O tanque chemical " + index + " precisa de um id.");
+                  } else if (chemicalIds.has(chemicalId)) {
+                    capabilitiesOk = false;
+                    add("chemical.id.duplicate", "error", "capabilities", field,
+                      "O id de tanque chemical \"" + chemicalId + "\" aparece mais de uma vez.");
+                  } else {
+                    chemicalIds.add(chemicalId);
+                  }
+                  var chemicalCapacity = toInt(tank.capacity);
+                  if (chemicalCapacity === null || chemicalCapacity < 1 || chemicalCapacity > CAPABILITY_MAX) {
+                    capabilitiesOk = false;
+                    add("chemical.capacity.invalid", "error", "capabilities", field,
+                      "A capacidade do tanque chemical \"" + (chemicalId || index) + "\" precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+                  }
+                  var chemicalReceive = toInt(tank.maxReceive);
+                  if (chemicalReceive === null || chemicalReceive < 0 || chemicalReceive > CAPABILITY_MAX) {
+                    capabilitiesOk = false;
+                    add("chemical.max_receive.invalid", "error", "capabilities", field,
+                      "max_receive do tanque chemical \"" + (chemicalId || index) + "\" precisa ser um inteiro de 0 a " + CAPABILITY_MAX + ".");
+                  }
+                  var chemicalExtract = toInt(tank.maxExtract);
+                  if (chemicalExtract === null || chemicalExtract < 0 || chemicalExtract > CAPABILITY_MAX) {
+                    capabilitiesOk = false;
+                    add("chemical.max_extract.invalid", "error", "capabilities", field,
+                      "max_extract do tanque chemical \"" + (chemicalId || index) + "\" precisa ser um inteiro de 0 a " + CAPABILITY_MAX + ".");
+                  }
+                  chemicalFilterList(tank.filter).forEach(function (filter) {
+                    if (!isValidIdentifier(stripTagPrefix(filter))) {
+                      capabilitiesOk = false;
+                      add("chemical.filter.invalid", "error", "capabilities", field,
+                        "O filtro do tanque chemical \"" + (chemicalId || index) + "\" precisa ser um chemical ou tag válido.");
+                    }
+                  });
+                });
+              }
+            }
+          }
+        }
+
+        if (energyId && (fluidIds.has(energyId) || chemicalIds.has(energyId))) {
           capabilitiesOk = false;
           add("energy.id.conflict", "error", "capabilities", "energy",
             "O id da energia \"" + energyId + "\" não pode ser igual ao id de um tanque.");
@@ -4430,7 +4870,8 @@
         "gui.element.size.invalid", "gui.element.slot.required", "gui.slot.duplicate",
         "gui.slot.unknown", "gui.slot.mixed", "gui.item_slots.required",
         "gui.player_inventory.count", "gui.energy.required", "gui.energy.unknown",
-        "gui.fluid.unknown", "gui.recipe.required", "gui.bounds.exceeded"].some(function (code) {
+        "gui.fluid.unknown", "gui.chemical.required", "gui.chemical.unknown",
+        "gui.recipe.required", "gui.bounds.exceeded"].some(function (code) {
         return errorCodes.has(code);
       }),
       step: "gui"
@@ -4571,6 +5012,7 @@
     capabilityPortText: capabilityPortText,
     createEnergy: createEnergy,
     createFluidTank: createFluidTank,
+    createChemicalTank: createChemicalTank,
     createTextureSet: createTextureSet,
     createTextures: createTextures,
     parseTextures: parseTextures,
@@ -4596,6 +5038,7 @@
     buildItemSlot: buildItemSlot,
     buildEnergy: buildEnergy,
     buildFluidTank: buildFluidTank,
+    buildChemicalTank: buildChemicalTank,
     buildCapabilities: buildCapabilities,
     buildCapabilityPorts: buildCapabilityPorts,
     buildController: buildController,
@@ -4614,6 +5057,7 @@
     slotProblem: slotProblem,
     energyProblem: energyProblem,
     fluidProblem: fluidProblem,
+    chemicalProblem: chemicalProblem,
     controllerProblem: controllerProblem,
     controllerRecipeProblem: controllerRecipeProblem,
     controllerRecipeIssues: controllerRecipeIssues,

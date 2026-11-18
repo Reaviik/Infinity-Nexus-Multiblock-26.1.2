@@ -16,6 +16,8 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout.SlotPlacement;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.Infinity.Nexus.Multiblock.api.addon.JeiResourceBridge;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
 import com.Infinity.Nexus.Multiblock.client.MultiblockGuiRender;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
@@ -105,7 +107,8 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         this.fallbackBackground.draw(guiGraphics);
         MultiblockMenuLayout layout = layout(recipe.definition());
         for (GuiElement element : layout.elements()) {
-            if (element.type() == GuiElementType.FLUID_BAR
+            if ((element.type() == GuiElementType.FLUID_BAR
+                    || element.type() == GuiElementType.RESOURCE_BAR)
                     && fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
                 MultiblockGuiRender.drawFrame(guiGraphics, element.x(), element.y() + HEADER,
                         element.width(), element.height());
@@ -248,6 +251,44 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                     .setFluidRenderer(fluidIngredient.amount(), true, width, height);
             for (Holder<Fluid> fluid : fluidIngredient.ingredient().fluids()) {
                 slot.add(fluid.value(), fluidIngredient.amount());
+            }
+        }
+
+        for (MultiblockRecipeIngredient.Resource input : recipe.resourceInputs()) {
+            JeiResourceBridge bridge = MultiblockAddons.jeiBridge(input.typeId());
+            if (bridge == null) {
+                continue;
+            }
+            Optional<GuiElement> bar = resourceBar(layout, input.typeId(), "");
+            if (bar.isPresent()
+                    && fits(bar.get().x(), bar.get().y() + HEADER,
+                            bar.get().width(), bar.get().height())) {
+                GuiElement element = bar.get();
+                IRecipeSlotBuilder slot = builder.addInputSlot(
+                        element.x() + BAR_INSET,
+                        element.y() + HEADER + BAR_INSET);
+                bridge.addInput(slot, input, innerSize(element.width()), innerSize(element.height()));
+            } else {
+                bridge.addInvisibleInput(builder, input);
+            }
+        }
+
+        for (MultiblockRecipeOutput.Resource output : recipe.resourceOutputs()) {
+            JeiResourceBridge bridge = MultiblockAddons.jeiBridge(output.typeId());
+            if (bridge == null) {
+                continue;
+            }
+            Optional<GuiElement> bar = resourceBar(layout, output.typeId(), output.tank());
+            if (bar.isPresent()
+                    && fits(bar.get().x(), bar.get().y() + HEADER,
+                            bar.get().width(), bar.get().height())) {
+                GuiElement element = bar.get();
+                IRecipeSlotBuilder slot = builder.addOutputSlot(
+                        element.x() + BAR_INSET,
+                        element.y() + HEADER + BAR_INSET);
+                bridge.addOutput(slot, output, innerSize(element.width()), innerSize(element.height()));
+            } else {
+                bridge.addInvisibleOutput(builder, output);
             }
         }
     }
@@ -402,6 +443,22 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
         return index < fluidBars.size() ? Optional.of(fluidBars.get(index)) : Optional.empty();
     }
 
+    private static Optional<GuiElement> resourceBar(
+            MultiblockMenuLayout layout,
+            String kind,
+            String tank) {
+        for (GuiElement element : layout.elements()) {
+            if (element.type() != GuiElementType.RESOURCE_BAR
+                    || !element.capability().equals(kind)) {
+                continue;
+            }
+            if (tank.isBlank() || element.slot().equals(tank)) {
+                return Optional.of(element);
+            }
+        }
+        return Optional.empty();
+    }
+
     private static SlotPosition arrowPosition(GuiElement arrow) {
         if (arrow != null && fits(arrow.x(), arrow.y() + HEADER, arrow.width(), arrow.height())) {
             return new SlotPosition(arrow.x(), arrow.y() + HEADER);
@@ -426,6 +483,10 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                 && y >= 0
                 && x + width <= WIDTH
                 && y + height <= HEIGHT;
+    }
+
+    private static int innerSize(int size) {
+        return Math.max(1, size - BAR_INSET * 2);
     }
 
     private static boolean hasIngredientOutput(MultiblockRecipeOutput output) {

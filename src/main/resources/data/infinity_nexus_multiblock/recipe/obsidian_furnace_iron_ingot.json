@@ -1,0 +1,18 @@
+{
+  "type": "infinity_nexus_multiblock:multiblock",
+  "definition": "infinity_nexus_multiblock:obsidian_furnace",
+  "inputs": [
+    {
+      "type": "item",
+      "ingredient": "minecraft:raw_iron"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "item",
+      "id": "minecraft:iron_ingot",
+      "count": 1
+    }
+  ],
+  "time": 50
+}

@@ -4,6 +4,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.Infinity.Nexus.Multiblock.api.CapabilityPorts.PortSelector;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
@@ -20,38 +22,63 @@ import net.neoforged.neoforge.fluids.FluidStackTemplate;
 
 public sealed interface MultiblockRecipeOutput {
     Codec<Float> CHANCE_CODEC = Codec.floatRange(0.0F, 1.0F);
-    MapCodec<MultiblockRecipeOutput> MAP_CODEC = Kind.CODEC.dispatchMap(
+    MapCodec<MultiblockRecipeOutput> MAP_CODEC = Codec.STRING.dispatchMap(
             "type",
-            MultiblockRecipeOutput::kind,
-            Kind::codec);
+            MultiblockRecipeOutput::typeId,
+            id -> switch (id) {
+                case "item" -> Item.CODEC;
+                case "fluid" -> Fluid.CODEC;
+                case "entity" -> Entity.CODEC;
+                case "energy" -> Energy.CODEC;
+                default -> {
+                    MultiblockResourceType type = MultiblockAddons.get(id);
+                    yield type == null ? Resource.codec(id) : type.outputCodec();
+                }
+            });
     Codec<MultiblockRecipeOutput> CODEC = MAP_CODEC.codec();
 
     StreamCodec<RegistryFriendlyByteBuf, MultiblockRecipeOutput> STREAM_CODEC =
             new StreamCodec<>() {
                 @Override
                 public MultiblockRecipeOutput decode(RegistryFriendlyByteBuf buffer) {
-                    Kind kind = Kind.values()[buffer.readByte()];
-                    return switch (kind) {
-                        case ITEM -> Item.STREAM_CODEC.decode(buffer);
-                        case FLUID -> Fluid.STREAM_CODEC.decode(buffer);
-                        case ENTITY -> Entity.STREAM_CODEC.decode(buffer);
-                        case ENERGY -> Energy.STREAM_CODEC.decode(buffer);
+                    String type = buffer.readUtf();
+                    return switch (type) {
+                        case "item" -> Item.STREAM_CODEC.decode(buffer);
+                        case "fluid" -> Fluid.STREAM_CODEC.decode(buffer);
+                        case "entity" -> Entity.STREAM_CODEC.decode(buffer);
+                        case "energy" -> Energy.STREAM_CODEC.decode(buffer);
+                        default -> new Resource(
+                                type,
+                                buffer.readUtf(),
+                                buffer.readVarInt(),
+                                buffer.readUtf(),
+                                buffer.readFloat());
                     };
                 }
 
                 @Override
                 public void encode(RegistryFriendlyByteBuf buffer, MultiblockRecipeOutput output) {
-                    buffer.writeByte(output.kind().ordinal());
+                    buffer.writeUtf(output.typeId());
                     switch (output) {
                         case Item item -> Item.STREAM_CODEC.encode(buffer, item);
                         case Fluid fluid -> Fluid.STREAM_CODEC.encode(buffer, fluid);
                         case Entity entity -> Entity.STREAM_CODEC.encode(buffer, entity);
                         case Energy energy -> Energy.STREAM_CODEC.encode(buffer, energy);
+                        case Resource resource -> {
+                            buffer.writeUtf(resource.id());
+                            buffer.writeVarInt(resource.amount());
+                            buffer.writeUtf(resource.tank());
+                            buffer.writeFloat(resource.chance());
+                        }
                     }
                 }
             };
 
     Kind kind();
+
+    default String typeId() {
+        return this.kind().id();
+    }
 
     float chance();
 
@@ -59,7 +86,8 @@ public sealed interface MultiblockRecipeOutput {
         ITEM("item"),
         FLUID("fluid"),
         ENTITY("entity"),
-        ENERGY("energy");
+        ENERGY("energy"),
+        RESOURCE("resource");
 
         private final String id;
 
@@ -70,26 +98,6 @@ public sealed interface MultiblockRecipeOutput {
         public String id() {
             return this.id;
         }
-
-        private MapCodec<? extends MultiblockRecipeOutput> codec() {
-            return switch (this) {
-                case ITEM -> Item.CODEC;
-                case FLUID -> Fluid.CODEC;
-                case ENTITY -> Entity.CODEC;
-                case ENERGY -> Energy.CODEC;
-            };
-        }
-
-        private static final Codec<Kind> CODEC = Codec.STRING.flatXmap(
-                value -> {
-                    for (Kind kind : values()) {
-                        if (kind.id.equals(value)) {
-                            return DataResult.success(kind);
-                        }
-                    }
-                    return DataResult.error(() -> "Unknown recipe output type: " + value);
-                },
-                kind -> DataResult.success(kind.id));
     }
 
     record Item(ItemStackTemplate stack, float chance) implements MultiblockRecipeOutput {
@@ -251,6 +259,63 @@ public sealed interface MultiblockRecipeOutput {
         @Override
         public Kind kind() {
             return Kind.ENERGY;
+        }
+    }
+
+    record Resource(String resourceKind, String id, int amount, String tank, float chance)
+            implements MultiblockRecipeOutput {
+        public Resource {
+            if (resourceKind == null || resourceKind.isBlank()) {
+                throw new IllegalArgumentException("Resource recipe output kind cannot be blank");
+            }
+            MultiblockResourceType type = MultiblockAddons.get(resourceKind);
+            if (type == null) {
+                throw new IllegalArgumentException("Unknown resource recipe output kind: " + resourceKind);
+            }
+            if (id == null) {
+                id = "";
+            }
+            if (amount < 1) {
+                throw new IllegalArgumentException("Resource recipe output amount must be positive");
+            }
+            if (!id.isEmpty()) {
+                DataResult<String> validated = type.validateResourceId(id);
+                if (validated.error().isPresent()) {
+                    throw new IllegalArgumentException(validated.error().get().message());
+                }
+            }
+            tank = tank == null ? "" : tank.trim();
+            validateChance(chance);
+        }
+
+        public static MapCodec<Resource> codec(String resourceKind) {
+            return codec(resourceKind, "id", true);
+        }
+
+        public static MapCodec<Resource> codec(String resourceKind, String idField, boolean idRequired) {
+            MapCodec<String> idCodec = idRequired
+                    ? Codec.STRING.fieldOf(idField)
+                    : Codec.STRING.optionalFieldOf(idField, "");
+            return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                    idCodec.forGetter(Resource::id),
+                    Codec.intRange(1, Integer.MAX_VALUE).fieldOf("amount").forGetter(Resource::amount),
+                    Codec.STRING.optionalFieldOf("tank", "").forGetter(Resource::tank),
+                    CHANCE_CODEC.optionalFieldOf("chance", 1.0F).forGetter(Resource::chance))
+                    .apply(instance, (id, amount, tank, chance) -> new Resource(resourceKind, id, amount, tank, chance)));
+        }
+
+        public Resource(String resourceKind, String id, int amount) {
+            this(resourceKind, id, amount, "", 1.0F);
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.RESOURCE;
+        }
+
+        @Override
+        public String typeId() {
+            return this.resourceKind;
         }
     }
 

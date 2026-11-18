@@ -1735,14 +1735,19 @@
   function capabilitySummaryText() {
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
     if (!capabilities) {
-      return "Sem capabilities; a máquina não expõe energia/fluidos.";
+      return "Sem capabilities; a máquina não expõe energia/fluidos/chemicals.";
     }
     var energy = isPlainObject(capabilities.energy) ? capabilities.energy : null;
     var fluids = Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
+    var chemicalTanks = isPlainObject(capabilities.chemical)
+      && Array.isArray(capabilities.chemical.tanks)
+      ? capabilities.chemical.tanks
+      : [];
     var energyText = energy
       ? "Energia " + (trim(energy.id) || "sem id") + " · " + capabilityFieldValue(energy.capacity) + " FE"
       : "Sem energia";
-    return energyText + " · " + (fluids.length === 1 ? "1 tanque" : fluids.length + " tanques");
+    return energyText + " · " + (fluids.length === 1 ? "1 tanque" : fluids.length + " tanques") +
+      " · " + (chemicalTanks.length === 1 ? "1 tanque chemical" : chemicalTanks.length + " tanques chemical");
   }
 
   function updateCapabilitySummary() {
@@ -1766,7 +1771,7 @@
     }
     var parts = [];
     var availability = V.capabilityPortAvailability(state.capabilities);
-    ["item", "energy", "fluid"].forEach(function (key) {
+    ["item", "energy", "fluid", "chemical"].forEach(function (key) {
       if (!availability[key] || !Array.isArray(ports[key])) {
         return;
       }
@@ -1792,6 +1797,9 @@
     if (!availability.fluid) {
       unavailable.push("fluid (adicione um tanque)");
     }
+    if (!availability.chemical) {
+      unavailable.push("chemical (adicione um tanque chemical)");
+    }
     var hint = $("capabilityPortAvailability");
     if (hint) {
       hint.textContent = unavailable.length > 0
@@ -1804,7 +1812,7 @@
   function renderCapabilityPorts() {
     var ports = isPlainObject(state.capabilityPorts) ? state.capabilityPorts : null;
     var availability = V.capabilityPortAvailability(state.capabilities);
-    ["item", "energy", "fluid"].forEach(function (key) {
+    ["item", "energy", "fluid", "chemical"].forEach(function (key) {
       var input = document.querySelector("[data-capability-port='" + key + "']");
       if (!input) {
         return;
@@ -1898,6 +1906,36 @@
       (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
   }
 
+  function chemicalCardHtml(chemical, index) {
+    var problem = V.chemicalProblem(chemical);
+    var serialized = JSON.stringify(V.buildChemicalTank(chemical));
+    var filter = trim(chemical.filter) || "qualquer chemical";
+    var summary = (trim(chemical.id) || "sem id") + " · " + capabilityFieldValue(chemical.capacity) +
+      " · " + filter;
+    return "<div class='slot-card capability-card" + (problem ? " is-problem" : "") +
+      "' data-chemical-index='" + index + "'><div class='matcher-head'><span class='slot-index'>C" + (index + 1) +
+      "</span><div class='matcher-title'><strong>Tanque chemical</strong><small>" + esc(summary) +
+      "</small></div><button type='button' class='btn btn-tiny btn-danger matcher-remove' data-action='remove-chemical'>remover</button></div>" +
+      "<div class='capability-form'>" +
+      "<div class='field'><label>id</label><input type='text' data-chemical-index='" + index +
+      "' data-chemical-field='id' value='" + esc(chemical.id || "") + "' placeholder='input' spellcheck='false' autocomplete='off'></div>" +
+      "<div class='field'><label>capacity</label><input type='number' data-chemical-index='" + index +
+      "' data-chemical-field='capacity' min='1' step='1' value='" + esc(capabilityFieldValue(chemical.capacity)) +
+      "' placeholder='16000'></div>" +
+      "<div class='field'><label>max_receive</label><input type='number' data-chemical-index='" + index +
+      "' data-chemical-field='maxReceive' min='0' step='1' value='" + esc(capabilityFieldValue(chemical.maxReceive)) +
+      "' placeholder='0'></div>" +
+      "<div class='field'><label>max_extract</label><input type='number' data-chemical-index='" + index +
+      "' data-chemical-field='maxExtract' min='0' step='1' value='" + esc(capabilityFieldValue(chemical.maxExtract)) +
+      "' placeholder='0'></div>" +
+      "<div class='field'><label>filter</label><input type='text' data-chemical-index='" + index +
+      "' data-chemical-field='filter' value='" + esc(chemical.filter || "") +
+      "' placeholder='mekanism:hydrogen ou #tag' spellcheck='false' autocomplete='off'></div>" +
+      "</div><code class='matcher-json slot-json'>" + esc(serialized === undefined ? "null" : serialized) +
+      "</code><p class='matcher-feedback capability-feedback" + (problem ? " is-error" : "") + "'" +
+      (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
+  }
+
   function renderCapabilities() {
     renderCapabilityPorts();
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
@@ -1908,15 +1946,20 @@
     if (!capabilities) {
       summary.textContent = capabilitySummaryText();
       empty.hidden = false;
-      empty.textContent = "Nenhuma capability definida. Adicione energia ou um tanque para expor FE/fluidos.";
+      empty.textContent = "Nenhuma capability definida. Adicione energia ou um tanque para expor FE/fluidos/chemicals.";
       list.innerHTML = "";
       removeButton.disabled = true;
       $("addEnergyBtn").disabled = false;
       $("addFluidBtn").disabled = false;
+      $("addChemicalBtn").disabled = false;
       return;
     }
     var energy = isPlainObject(capabilities.energy) ? capabilities.energy : null;
     var fluids = Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
+    var chemicalTanks = isPlainObject(capabilities.chemical)
+      && Array.isArray(capabilities.chemical.tanks)
+      ? capabilities.chemical.tanks
+      : [];
     var parts = [];
     if (energy) {
       parts.push(energyCardHtml(energy));
@@ -1926,15 +1969,21 @@
         parts.push(fluidCardHtml(fluid, index));
       }
     });
+    chemicalTanks.forEach(function (chemical, index) {
+      if (isPlainObject(chemical)) {
+        parts.push(chemicalCardHtml(chemical, index));
+      }
+    });
     summary.textContent = capabilitySummaryText();
     empty.hidden = parts.length > 0;
     empty.textContent = parts.length === 0
-      ? "Capabilities ativas, mas sem energia ou tanques. Use + energia ou + tanque."
+      ? "Capabilities ativas, mas sem energia ou tanques. Use + energia, + tanque ou + chemical."
       : "";
     list.innerHTML = parts.join("");
     removeButton.disabled = false;
     $("addEnergyBtn").disabled = Boolean(energy);
     $("addFluidBtn").disabled = false;
+    $("addChemicalBtn").disabled = false;
   }
 
   function energyCardElement() {
@@ -1943,6 +1992,10 @@
 
   function fluidCardElement(index) {
     return document.querySelector(".capability-card[data-fluid-index='" + index + "']");
+  }
+
+  function chemicalCardElement(index) {
+    return document.querySelector(".capability-card[data-chemical-index='" + index + "']");
   }
 
   function updateEnergyCard() {
@@ -2001,6 +2054,54 @@
     card.classList.toggle("is-problem", Boolean(problem));
   }
 
+  function updateChemicalCard(index) {
+    var card = chemicalCardElement(index);
+    var chemical = isPlainObject(state.capabilities)
+      && isPlainObject(state.capabilities.chemical)
+      && Array.isArray(state.capabilities.chemical.tanks)
+      ? state.capabilities.chemical.tanks[index]
+      : null;
+    if (!card || !isPlainObject(chemical)) {
+      return;
+    }
+    var problem = V.chemicalProblem(chemical);
+    var feedback = card.querySelector(".capability-feedback");
+    if (feedback) {
+      feedback.className = "matcher-feedback capability-feedback" + (problem ? " is-error" : "");
+      feedback.textContent = problem || "";
+      feedback.hidden = !problem;
+    }
+    var jsonElement = card.querySelector(".slot-json");
+    if (jsonElement) {
+      var serialized = JSON.stringify(V.buildChemicalTank(chemical));
+      jsonElement.textContent = serialized === undefined ? "null" : serialized;
+    }
+    var title = card.querySelector(".matcher-title small");
+    if (title) {
+      title.textContent = (trim(chemical.id) || "sem id") + " · " +
+        capabilityFieldValue(chemical.capacity) + " · " +
+        (trim(chemical.filter) || "qualquer chemical");
+    }
+    card.classList.toggle("is-problem", Boolean(problem));
+  }
+
+  function nextChemicalId() {
+    var used = {};
+    var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
+    var tanks = capabilities && isPlainObject(capabilities.chemical)
+      && Array.isArray(capabilities.chemical.tanks)
+      ? capabilities.chemical.tanks
+      : [];
+    tanks.forEach(function (tank) {
+      used[trim(tank.id)] = true;
+    });
+    var index = 0;
+    while (used["chemical_" + index]) {
+      index += 1;
+    }
+    return "chemical_" + index;
+  }
+
   function nextFluidId() {
     var used = {};
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
@@ -2042,6 +2143,23 @@
     focusElement(input || card, false);
   }
 
+  function addChemicalTank() {
+    var capabilities = ensureCapabilities();
+    if (!isPlainObject(capabilities.chemical)) {
+      capabilities.chemical = { tanks: [], extras: {} };
+    }
+    if (!Array.isArray(capabilities.chemical.tanks)) {
+      capabilities.chemical.tanks = [];
+    }
+    var chemical = V.createChemicalTank();
+    chemical.id = nextChemicalId();
+    capabilities.chemical.tanks.push(chemical);
+    refresh();
+    var card = chemicalCardElement(capabilities.chemical.tanks.length - 1);
+    var input = card ? card.querySelector("[data-chemical-field='id']") : null;
+    focusElement(input || card, false);
+  }
+
   function removeEnergy() {
     if (!isPlainObject(state.capabilities) || !isPlainObject(state.capabilities.energy)) {
       return;
@@ -2067,11 +2185,28 @@
     refresh();
   }
 
+  function removeChemicalTank(index) {
+    var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
+    var tanks = capabilities && isPlainObject(capabilities.chemical)
+      && Array.isArray(capabilities.chemical.tanks)
+      ? capabilities.chemical.tanks
+      : null;
+    if (!tanks || index < 0 || index >= tanks.length) {
+      return;
+    }
+    var name = trim(tanks[index].id) || "tanque chemical " + (index + 1);
+    if (!window.confirm("Remover o " + name + "?")) {
+      return;
+    }
+    tanks.splice(index, 1);
+    refresh();
+  }
+
   function removeCapabilities() {
     if (!isPlainObject(state.capabilities)) {
       return;
     }
-    if (!window.confirm("Remover todas as capabilities da máquina?")) {
+    if (!window.confirm("Remover todas as capabilities da máquina? Portas e receitas chemical existentes serão ignoradas.")) {
       return;
     }
     state.capabilities = null;
@@ -2096,6 +2231,21 @@
       refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
       return;
     }
+    var chemicalIndex = parseInt(target.getAttribute("data-chemical-index"), 10);
+    var chemicalField = target.getAttribute("data-chemical-field");
+    var chemicalTank = isPlainObject(state.capabilities)
+      && isPlainObject(state.capabilities.chemical)
+      && Array.isArray(state.capabilities.chemical.tanks)
+      ? state.capabilities.chemical.tanks[chemicalIndex]
+      : null;
+    if (chemicalField && isPlainObject(chemicalTank)
+        && ["id", "capacity", "maxReceive", "maxExtract", "filter"].indexOf(chemicalField) !== -1) {
+      chemicalTank[chemicalField] = target.value;
+      updateChemicalCard(chemicalIndex);
+      updateCapabilitySummary();
+      refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
+      return;
+    }
     var index = parseInt(target.getAttribute("data-fluid-index"), 10);
     var field = target.getAttribute("data-fluid-field");
     var fluid = isPlainObject(state.capabilities) && Array.isArray(state.capabilities.fluids)
@@ -2113,6 +2263,13 @@
   function onCapabilityListClick(event) {
     if (closest(event.target, "[data-action='remove-energy']")) {
       removeEnergy();
+      return;
+    }
+    var chemicalAction = closest(event.target, "[data-action='remove-chemical']");
+    if (chemicalAction) {
+      var chemicalCard = closest(chemicalAction, ".capability-card");
+      var chemicalIndex = chemicalCard ? parseInt(chemicalCard.getAttribute("data-chemical-index"), 10) : -1;
+      removeChemicalTank(chemicalIndex);
       return;
     }
     var action = closest(event.target, "[data-action='remove-fluid']");
@@ -2519,6 +2676,7 @@
     slot: "slot",
     energy_bar: "barra de energia",
     fluid_bar: "barra de fluido",
+    chemical_bar: "barra de chemical",
     progress_bar: "barra de progresso",
     arrow: "seta",
     entity: "entidade"
@@ -2529,7 +2687,7 @@
   }
 
   function guiElementUsesSize(type) {
-    return ["energy_bar", "fluid_bar", "progress_bar", "arrow", "entity"].indexOf(type) !== -1;
+    return ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow", "entity"].indexOf(type) !== -1;
   }
 
   function guiElementUsesText(type) {
@@ -2537,7 +2695,7 @@
   }
 
   function guiElementUsesDirection(type) {
-    return ["energy_bar", "fluid_bar", "progress_bar", "arrow"].indexOf(type) !== -1;
+    return ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow"].indexOf(type) !== -1;
   }
 
   function guiElementUsesTexture(type) {
@@ -2554,6 +2712,10 @@
     var fluids = capabilities && Array.isArray(capabilities.fluids)
       ? capabilities.fluids.filter(isPlainObject)
       : [];
+    var chemicalTanks = capabilities && isPlainObject(capabilities.chemical)
+      && Array.isArray(capabilities.chemical.tanks)
+      ? capabilities.chemical.tanks.filter(isPlainObject)
+      : [];
     var slots = Array.isArray(state.itemSlots) ? state.itemSlots : [];
     var hasSlotCoordinates = slots.some(guiSlotHasCoordinate);
     var hasRecipe = state.type === "recipe";
@@ -2564,6 +2726,7 @@
       slot: slots.some(isPlainObject) && !hasSlotCoordinates,
       energy_bar: Boolean(capabilities && isPlainObject(capabilities.energy)),
       fluid_bar: fluids.length > 0,
+      chemical_bar: chemicalTanks.length > 0,
       progress_bar: hasRecipe,
       arrow: hasRecipe,
       entity: hasRecipe
@@ -2576,6 +2739,9 @@
     }
     if (type === "fluid_bar") {
       return "Adicione um tanque na etapa 05 para liberar fluid_bar.";
+    }
+    if (type === "chemical_bar") {
+      return "Adicione um tanque chemical na etapa 05 para liberar chemical_bar.";
     }
     if (type === "progress_bar" || type === "arrow" || type === "entity") {
       return "Use type=recipe para liberar progress_bar, arrow e entity.";
@@ -2593,6 +2759,9 @@
     }
     if (!availability.fluid_bar) {
       missing.push("fluid_bar (tanque)");
+    }
+    if (!availability.chemical_bar) {
+      missing.push("chemical_bar (tanque chemical)");
     }
     if (!availability.progress_bar) {
       missing.push("progress_bar/arrow/entity (recipe)");
@@ -2726,6 +2895,9 @@
     } else if (type === "energy_bar" || type === "fluid_bar") {
       html += guiInputField("capability", "capability", element.capability, "text", undefined,
         type === "energy_bar" ? "energy.id" : "fluids[].id");
+    } else if (type === "chemical_bar") {
+      html += guiInputField("capability", "capability", element.capability, "text", undefined, "chemical");
+      html += guiInputField("slot", "slot", element.slot, "text", undefined, "id do tanque chemical");
     }
     return html + "</div>";
   }
@@ -2814,7 +2986,7 @@
     if (type === "slot") {
       return { width: 18, height: 18 };
     }
-    if (type === "energy_bar" || type === "fluid_bar") {
+    if (type === "energy_bar" || type === "fluid_bar" || type === "chemical_bar") {
       return { width: safeWidth || 12, height: safeHeight || 52 };
     }
     if (type === "progress_bar") {
@@ -2845,6 +3017,9 @@
     if (type === "fluid_bar") {
       return trim(element.capability) || "fluido";
     }
+    if (type === "chemical_bar") {
+      return trim(element.slot) || "chemical";
+    }
     if (type === "progress_bar") {
       return "progresso";
     }
@@ -2868,7 +3043,7 @@
     var offsetY = type === "player_inventory" ? -1 : 0;
     var style = "left:" + (x === null ? 0 : x + offsetX) + "px;top:" + (y === null ? 0 : y + offsetY) +
       "px;width:" + size.width + "px;height:" + size.height + "px;";
-    var isBar = ["energy_bar", "fluid_bar", "progress_bar"].indexOf(type) !== -1;
+    var isBar = ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar"].indexOf(type) !== -1;
     var textColor = guiPreviewColor(element.color);
     if (textColor && (type === "title" || type === "text" || type === "player_inventory")) {
       style += "--element-text:" + textColor + ";";
@@ -5401,6 +5576,7 @@
     $("slotList").addEventListener("click", onSlotListClick);
     $("addEnergyBtn").addEventListener("click", addEnergy);
     $("addFluidBtn").addEventListener("click", addFluidTank);
+    $("addChemicalBtn").addEventListener("click", addChemicalTank);
     $("removeCapabilitiesBtn").addEventListener("click", removeCapabilities);
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);

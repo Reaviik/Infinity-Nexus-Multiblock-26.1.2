@@ -6,10 +6,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Energy;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Entity;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Fluid;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Item;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Resource;
 import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -94,6 +96,26 @@ public record MultiblockRecipe(
         return entities;
     }
 
+    public List<Resource> resourceInputs() {
+        List<Resource> resources = new ArrayList<>();
+        for (MultiblockRecipeIngredient input : this.inputs) {
+            if (input instanceof Resource resource) {
+                resources.add(resource);
+            }
+        }
+        return resources;
+    }
+
+    public List<MultiblockRecipeOutput.Resource> resourceOutputs() {
+        List<MultiblockRecipeOutput.Resource> resources = new ArrayList<>();
+        for (MultiblockRecipeOutput output : this.outputs) {
+            if (output instanceof MultiblockRecipeOutput.Resource resource) {
+                resources.add(resource);
+            }
+        }
+        return resources;
+    }
+
     public List<Ingredient> ingredients() {
         List<Ingredient> ingredients = new ArrayList<>();
         for (MultiblockRecipeIngredient input : this.inputs) {
@@ -134,7 +156,57 @@ public record MultiblockRecipe(
                 return false;
             }
         }
-        return true;
+        return this.findResourceInputs(input.resources()) != null;
+    }
+
+    public @Nullable List<ResourceAllocation> findResourceInputs(List<StoredResource> available) {
+        List<Resource> required = this.resourceInputs();
+        if (required.isEmpty()) {
+            return List.of();
+        }
+        List<StoredResource> stacks = new ArrayList<>();
+        List<Long> remaining = new ArrayList<>();
+        for (StoredResource stack : available) {
+            if (stack.amount() <= 0L || stack.id().isEmpty()) {
+                continue;
+            }
+            stacks.add(stack);
+            remaining.add(stack.amount());
+        }
+        List<ResourceAllocation> allocations = new ArrayList<>();
+        for (Resource input : required) {
+            long needed = input.amount();
+            for (int index = 0; index < stacks.size() && needed > 0L; index++) {
+                StoredResource stack = stacks.get(index);
+                if (!stack.kind().equals(input.typeId()) || !stack.id().equals(input.id())) {
+                    continue;
+                }
+                long availableAmount = remaining.get(index);
+                if (availableAmount <= 0L) {
+                    continue;
+                }
+                int moved = (int) Math.min(needed, availableAmount);
+                remaining.set(index, availableAmount - moved);
+                allocations.add(new ResourceAllocation(
+                        input.typeId(), stack.tank(), stack.id(), moved));
+                needed -= moved;
+            }
+            if (needed > 0L) {
+                return null;
+            }
+        }
+        return List.copyOf(allocations);
+    }
+
+    public record ResourceAllocation(String kind, String tank, String id, int amount) {
+        public ResourceAllocation {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(tank, "tank");
+            Objects.requireNonNull(id, "id");
+            if (amount < 1) {
+                throw new IllegalArgumentException("Resource allocation amount must be positive");
+            }
+        }
     }
 
     public @Nullable List<ItemAllocation> findItemInputs(List<ItemStack> items) {
@@ -292,6 +364,11 @@ public record MultiblockRecipe(
     @Override
     public RecipeType<? extends Recipe<MultiblockRecipeInput>> getType() {
         return this.recipeType;
+    }
+
+    @Override
+    public boolean isSpecial() {
+        return this.ingredients().isEmpty();
     }
 
     @Override

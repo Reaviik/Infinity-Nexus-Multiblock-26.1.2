@@ -27,6 +27,10 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockSounds;
 import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
+import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
+import com.Infinity.Nexus.Multiblock.config.Config;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.Codec;
@@ -115,7 +119,7 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .orElseGet(() -> DataResult.error(() -> "Unknown block: " + id)));
     }
 
-    private static MultiblockDefinition createDefinition(Identifier id, DefinitionFile file) {
+    private static MultiblockDefinition createDefinition(Identifier id, DefinitionFile file, JsonObject raw) {
         if (!id.equals(file.id())) {
             throw new IllegalArgumentException("Definition id " + file.id() + " does not match file id " + id);
         }
@@ -131,6 +135,24 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
 
         List<ItemSlot> itemSlots = file.itemSlots().stream().map(ItemSlotFile::toSlot).toList();
         List<FluidTank> fluidTanks = file.capabilities().fluids().stream().map(FluidFile::toTank).toList();
+        Map<String, JsonElement> resourceConfigs = resourceConfigs(raw);
+        Map<String, List<ResourceTankInfo>> resourceTanks = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : resourceConfigs.entrySet()) {
+            String kind = entry.getKey();
+            MultiblockResourceType type = MultiblockAddons.get(kind);
+            if (type == null) {
+                throw new IllegalArgumentException("Unknown multiblock resource kind '" + kind
+                        + "': is the addon installed?");
+            }
+            resourceTanks.put(kind, type.describeTanks(entry.getValue()));
+        }
+        Map<String, List<CapabilityPorts.PortSelector>> resourcePorts = resourcePorts(raw);
+        CapabilityPorts basePorts = file.capabilityPorts().map(PortsFile::toPorts).orElse(CapabilityPorts.ALL);
+        CapabilityPorts capabilityPorts = new CapabilityPorts(
+                basePorts.item(),
+                basePorts.energy(),
+                basePorts.fluid(),
+                resourcePorts);
         MultiblockDefinition.Builder definition = MultiblockDefinition.builder(id)
                 .schemaVersion(file.schemaVersion())
                 .type(file.type())
@@ -139,9 +161,11 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .inventoryRows(file.inventoryRows())
                 .itemSlots(itemSlots)
                 .fluidTanks(fluidTanks)
+                .resourceConfigs(resourceConfigs)
+                .resourceTanks(resourceTanks)
                 .sounds(file.sounds().map(SoundsFile::toSounds).orElse(MultiblockSounds.EMPTY))
                 .textures(file.textures().orElse(MultiblockTextures.EMPTY))
-                .capabilityPorts(file.capabilityPorts().map(PortsFile::toPorts).orElse(CapabilityPorts.ALL))
+                .capabilityPorts(capabilityPorts)
                 .pattern(pattern.build());
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
         file.gui().ifPresent(definition::gui);
@@ -149,6 +173,50 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
         validateFluidPorts(built);
         MultiblockMenuLayout.create(built);
         return built;
+    }
+
+    private static Map<String, JsonElement> resourceConfigs(JsonObject raw) {
+        JsonObject capabilities = raw.getAsJsonObject("capabilities");
+        if (capabilities == null) {
+            return Map.of();
+        }
+        Map<String, JsonElement> resources = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : capabilities.entrySet()) {
+            if (entry.getKey().equals("energy") || entry.getKey().equals("fluids")) {
+                continue;
+            }
+            resources.put(entry.getKey(), entry.getValue());
+        }
+        return Map.copyOf(resources);
+    }
+
+    private static Map<String, List<CapabilityPorts.PortSelector>> resourcePorts(JsonObject raw) {
+        JsonObject ports = raw.getAsJsonObject("capability_ports");
+        if (ports == null) {
+            return Map.of();
+        }
+        Map<String, List<CapabilityPorts.PortSelector>> resources = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : ports.entrySet()) {
+            if (entry.getKey().equals("item") || entry.getKey().equals("energy")
+                    || entry.getKey().equals("fluid")) {
+                continue;
+            }
+            JsonElement value = entry.getValue();
+            if (!value.isJsonArray()) {
+                throw new IllegalArgumentException("capability_ports." + entry.getKey()
+                        + " must be an array of selectors");
+            }
+            List<CapabilityPorts.PortSelector> selectors = new ArrayList<>();
+            for (JsonElement element : value.getAsJsonArray()) {
+                if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+                    throw new IllegalArgumentException("capability_ports." + entry.getKey()
+                            + " selectors must be strings");
+                }
+                selectors.add(PortsFile.toSelector(element.getAsString()));
+            }
+            resources.put(entry.getKey(), List.copyOf(selectors));
+        }
+        return Map.copyOf(resources);
     }
 
     private static void validateFluidPorts(MultiblockDefinition definition) {
@@ -214,13 +282,21 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                     InfinityNexusMultiblock.LOGGER.debug("Skipped multiblock template {}", id);
                     return;
                 }
+                if (isExampleDisabled(file)) {
+                    InfinityNexusMultiblock.LOGGER.debug("Skipped example multiblock definition {}", id);
+                    return;
+                }
                 JsonObject resolvedFile = MultiblockDefinitionFiles.resolve(id, prepared, resolved, new HashSet<>());
                 if (!resolvedFile.has("pattern") && referencedTemplates.contains(id)) {
                     InfinityNexusMultiblock.LOGGER.debug("Skipped multiblock template {}", id);
                     return;
                 }
+                if (isExampleDisabled(resolvedFile)) {
+                    InfinityNexusMultiblock.LOGGER.debug("Skipped example multiblock definition {}", id);
+                    return;
+                }
                 DefinitionFile definitionFile = decode(id, resolvedFile);
-                definitions.put(id, createDefinition(id, definitionFile));
+                definitions.put(id, createDefinition(id, definitionFile, resolvedFile));
                 synced.put(id, resolvedFile.deepCopy());
             } catch (RuntimeException exception) {
                 InfinityNexusMultiblock.LOGGER.error("Failed to load multiblock definition {}: {}", id, exception.getMessage());
@@ -239,19 +315,33 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
 
     public static void applyResolved(Map<Identifier, JsonObject> files) {
         Map<Identifier, MultiblockDefinition> definitions = new LinkedHashMap<>();
+        Map<Identifier, JsonObject> enabled = new LinkedHashMap<>();
         files.forEach((id, json) -> {
             try {
                 if (!json.has("pattern")) {
                     return;
                 }
-                definitions.put(id, createDefinition(id, decode(id, json)));
+                if (isExampleDisabled(json)) {
+                    InfinityNexusMultiblock.LOGGER.debug("Skipped example multiblock definition {} from server", id);
+                    return;
+                }
+                definitions.put(id, createDefinition(id, decode(id, json), json));
+                enabled.put(id, json);
             } catch (RuntimeException exception) {
                 InfinityNexusMultiblock.LOGGER.error("Failed to load synced multiblock definition {}: {}", id, exception.getMessage());
             }
         });
         MultiblockDefinitions.replaceAll(definitions);
-        resolvedFiles = Map.copyOf(files);
+        resolvedFiles = Map.copyOf(enabled);
         InfinityNexusMultiblock.LOGGER.info("Loaded {} multiblock definitions from server", definitions.size());
+    }
+
+    private static boolean isExampleDisabled(JsonObject json) {
+        JsonElement type = json.get("type");
+        if (type == null || !type.isJsonPrimitive() || !type.getAsJsonPrimitive().isString()) {
+            return false;
+        }
+        return MultiblockType.isExampleSerializedName(type.getAsString()) && !Config.examplesEnabled();
     }
 
     private static DefinitionFile decode(Identifier id, JsonObject json) {

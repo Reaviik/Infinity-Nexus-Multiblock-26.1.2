@@ -11,6 +11,7 @@ public class Config {
 
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
+    public static final ModConfigSpec.BooleanValue ENABLE_EXEMPLES;
     public static final ModConfigSpec.IntValue PATTERN_SCAN_LIMIT;
     public static final ModConfigSpec.IntValue ASSEMBLY_BLOCKS_PER_TICK;
     public static final ModConfigSpec.IntValue ASSEMBLY_MAX_FAILED_SCANS_PER_TICK;
@@ -18,6 +19,10 @@ public class Config {
     public static final ModConfigSpec SPEC;
 
     static {
+        ENABLE_EXEMPLES = BUILDER
+                .comment("Load the bundled example multiblocks whose type is 'recipe_exemple' or 'storage_exemple'.")
+                .define("enable_exemples", false);
+
         BUILDER.push("export");
         PATTERN_SCAN_LIMIT = BUILDER
                 .comment("Maximum number of connected non-air blocks scanned when exporting a multiblock pattern.")
@@ -37,5 +42,13 @@ public class Config {
         BUILDER.pop();
 
         SPEC = BUILDER.build();
+    }
+
+    public static boolean examplesEnabled() {
+        try {
+            return ENABLE_EXEMPLES.get();
+        } catch (IllegalStateException exception) {
+            return false;
+        }
     }
 }

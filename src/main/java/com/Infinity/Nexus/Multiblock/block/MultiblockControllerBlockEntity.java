@@ -20,11 +20,15 @@ import com.Infinity.Nexus.Multiblock.api.FluidTank;
 import com.Infinity.Nexus.Multiblock.api.ItemSlot;
 import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceStorage;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
+import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
+import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
-import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.client.ClientMultiblockModelData;
 import com.Infinity.Nexus.Multiblock.client.MultiblockClientCache;
@@ -137,6 +141,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private final Map<String, SlotLock> slotLocks = new LinkedHashMap<>();
     private final Map<String, String> fluidSlotTanks = new LinkedHashMap<>();
     private final Set<String> drainedFluidSlots = new HashSet<>();
+    private final Map<String, MultiblockResourceStorage> resourceStorages = new LinkedHashMap<>();
+    private final Map<String, CompoundTag> pendingResources = new LinkedHashMap<>();
+    private Map<String, Set<BlockPos>> resourceCapabilityPorts = Map.of();
+    private Map<String, Map<BlockPos, List<Integer>>> resourcePortTanks = Map.of();
     private @Nullable MultiblockAssemblyJob assemblyJob;
 
     public MultiblockControllerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -153,6 +161,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (definition == null) {
             this.invalidateCapabilityPorts();
             this.clearCapabilityPorts();
+            this.resourceStorages.clear();
+            this.pendingResources.clear();
             this.configuredDefinition = null;
             this.structureValidated = false;
             return;
@@ -196,9 +206,48 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         } else if (this.fluidHandler == null) {
             this.fluidHandler = new MultiblockFluidHandler(definition.fluidTanks(), this::onCapabilityChanged);
         }
+        this.configureResourceStorages(definition);
         this.sanitizeFluidSlotState();
 
         this.applyPendingCapabilities();
+    }
+
+    private void configureResourceStorages(MultiblockDefinition definition) {
+        Set<String> kinds = definition.resourceKinds();
+        this.resourceStorages.keySet().removeIf(kind -> !kinds.contains(kind));
+        this.pendingResources.keySet().removeIf(kind -> !kinds.contains(kind));
+        for (String kind : kinds) {
+            MultiblockResourceType type = MultiblockAddons.get(kind);
+            if (type == null) {
+                continue;
+            }
+            List<ResourceTankInfo> tanks = definition.resourceTanks(kind);
+            MultiblockResourceStorage existing = this.resourceStorages.get(kind);
+            if (existing != null && sameTanks(existing, tanks)) {
+                continue;
+            }
+            MultiblockResourceStorage storage = type.createStorage(
+                    definition,
+                    definition.resourceConfigs().get(kind),
+                    this::onCapabilityChanged);
+            if (existing != null) {
+                storage.restore(existing.snapshot());
+            }
+            this.resourceStorages.put(kind, storage);
+        }
+    }
+
+    private static boolean sameTanks(MultiblockResourceStorage storage, List<ResourceTankInfo> tanks) {
+        if (storage.size() != tanks.size()) {
+            return false;
+        }
+        for (int index = 0; index < tanks.size(); index++) {
+            ResourceTankInfo tank = tanks.get(index);
+            if (!storage.tankId(index).equals(tank.id()) || storage.capacity(index) != tank.capacity()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void replaceInventory(MultiblockDefinition definition) {
@@ -241,6 +290,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (this.pendingFluid != null && this.fluidHandler != null) {
             this.fluidHandler.deserialize(TagValueInput.create(ProblemReporter.DISCARDING, registries, this.pendingFluid));
             this.pendingFluid = null;
+        }
+        if (!this.pendingResources.isEmpty()) {
+            for (Map.Entry<String, CompoundTag> entry : List.copyOf(this.pendingResources.entrySet())) {
+                MultiblockResourceStorage storage = this.resourceStorages.get(entry.getKey());
+                if (storage == null) {
+                    continue;
+                }
+                storage.deserialize(TagValueInput.create(ProblemReporter.DISCARDING, registries, entry.getValue()));
+                this.pendingResources.remove(entry.getKey());
+            }
         }
     }
 
@@ -310,6 +369,26 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             case ENERGY -> this.energyCapabilityPorts.contains(pos);
             case FLUID -> this.fluidCapabilityPorts.contains(pos);
         };
+    }
+
+    public boolean allowsResourceCapability(BlockPos pos, String kind) {
+        MultiblockDefinition definition = this.definition();
+        if (definition == null || !definition.resourceKinds().contains(kind)) {
+            return false;
+        }
+        if (!this.formed) {
+            return this.worldPosition.equals(pos) && !definition.capabilityPorts().isDefined(kind);
+        }
+        return this.resourceCapabilityPorts.getOrDefault(kind, Set.of()).contains(pos);
+    }
+
+    public Set<BlockPos> resourceCapabilityPorts(String kind) {
+        return this.resourceCapabilityPorts.getOrDefault(kind, Set.of());
+    }
+
+    public @Nullable List<Integer> resourcePortTanks(String kind, BlockPos pos) {
+        Map<BlockPos, List<Integer>> ports = this.resourcePortTanks.get(kind);
+        return ports == null ? null : ports.get(pos);
     }
 
     public Rotation rotation() {
@@ -631,13 +710,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Map<String, String> tanks = new LinkedHashMap<>();
         Set<String> drained = new HashSet<>();
         for (MultiblockMenuLayout.SlotPlacement placement : this.menuLayout.slots()) {
-            if (placement.role() != ItemSlotRole.FLUID) {
+            if (placement.role() != ItemSlotRole.FLUID && placement.role() != ItemSlotRole.RESOURCE) {
                 continue;
             }
             String key = lockKey(placement);
-            String tankId = this.fluidSlotTanks.get(key);
-            if (tankId != null && this.fluidHandler != null && this.fluidHandler.indexOf(tankId) >= 0) {
-                tanks.put(key, tankId);
+            if (placement.role() == ItemSlotRole.FLUID) {
+                String tankId = this.fluidSlotTanks.get(key);
+                if (tankId != null && this.fluidHandler != null && this.fluidHandler.indexOf(tankId) >= 0) {
+                    tanks.put(key, tankId);
+                }
             }
             if (this.drainedFluidSlots.contains(key)) {
                 ItemStack current = placement.index() < this.inventory.getContainerSize()
@@ -658,12 +739,132 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
     }
 
+    public int resourceSlotIndex(int slotIndex) {
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        ResourceSlotTarget target = placement == null ? null : this.resourceSlotTarget(placement);
+        return target == null ? -1 : target.index();
+    }
+
+    public void onResourceSlotPlaced(int slotIndex) {
+        if (this.level == null || this.level.isClientSide()) {
+            return;
+        }
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        ResourceSlotTarget target = placement == null ? null : this.resourceSlotTarget(placement);
+        if (target == null) {
+            return;
+        }
+        this.drainedFluidSlots.remove(lockKey(placement));
+        this.drainResourceSlot(slotIndex, target);
+    }
+
+    public ItemStack onResourceSlotTaken(int slotIndex, ItemStack removed) {
+        if (this.level == null || this.level.isClientSide() || removed.isEmpty()) {
+            return removed;
+        }
+        MultiblockMenuLayout.SlotPlacement placement = this.placementAt(slotIndex);
+        if (placement == null) {
+            return removed;
+        }
+        String key = lockKey(placement);
+        if (this.drainedFluidSlots.remove(key)) {
+            if (slotIndex < this.inventory.getContainerSize() && !this.inventory.getItem(slotIndex).isEmpty()) {
+                this.drainedFluidSlots.add(key);
+            }
+            this.setChanged();
+            return removed;
+        }
+        ResourceSlotTarget target = this.resourceSlotTarget(placement);
+        if (target == null) {
+            return removed;
+        }
+        ItemStack single = removed.copyWithCount(1);
+        ItemStack filled = target.storage().fillContainer(target.index(), single);
+        if (filled == null || ItemStack.matches(filled, single)) {
+            return removed;
+        }
+        int remaining = removed.getCount() - 1;
+        if (remaining > 0) {
+            ItemStack remainder = removed.copyWithCount(remaining);
+            this.inventory.setItem(slotIndex, remainder);
+            if (!ItemStack.matches(this.inventory.getItem(slotIndex), remainder)) {
+                Block.popResource(this.level, this.worldPosition, remainder);
+            }
+        }
+        this.setChanged();
+        return filled;
+    }
+
+    private void drainResourceSlot(int slotIndex, ResourceSlotTarget target) {
+        ItemStack stack = this.inventory.getItem(slotIndex);
+        if (stack.isEmpty()) {
+            return;
+        }
+        ItemStack drained = target.storage().drainContainer(target.index(), stack.copy());
+        if (drained != null && !ItemStack.matches(stack, drained)) {
+            this.inventory.setItem(slotIndex, drained);
+            this.drainedFluidSlots.add(lockKey(this.placementAt(slotIndex)));
+            this.setChanged();
+        }
+    }
+
+    private @Nullable ResourceSlotTarget resourceSlotTarget(MultiblockMenuLayout.SlotPlacement placement) {
+        if (placement.role() != ItemSlotRole.RESOURCE) {
+            return null;
+        }
+        String id = placement.id();
+        int separator = id.indexOf(':');
+        if (separator <= 0 || separator == id.length() - 1) {
+            return null;
+        }
+        String kind = id.substring(0, separator);
+        String tank = id.substring(separator + 1);
+        MultiblockResourceStorage storage = this.resourceStorages.get(kind);
+        if (storage == null) {
+            return null;
+        }
+        int index = storage.indexOf(tank);
+        return index < 0 ? null : new ResourceSlotTarget(kind, storage, index);
+    }
+
     public @Nullable MultiblockEnergyStorage energyStorage() {
         return this.energyStorage;
     }
 
     public @Nullable MultiblockFluidHandler fluidHandler() {
         return this.fluidHandler;
+    }
+
+    public @Nullable MultiblockResourceStorage resourceStorage(String kind) {
+        return kind == null ? null : this.resourceStorages.get(kind);
+    }
+
+    public Map<String, MultiblockResourceStorage> resourceStorages() {
+        return Map.copyOf(this.resourceStorages);
+    }
+
+    public List<StoredResource> resourceSnapshot() {
+        List<StoredResource> stored = new ArrayList<>();
+        for (MultiblockResourceStorage storage : this.resourceStorages.values()) {
+            stored.addAll(storage.snapshot());
+        }
+        return List.copyOf(stored);
+    }
+
+    public void restoreResources(List<StoredResource> stored) {
+        if (stored == null || stored.isEmpty()) {
+            return;
+        }
+        Map<String, List<StoredResource>> byKind = new LinkedHashMap<>();
+        for (StoredResource resource : stored) {
+            byKind.computeIfAbsent(resource.kind(), key -> new ArrayList<>()).add(resource);
+        }
+        for (Map.Entry<String, List<StoredResource>> entry : byKind.entrySet()) {
+            MultiblockResourceStorage storage = this.resourceStorages.get(entry.getKey());
+            if (storage != null) {
+                storage.restore(entry.getValue());
+            }
+        }
     }
 
     public int progress() {
@@ -922,7 +1123,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         }
         MultiblockDefinition definition = this.definition();
         if (definition == null
-                || definition.type() != MultiblockType.RECIPE
+                || !definition.type().isRecipe()
                 || !this.formed) {
             this.resetRecipe();
             return;
@@ -961,6 +1162,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (this.maxProgress <= 0
                 || this.progress < 0
                 || this.progress >= this.maxProgress
+                || !this.hasStorageFor(recipe)
                 || !recipe.matches(input, serverLevel)
                 || !this.matchesEntityInputs(recipe)) {
             this.resetRecipe();
@@ -1033,7 +1235,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     private @Nullable RecipeType<?> recipeType() {
         MultiblockDefinition definition = this.definition();
-        return definition != null && definition.type() == MultiblockType.RECIPE
+        return definition != null && definition.type().isRecipe()
                 ? ModRecipes.MULTIBLOCK_TYPE
                 : null;
     }
@@ -1048,7 +1250,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         for (RecipeHolder<?> holder : holders) {
             if (holder.value() instanceof MultiblockRecipe recipe
                     && java.util.Objects.equals(recipe.definition(), this.definitionId)
-                    && this.hasEnergyStorageFor(recipe)
+                    && this.hasStorageFor(recipe)
                     && recipe.matches(input, serverLevel)
                     && this.matchesEntityInputs(recipe)) {
                 RecipeHolder<MultiblockRecipe> matched = (RecipeHolder<MultiblockRecipe>) (RecipeHolder) holder;
@@ -1076,7 +1278,28 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 fluids.add(resource.isEmpty() || amount <= 0 ? FluidStack.EMPTY : resource.toStack(amount));
             }
         }
-        return new MultiblockRecipeInput(items, fluids);
+        List<StoredResource> resources = new ArrayList<>();
+        for (MultiblockResourceStorage storage : this.resourceStorages.values()) {
+            resources.addAll(storage.snapshot());
+        }
+        return new MultiblockRecipeInput(items, fluids, resources);
+    }
+
+    private boolean hasStorageFor(MultiblockRecipe recipe) {
+        if (!this.hasEnergyStorageFor(recipe)) {
+            return false;
+        }
+        for (MultiblockRecipeIngredient.Resource input : recipe.resourceInputs()) {
+            if (this.resourceStorages.get(input.typeId()) == null) {
+                return false;
+            }
+        }
+        for (MultiblockRecipeOutput.Resource output : recipe.resourceOutputs()) {
+            if (this.resourceStorages.get(output.typeId()) == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean hasEnergyStorageFor(MultiblockRecipe recipe) {
@@ -1125,6 +1348,39 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 resources[tank] = FluidResource.EMPTY;
             }
         }
+        Map<String, List<ResourceTankState>> resourceStates = new LinkedHashMap<>();
+        for (Map.Entry<String, MultiblockResourceStorage> entry : this.resourceStorages.entrySet()) {
+            MultiblockResourceStorage storage = entry.getValue();
+            List<ResourceTankState> states = new ArrayList<>(storage.size());
+            for (int index = 0; index < storage.size(); index++) {
+                states.add(new ResourceTankState(
+                        storage.tankId(index),
+                        storage.capacity(index),
+                        storage.resourceId(index),
+                        storage.amount(index)));
+            }
+            resourceStates.put(entry.getKey(), states);
+        }
+        List<MultiblockRecipe.ResourceAllocation> resourceInputs = recipe.findResourceInputs(input.resources());
+        if (resourceInputs == null) {
+            return null;
+        }
+        for (MultiblockRecipe.ResourceAllocation allocation : resourceInputs) {
+            List<ResourceTankState> states = resourceStates.get(allocation.kind());
+            if (states == null) {
+                return null;
+            }
+            ResourceTankState state = findResourceTank(states, allocation.tank());
+            if (state == null || state.amount < allocation.amount()) {
+                return null;
+            }
+            state.amount -= allocation.amount();
+            if (state.amount <= 0L) {
+                state.amount = 0L;
+                state.id = "";
+            }
+        }
+        List<PlannedResource> plannedResources = new ArrayList<>();
         List<PlannedEntity> entities = new ArrayList<>();
         for (MultiblockRecipeOutput output : recipe.outputs()) {
             if (rollChance && output.chance() < 1.0F
@@ -1149,6 +1405,36 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                     }
                     energy += energyOutput.amount();
                 }
+                case MultiblockRecipeOutput.Resource resourceOutput -> {
+                    List<ResourceTankState> states = resourceStates.get(resourceOutput.typeId());
+                    if (states == null) {
+                        return null;
+                    }
+                    ResourceTankState target = null;
+                    if (!resourceOutput.tank().isEmpty()) {
+                        target = findResourceTank(states, resourceOutput.tank());
+                    } else {
+                        for (ResourceTankState state : states) {
+                            if (state.accepts(resourceOutput.id())
+                                    && state.space() >= resourceOutput.amount()) {
+                                target = state;
+                                break;
+                            }
+                        }
+                    }
+                    if (target == null
+                            || !target.accepts(resourceOutput.id())
+                            || target.space() < resourceOutput.amount()) {
+                        return null;
+                    }
+                    target.id = resourceOutput.id();
+                    target.amount += resourceOutput.amount();
+                    plannedResources.add(new PlannedResource(
+                            resourceOutput.typeId(),
+                            target.tank,
+                            resourceOutput.id(),
+                            resourceOutput.amount()));
+                }
                 case MultiblockRecipeOutput.Entity entityOutput -> {
                     Optional<BlockPos> spawnPos = this.resolveSpawnPos(entityOutput);
                     HolderGetter<EntityType<?>> registry = this.entityTypeRegistry();
@@ -1166,7 +1452,24 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 }
             }
         }
-        return new OutputPlan(items, resources, amounts, (int) Math.min(Integer.MAX_VALUE, energy), entities);
+        return new OutputPlan(
+                items,
+                resources,
+                amounts,
+                (int) Math.min(Integer.MAX_VALUE, energy),
+                entities,
+                List.copyOf(plannedResources));
+    }
+
+    private static @Nullable ResourceTankState findResourceTank(
+            List<ResourceTankState> states,
+            String tankId) {
+        for (ResourceTankState state : states) {
+            if (state.tank.equals(tankId)) {
+                return state;
+            }
+        }
+        return null;
     }
 
     private boolean insertItemPlan(
@@ -1254,6 +1557,17 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (this.energyStorage != null) {
             this.energyStorage.set(plan.energy());
         }
+        for (PlannedResource resource : plan.plannedResources()) {
+            MultiblockResourceStorage storage = this.resourceStorages.get(resource.kind());
+            if (storage == null) {
+                continue;
+            }
+            int index = storage.indexOf(resource.tank());
+            if (index < 0) {
+                continue;
+            }
+            storage.insert(index, resource.id(), resource.amount(), false);
+        }
         for (PlannedEntity entity : plan.entities()) {
             entity.entityType().spawn(
                     serverLevel,
@@ -1282,12 +1596,30 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         if (entityInputs == null) {
             return false;
         }
+        List<MultiblockRecipe.ResourceAllocation> resourceAllocations =
+                recipe.findResourceInputs(input.resources());
+        if (resourceAllocations == null) {
+            return false;
+        }
         OutputPlan plan = this.planOutputs(recipe, true, input);
         if (plan == null) {
             return false;
         }
         for (MultiblockRecipe.ItemAllocation allocation : itemAllocations) {
             this.inventory.removeItem(this.inputSlots[allocation.slot()], allocation.count());
+        }
+        for (MultiblockRecipe.ResourceAllocation allocation : resourceAllocations) {
+            MultiblockResourceStorage storage = this.resourceStorages.get(allocation.kind());
+            if (storage == null) {
+                return false;
+            }
+            int index = storage.indexOf(allocation.tank());
+            if (index < 0) {
+                return false;
+            }
+            if (storage.extract(index, allocation.id(), allocation.amount(), false) < allocation.amount()) {
+                return false;
+            }
         }
         this.commitOutputPlan(plan, serverLevel);
         for (Entity entity : entityInputs) {
@@ -1446,10 +1778,39 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             FluidResource[] resources,
             int[] amounts,
             int energy,
-            List<PlannedEntity> entities) {
+            List<PlannedEntity> entities,
+            List<PlannedResource> plannedResources) {
     }
 
     private record PlannedEntity(EntityType<?> entityType, BlockPos spawnPos) {
+    }
+
+    private record PlannedResource(String kind, String tank, String id, int amount) {
+    }
+
+    private record ResourceSlotTarget(String kind, MultiblockResourceStorage storage, int index) {
+    }
+
+    private static final class ResourceTankState {
+        private final String tank;
+        private final long capacity;
+        private String id;
+        private long amount;
+
+        private ResourceTankState(String tank, long capacity, String id, long amount) {
+            this.tank = tank;
+            this.capacity = capacity;
+            this.id = id;
+            this.amount = amount;
+        }
+
+        private boolean accepts(String resourceId) {
+            return this.id.isEmpty() || this.id.equals(resourceId);
+        }
+
+        private long space() {
+            return Math.max(0L, this.capacity - this.amount);
+        }
     }
 
     private void resetRecipe() {
@@ -1545,11 +1906,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Set<BlockPos> previousEnergyPorts = this.energyCapabilityPorts;
         Set<BlockPos> previousFluidPorts = this.fluidCapabilityPorts;
         Map<BlockPos, List<Integer>> previousFluidPortTanks = this.fluidPortTanks;
+        Map<String, Set<BlockPos>> previousResourcePorts = this.resourceCapabilityPorts;
+        Map<String, Map<BlockPos, List<Integer>>> previousResourcePortTanks = this.resourcePortTanks;
         this.updateCapabilityPorts(serverLevel, definition, newOrigin, newRotation, matched);
         if (!previousItemPorts.equals(this.itemCapabilityPorts)
                 || !previousEnergyPorts.equals(this.energyCapabilityPorts)
                 || !previousFluidPorts.equals(this.fluidCapabilityPorts)
-                || !previousFluidPortTanks.equals(this.fluidPortTanks)) {
+                || !previousFluidPortTanks.equals(this.fluidPortTanks)
+                || !previousResourcePorts.equals(this.resourceCapabilityPorts)
+                || !previousResourcePortTanks.equals(this.resourcePortTanks)) {
             Set<BlockPos> invalidated = new HashSet<>();
             invalidated.addAll(previousItemPorts);
             invalidated.addAll(previousEnergyPorts);
@@ -1559,6 +1924,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             invalidated.addAll(this.fluidCapabilityPorts);
             invalidated.addAll(previousFluidPortTanks.keySet());
             invalidated.addAll(this.fluidPortTanks.keySet());
+            previousResourcePorts.values().forEach(invalidated::addAll);
+            this.resourceCapabilityPorts.values().forEach(invalidated::addAll);
+            previousResourcePortTanks.values().forEach(map -> invalidated.addAll(map.keySet()));
+            this.resourcePortTanks.values().forEach(map -> invalidated.addAll(map.keySet()));
             this.invalidateCapabilities(List.copyOf(invalidated));
         }
 
@@ -1624,12 +1993,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     public void exportStructure(Player player) {
         ServerLevel serverLevel = this.serverLevel();
         if (serverLevel == null || !(player instanceof ServerPlayer serverPlayer)) {
-            return;
-        }
-        this.ensureConfigured();
-        MultiblockDefinition definition = this.definition();
-        if (definition == null) {
-            player.sendOverlayMessage(Component.translatable("message.infinity_nexus_multiblock.export_failed"));
             return;
         }
 
@@ -1714,9 +2077,15 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         Set<BlockPos> energy = new HashSet<>();
         Set<BlockPos> fluids = new HashSet<>();
         Map<BlockPos, List<Integer>> fluidTanksByPort = new LinkedHashMap<>();
+        Map<String, Set<BlockPos>> resourcePorts = new LinkedHashMap<>();
+        Map<String, Map<BlockPos, List<Integer>>> resourceTanksByPort = new LinkedHashMap<>();
         if (matched) {
             CapabilityPorts ports = definition.capabilityPorts();
             List<FluidTank> tanks = definition.fluidTanks();
+            for (String kind : definition.resourceKinds()) {
+                resourcePorts.put(kind, new HashSet<>());
+                resourceTanksByPort.put(kind, new LinkedHashMap<>());
+            }
             for (MultiblockPattern.PatternCell cell : definition.pattern().cells()) {
                 BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(newRotation);
                 BlockPos pos = newOrigin.offset(offset.getX(), offset.getY(), offset.getZ());
@@ -1737,12 +2106,48 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                     }
                     fluidTanksByPort.put(pos, List.copyOf(allowed));
                 }
+                for (String kind : definition.resourceKinds()) {
+                    MultiblockResourceStorage storage = this.resourceStorages.get(kind);
+                    if (storage == null
+                            || !ports.allows(kind, cell.symbol(), state, newRotation)) {
+                        continue;
+                    }
+                    resourcePorts.get(kind).add(pos);
+                    List<Integer> allowed = new ArrayList<>(storage.size());
+                    for (int index = 0; index < storage.size(); index++) {
+                        if (storage.allowsPort(index, cell.symbol(), state, newRotation)) {
+                            allowed.add(index);
+                        }
+                    }
+                    resourceTanksByPort.get(kind).put(pos, List.copyOf(allowed));
+                }
             }
         }
         this.itemCapabilityPorts = Set.copyOf(items);
         this.energyCapabilityPorts = Set.copyOf(energy);
         this.fluidCapabilityPorts = Set.copyOf(fluids);
         this.fluidPortTanks = Map.copyOf(fluidTanksByPort);
+        this.resourceCapabilityPorts = copyPorts(resourcePorts);
+        this.resourcePortTanks = copyResourceTanks(resourceTanksByPort);
+    }
+
+    private static Map<String, Set<BlockPos>> copyPorts(Map<String, Set<BlockPos>> ports) {
+        if (ports.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Set<BlockPos>> copy = new LinkedHashMap<>();
+        ports.forEach((kind, positions) -> copy.put(kind, Set.copyOf(positions)));
+        return Map.copyOf(copy);
+    }
+
+    private static Map<String, Map<BlockPos, List<Integer>>> copyResourceTanks(
+            Map<String, Map<BlockPos, List<Integer>>> tanks) {
+        if (tanks.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Map<BlockPos, List<Integer>>> copy = new LinkedHashMap<>();
+        tanks.forEach((kind, byPort) -> copy.put(kind, Map.copyOf(byPort)));
+        return Map.copyOf(copy);
     }
 
     private void clearCapabilityPorts() {
@@ -1750,6 +2155,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.energyCapabilityPorts = Set.of();
         this.fluidCapabilityPorts = Set.of();
         this.fluidPortTanks = Map.of();
+        this.resourceCapabilityPorts = Map.of();
+        this.resourcePortTanks = Map.of();
     }
 
     private void invalidateCapabilityPorts() {
@@ -1761,6 +2168,8 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         positions.addAll(this.itemCapabilityPorts);
         positions.addAll(this.energyCapabilityPorts);
         positions.addAll(this.fluidCapabilityPorts);
+        this.resourceCapabilityPorts.values().forEach(positions::addAll);
+        this.resourcePortTanks.values().forEach(map -> positions.addAll(map.keySet()));
         this.invalidateCapabilities(List.copyOf(positions));
     }
 
@@ -1859,6 +2268,18 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         } else if (this.pendingFluid != null) {
             output.store("fluid", CompoundTag.CODEC, this.pendingFluid);
         }
+        if (!this.resourceStorages.isEmpty()) {
+            ValueOutput resources = output.child("resources");
+            for (Map.Entry<String, MultiblockResourceStorage> entry : this.resourceStorages.entrySet()) {
+                entry.getValue().serialize(resources.child(entry.getKey()));
+            }
+        }
+        if (!this.pendingResources.isEmpty()) {
+            output.store(
+                    "PendingResources",
+                    Codec.unboundedMap(Codec.STRING, CompoundTag.CODEC),
+                    Map.copyOf(this.pendingResources));
+        }
     }
 
     @Override
@@ -1889,6 +2310,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.drainedFluidSlots.clear();
         this.drainedFluidSlots.addAll(input.read(
                 "DrainedFluidSlots", Codec.STRING.listOf()).orElse(List.of()));
+        this.pendingResources.clear();
+        this.pendingResources.putAll(input.read(
+                "PendingResources",
+                Codec.unboundedMap(Codec.STRING, CompoundTag.CODEC)).orElse(Map.of()));
         MultiblockDefinition definition = this.definition();
         if (definition != null) {
             this.menuLayout = MultiblockMenuLayout.create(definition);
@@ -1911,6 +2336,13 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
             input.child("fluid").ifPresent(this.fluidHandler::deserialize);
         } else {
             this.pendingFluid = input.read("fluid", CompoundTag.CODEC).orElse(null);
+        }
+        if (!this.resourceStorages.isEmpty()) {
+            input.child("resources").ifPresent(resources -> {
+                for (Map.Entry<String, MultiblockResourceStorage> entry : this.resourceStorages.entrySet()) {
+                    resources.child(entry.getKey()).ifPresent(entry.getValue()::deserialize);
+                }
+            });
         }
 
         if (this.level != null && this.level.isClientSide()) {

@@ -1,0 +1,182 @@
+{
+  "schema_version": 2,
+  "id": "infinity_nexus_multiblock:obsidian_furnace",
+  "type": "recipe_exemple",
+  "item_slots": [
+    {
+      "id": "slot_0",
+      "role": "input",
+      "x": 26,
+      "y": 34
+    },
+    {
+      "id": "slot_9",
+      "role": "output",
+      "x": 80,
+      "y": 16
+    },
+    {
+      "id": "slot_1",
+      "role": "output",
+      "x": 98,
+      "y": 16
+    },
+    {
+      "id": "slot_2",
+      "role": "output",
+      "x": 80,
+      "y": 34
+    },
+    {
+      "id": "slot_3",
+      "role": "output",
+      "x": 98,
+      "y": 34
+    }
+  ],
+  "capabilities": {
+    "energy": {
+      "id": "energy",
+      "capacity": 500000,
+      "max_receive": 10000
+    }
+  },
+  "capability_ports": {
+    "item": [
+      "F",
+      "H",
+      "D"
+    ],
+    "energy": [
+      "L"
+    ]
+  },
+  "textures": {
+    "front": "minecraft:block/obsidian",
+    "side": "minecraft:block/obsidian",
+    "top": "minecraft:block/obsidian",
+    "bottom": "minecraft:block/obsidian",
+    "particle": "minecraft:block/obsidian",
+    "active": {
+      "front": "minecraft:block/crying_obsidian",
+      "side": "minecraft:block/crying_obsidian",
+      "top": "minecraft:block/crying_obsidian",
+      "bottom": "minecraft:block/crying_obsidian",
+      "particle": "minecraft:block/crying_obsidian"
+    }
+  },
+  "gui": {
+    "elements": [
+      {
+        "type": "progress_bar",
+        "x": 148,
+        "y": 16,
+        "width": 8,
+        "height": 54,
+        "color": "0xFF00AA00"
+      },
+      {
+        "type": "energy_bar",
+        "x": 158,
+        "y": 16,
+        "width": 8,
+        "height": 54,
+        "capability": "energy",
+        "color": "0xFFFF0000"
+      },
+      {
+        "type": "player_inventory",
+        "x": 8,
+        "y": 84,
+        "color": "404040",
+        "shadow": false
+      },
+      {
+        "type": "title",
+        "x": 8,
+        "y": 4,
+        "color": "404040",
+        "shadow": false
+      },
+      {
+        "type": "text",
+        "x": 8,
+        "y": 75,
+        "color": "404040",
+        "shadow": false
+      }
+    ]
+  },
+  "pattern": {
+    "anchor": "C",
+    "layers": [
+      [
+        "ELE",
+        "EJH",
+        "EFE"
+      ],
+      [
+        "EAE",
+        "KGK",
+        "EAE"
+      ],
+      [
+        "EEE",
+        "EDE",
+        "ECE"
+      ],
+      [
+        "I I",
+        "I I",
+        "IBI"
+      ]
+    ],
+    "matchers": {
+      "A": {
+        "block": "minecraft:iron_bars",
+        "state": {
+          "waterlogged": "false"
+        }
+      },
+      "B": {
+        "block": "minecraft:copper_golem_statue",
+        "state": {
+          "copper_golem_pose": "sitting",
+          "facing": "south",
+          "waterlogged": "false"
+        }
+      },
+      "D": "minecraft:tinted_glass",
+      "E": "minecraft:obsidian",
+      "F": {
+        "block": "minecraft:dispenser",
+        "state": {
+          "facing": "south",
+          "triggered": "false"
+        }
+      },
+      "G": {
+        "block": "minecraft:lava",
+        "state": {
+          "level": "0"
+        }
+      },
+      "H": "minecraft:target",
+      "I": "minecraft:daylight_detector",
+      "J": "minecraft:magma_block",
+      "K": {
+        "block": "minecraft:iron_bars",
+        "state": {
+          "waterlogged": "false"
+        }
+      },
+      "L": {
+        "block": "minecraft:observer",
+        "state": {
+          "facing": "south",
+          "powered": "false"
+        }
+      }
+    }
+  }
+}
