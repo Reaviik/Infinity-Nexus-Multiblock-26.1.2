@@ -271,7 +271,7 @@ public final class MyAddonClient {
         <p><code>capability</code> é o id do tipo (<code>aura</code>) e <code>slot</code> é o id do tanque retornado por <code>describeTanks</code>. O base rejeita a GUI se o tipo não estiver registrado ou se o tanque não existir.</p>
 
         <blockquote>
-          <p><code>chemical_bar</code> é apenas um alias específico para o tipo <code>chemical</code> e é redirecionado para <code>resource_bar</code>. Para outros recursos, use <code>resource_bar</code>.</p>
+          <p><code>chemical_bar</code> é apenas um alias específico para o tipo <code>chemical</code> e é redirecionado para <code>resource_bar</code>. O tipo <code>mana</code> também usa <code>chemical_bar</code> no JSON final, com <code>capability: "mana"</code> e <code>slot: "mana"</code>. Para outros recursos, use <code>resource_bar</code>.</p>
         </blockquote>
 
         <h2 id="receitas">Receitas</h2>
@@ -347,8 +347,8 @@ public MapCodec&lt;? extends MultiblockRecipeOutput&gt; outputCodec() {
         <h2 id="limitacoes">Limitações atuais</h2>
         <ul>
           <li>O base não valida os campos internos de <code>capabilities.&lt;kind&gt;</code>; essa validação pertence ao addon.</li>
-          <li>O builder visual ainda só edita <code>energy</code>, <code>fluid</code> e <code>chemical</code>. Para um recurso novo, edite o JSON manualmente ou estenda o builder.</li>
-          <li>O builder ainda converte <code>resource_bar</code> importado para <code>chemical_bar</code>; isso precisa ser ajustado antes de usar o builder para outros recursos.</li>
+          <li>O builder visual edita <code>energy</code>, <code>fluid</code>, <code>chemical</code>, <code>mana</code> e <code>essentia</code>. Para um recurso novo, edite o JSON manualmente ou estenda o builder.</li>
+          <li>O builder converte <code>resource_bar</code> importado para <code>chemical_bar</code>, exceto quando <code>capability</code> é <code>mana</code>; <code>resource_list</code> é tratado como o caso especial de <code>essentia</code>. Isso precisa ser ajustado antes de usar o builder para outros recursos.</li>
           <li>Definições que declaram um tipo ausente precisam ficar em um datapack ou jar separado, ou ser protegidas por condições de carregamento.</li>
           <li>O codec de rede de receitas usa o formato genérico <code>id</code> + <code>amount</code>; campos extras do seu codec podem não sobreviver à sincronização.</li>
         </ul>

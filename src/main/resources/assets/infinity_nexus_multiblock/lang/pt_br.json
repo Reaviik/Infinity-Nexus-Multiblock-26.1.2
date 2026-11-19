@@ -29,6 +29,7 @@
   "gui.infinity_nexus_multiblock.jei.tier": "Tier: %s",
   "gui.infinity_nexus_multiblock.jei.time": "Tempo: %ss",
   "gui.infinity_nexus_multiblock.jei.energy": "%s FE",
+  "gui.infinity_nexus_multiblock.jei.energy_stored": "%s / %s FE",
   "gui.infinity_nexus_multiblock.jei.energy_output": "Produz: %s FE",
   "gui.infinity_nexus_multiblock.jei.entity_inputs": "Entidades: %s",
   "gui.infinity_nexus_multiblock.jei.entity_input": "Entidade de entrada",

@@ -296,6 +296,14 @@ public record MultiblockMenuLayout(
                     requireBarInside(element, gui.width(), gui.height());
                     elements.add(element);
                 }
+                case RESOURCE_LIST -> {
+                    if (MultiblockAddons.get(element.capability()) == null) {
+                        throw new IllegalArgumentException(
+                                "Unknown resource kind in gui: " + element.capability());
+                    }
+                    requireResourceListElement(element, gui.width(), gui.height());
+                    elements.add(element);
+                }
                 case PROGRESS_BAR, ARROW -> {
                     if (!definition.type().isRecipe()) {
                         throw new IllegalArgumentException("gui has a " + element.type().getSerializedName()
@@ -359,6 +367,17 @@ public record MultiblockMenuLayout(
     private static void requireBarInside(GuiElement element, int width, int height) {
         if (element.width() <= 0 || element.height() <= 0) {
             throw new IllegalArgumentException("gui bar elements need positive width and height");
+        }
+        requireInside(element, width, height, element.width(), element.height());
+    }
+
+    private static void requireResourceListElement(GuiElement element, int width, int height) {
+        if (element.width() < GuiElement.RESOURCE_LIST_CELL_SIZE
+                || element.height() < GuiElement.RESOURCE_LIST_CELL_SIZE
+                || element.width() % GuiElement.RESOURCE_LIST_CELL_SIZE != 0
+                || element.height() % GuiElement.RESOURCE_LIST_CELL_SIZE != 0) {
+            throw new IllegalArgumentException("gui resource_list elements need width and height as multiples of "
+                    + GuiElement.RESOURCE_LIST_CELL_SIZE + " (minimum " + GuiElement.RESOURCE_LIST_CELL_SIZE + ")");
         }
         requireInside(element, width, height, element.width(), element.height());
     }

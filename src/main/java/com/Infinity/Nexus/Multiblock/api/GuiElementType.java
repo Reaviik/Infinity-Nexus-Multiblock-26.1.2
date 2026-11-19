@@ -12,6 +12,7 @@ public enum GuiElementType implements StringRepresentable {
     ENERGY_BAR("energy_bar"),
     FLUID_BAR("fluid_bar"),
     RESOURCE_BAR("resource_bar"),
+    RESOURCE_LIST("resource_list"),
     PROGRESS_BAR("progress_bar"),
     ARROW("arrow"),
     ENTITY("entity");

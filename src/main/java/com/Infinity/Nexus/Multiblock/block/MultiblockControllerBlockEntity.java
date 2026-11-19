@@ -1257,6 +1257,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                 if (this.canCompleteRecipe(recipe, input)) {
                     return Optional.of(matched);
                 }
+                if (this.requiresSpaceToStart(recipe)) {
+                    continue;
+                }
                 if (fallback == null) {
                     fallback = matched;
                 }
@@ -1304,6 +1307,16 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
 
     private boolean hasEnergyStorageFor(MultiblockRecipe recipe) {
         return recipe.energy() <= 0 || this.energyStorage != null;
+    }
+
+    private boolean requiresSpaceToStart(MultiblockRecipe recipe) {
+        for (MultiblockRecipeOutput.Resource output : recipe.resourceOutputs()) {
+            MultiblockResourceStorage storage = this.resourceStorages.get(output.typeId());
+            if (storage != null && storage.requiresSpaceToStart()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean canCompleteRecipe(MultiblockRecipe recipe, MultiblockRecipeInput input) {
@@ -1357,7 +1370,9 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                         storage.tankId(index),
                         storage.capacity(index),
                         storage.resourceId(index),
-                        storage.amount(index)));
+                        storage.amount(index),
+                        storage,
+                        index));
             }
             resourceStates.put(entry.getKey(), states);
         }
@@ -1416,7 +1431,7 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                     } else {
                         for (ResourceTankState state : states) {
                             if (state.accepts(resourceOutput.id())
-                                    && state.space() >= resourceOutput.amount()) {
+                                    && state.space(resourceOutput.id()) >= resourceOutput.amount()) {
                                 target = state;
                                 break;
                             }
@@ -1424,11 +1439,10 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
                     }
                     if (target == null
                             || !target.accepts(resourceOutput.id())
-                            || target.space() < resourceOutput.amount()) {
+                            || target.space(resourceOutput.id()) < resourceOutput.amount()) {
                         return null;
                     }
-                    target.id = resourceOutput.id();
-                    target.amount += resourceOutput.amount();
+                    target.reserve(resourceOutput.id(), resourceOutput.amount());
                     plannedResources.add(new PlannedResource(
                             resourceOutput.typeId(),
                             target.tank,
@@ -1794,22 +1808,38 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
     private static final class ResourceTankState {
         private final String tank;
         private final long capacity;
+        private final MultiblockResourceStorage storage;
+        private final int index;
+        private final Map<String, Long> planned = new LinkedHashMap<>();
         private String id;
         private long amount;
 
-        private ResourceTankState(String tank, long capacity, String id, long amount) {
+        private ResourceTankState(String tank, long capacity, String id, long amount,
+                MultiblockResourceStorage storage, int index) {
             this.tank = tank;
             this.capacity = capacity;
             this.id = id;
             this.amount = amount;
+            this.storage = storage;
+            this.index = index;
         }
 
         private boolean accepts(String resourceId) {
-            return this.id.isEmpty() || this.id.equals(resourceId);
+            return this.storage.accepts(this.index, resourceId);
         }
 
-        private long space() {
-            return Math.max(0L, this.capacity - this.amount);
+        private long space(String resourceId) {
+            if (!this.storage.perResourceSpace()) {
+                return Math.max(0L, this.capacity - this.amount);
+            }
+            long available = this.storage.space(this.index, resourceId);
+            return Math.max(0L, available - this.planned.getOrDefault(resourceId, 0L));
+        }
+
+        private void reserve(String resourceId, long outputAmount) {
+            this.planned.merge(resourceId, outputAmount, Long::sum);
+            this.id = resourceId;
+            this.amount += outputAmount;
         }
     }
 
@@ -2314,6 +2344,12 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         this.pendingResources.putAll(input.read(
                 "PendingResources",
                 Codec.unboundedMap(Codec.STRING, CompoundTag.CODEC)).orElse(Map.of()));
+        input.read("resources", CompoundTag.CODEC).ifPresent(resources -> {
+            for (String kind : resources.keySet()) {
+                resources.getCompound(kind)
+                        .ifPresent(tag -> this.pendingResources.putIfAbsent(kind, tag));
+            }
+        });
         MultiblockDefinition definition = this.definition();
         if (definition != null) {
             this.menuLayout = MultiblockMenuLayout.create(definition);
@@ -2337,14 +2373,6 @@ public class MultiblockControllerBlockEntity extends BlockEntity implements Worl
         } else {
             this.pendingFluid = input.read("fluid", CompoundTag.CODEC).orElse(null);
         }
-        if (!this.resourceStorages.isEmpty()) {
-            input.child("resources").ifPresent(resources -> {
-                for (Map.Entry<String, MultiblockResourceStorage> entry : this.resourceStorages.entrySet()) {
-                    resources.child(entry.getKey()).ifPresent(entry.getValue()::deserialize);
-                }
-            });
-        }
-
         if (this.level != null && this.level.isClientSide()) {
             this.updateClientCache();
             ClientMultiblockModelData.requestRefresh(this);

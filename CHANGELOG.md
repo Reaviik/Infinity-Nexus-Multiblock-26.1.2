@@ -4,6 +4,18 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+## <span style="color:#2DC26B;">` V: 1.1.6`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Support resource list
+- Support for Thaumaturge addon
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.1.5`</span>
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Save / Load resource in multiblock tank
+
+---
 
 ## <span style="color:#2DC26B;">` V: 1.1.4`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>

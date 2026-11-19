@@ -75,7 +75,7 @@ Abra `docks/builder/index.html` no navegador. O estado fica no `localStorage`; a
 2. pattern e âncora;
 3. matchers;
 4. `item_slots`, incluindo filtros, limites e `faces` de automação;
-5. capabilities, incluindo os filtros de `capability_ports`;
+5. capabilities de energia, fluidos, chemical, mana e essentia, incluindo os filtros de `capability_ports`;
 6. controller;
 7. GUI customizada;
 8. sons `processing`/`finish`, com seletor de sons vanilla ou ID próprio;
@@ -85,7 +85,7 @@ Abra `docks/builder/index.html` no navegador. O estado fica no `localStorage`; a
 
 A etapa 08 usa o catálogo `docks/builder/data/minecraft_sounds.json`, gerado a partir do `sounds.json` do Minecraft 26.1.2, e aceita qualquer `namespace:path` custom. Sons só tocam em máquinas `type=recipe`.
 
-A etapa 09 edita receitas separadas em `data/<namespace>/recipe/<arquivo>.json`. Ingredientes usam uma linha por item/tag; fluidos usam `fluido quantidade`. O `type` da receita precisa ser o mesmo `recipe_type` da máquina. O JEI é gerado pelo runtime a partir do controller, não existe JSON extra de JEI.
+A etapa 09 edita receitas separadas em `data/<namespace>/recipe/<arquivo>.json`. Ingredientes usam uma linha por item/tag; fluidos, chemicals e mana usam `recurso quantidade`; essentia usa `thaumaturge:<aspecto> quantidade`. O `type` da receita precisa ser o mesmo `recipe_type` da máquina. O JEI é gerado pelo runtime a partir do controller, não existe JSON extra de JEI.
 
 A etapa 10 edita `extends`/`family`, `template` e `overrides`; o pai é resolvido pelo loader, não pelo builder. A revisão mostra os caminhos de definição, receitas e assets esperados, mas o builder não cria PNGs, modelos, blockstates ou classes Java para controllers externos.
 

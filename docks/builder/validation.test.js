@@ -1966,6 +1966,369 @@ test("receita chemical rejeita tank desconhecido e falta de capability", () => {
   assert.equal(result.checks.find((check) => check.id === "recipes").ok, false);
 });
 
+test("capabilities mana exportam tanque, porta e gui tipada", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 500000;
+    value.capabilityPorts = V.createCapabilityPorts();
+    value.capabilityPorts.mana = ["C"];
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  const built = V.buildDefinition(state);
+  assert.deepEqual(built.capabilities.mana, {
+    capacity: 500000,
+    max_receive: 1000000,
+    max_extract: 1000000
+  });
+  assert.deepEqual(built.capability_ports.mana, ["C"]);
+
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:mana_machine",
+    type: "storage",
+    capabilities: { mana: { capacity: 250000 } },
+    capability_ports: { mana: ["C"] },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+  assert.equal(imported.state.capabilities.mana.capacity, 250000);
+  assert.equal(imported.state.capabilities.mana.maxReceive, 250000);
+  assert.equal(imported.state.capabilities.mana.maxExtract, 250000);
+  assert.deepEqual(imported.state.capabilityPorts.mana, ["C"]);
+});
+
+test("capabilities mana exportam max_receive, max_extract e port", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 500000;
+    value.capabilities.mana.maxReceive = 1000;
+    value.capabilities.mana.maxExtract = 250;
+    value.capabilities.mana.port = "C";
+    value.capabilityPorts = V.createCapabilityPorts();
+    value.capabilityPorts.mana = ["C"];
+  });
+  assert.deepEqual(V.validateState(state).errors, []);
+  assert.deepEqual(V.buildDefinition(state).capabilities.mana, {
+    capacity: 500000,
+    max_receive: 1000,
+    max_extract: 250,
+    port: "C"
+  });
+
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:mana_limits",
+    type: "storage",
+    capabilities: {
+      mana: { capacity: 250000, max_receive: 0, max_extract: 50, port: "C" }
+    },
+    capability_ports: { mana: ["C"] },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+  assert.equal(imported.state.capabilities.mana.maxReceive, 0);
+  assert.equal(imported.state.capabilities.mana.maxExtract, 50);
+  assert.equal(imported.state.capabilities.mana.port, "C");
+  assert.deepEqual(V.buildDefinition(imported.state).capabilities.mana, {
+    capacity: 250000,
+    max_receive: 0,
+    max_extract: 50,
+    port: "C"
+  });
+});
+
+test("capabilities mana rejeita capacity invalida", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 0;
+  });
+  assert.ok(codes(V.validateState(state)).includes("mana.capacity.invalid"));
+});
+
+test("capabilities mana rejeita max e port invalidos", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.maxReceive = -1;
+    value.capabilities.mana.maxExtract = "abc";
+    value.capabilities.mana.port = "not a port";
+  });
+  const found = codes(V.validateState(state));
+  assert.ok(found.includes("mana.max_receive.invalid"));
+  assert.ok(found.includes("mana.max_extract.invalid"));
+  assert.ok(found.includes("mana.port.invalid"));
+});
+
+test("gui mana_bar exporta chemical_bar e importa resource_bar legado", () => {
+  const state = withGuiState((value) => {
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 1000000;
+    const manaBar = V.createGuiElement("mana_bar");
+    manaBar.x = 158;
+    manaBar.y = 16;
+    value.gui.elements.push(manaBar);
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.equal(V.guiProblem(state.gui, state), "");
+  const built = V.buildDefinition(state).gui.elements.find((element) => element.capability === "mana");
+  assert.equal(built.type, "chemical_bar");
+  assert.equal(built.slot, "mana");
+
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:mana_gui",
+    type: "storage",
+    capabilities: { mana: { capacity: 1000000 } },
+    gui: {
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "resource_bar", x: 158, y: 16, width: 8, height: 54, capability: "mana", slot: "mana" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+  assert.equal(imported.state.gui.elements[0].type, "mana_bar");
+  assert.equal(V.buildDefinition(imported.state).gui.elements[0].type, "chemical_bar");
+  assert.ok(imported.notes.some((note) => note.message.includes("resource_bar")));
+});
+
+test("receita mana exporta input e output tipados", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 10000;
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "mana_forge";
+    recipe.inputRows = [V.createRecipeInputRow("mana")];
+    recipe.inputRows[0].amount = "5000";
+    recipe.outputRows = [V.createRecipeOutputRow("mana")];
+    recipe.outputRows[0].amount = "1000";
+    recipe.outputRows[0].chance = "0.5";
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.ok(result.checks.find((check) => check.id === "recipes").ok);
+  const built = V.buildRecipe(state.recipes[0], {
+    definitionId: state.namespace + ":" + state.path
+  });
+  assert.deepEqual(built.inputs, [{ type: "mana", amount: 5000 }]);
+  assert.deepEqual(built.outputs, [{ type: "mana", amount: 1000, chance: 0.5 }]);
+});
+
+test("receita mana rejeita falta de tanque e capacity insuficiente", () => {
+  const withoutTank = withState((value) => {
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "mana_sem_tanque";
+    recipe.inputRows = [V.createRecipeInputRow("mana")];
+    recipe.inputRows[0].amount = "1000";
+    recipe.outputRows = [V.createRecipeOutputRow("mana")];
+    recipe.outputRows[0].amount = "500";
+  });
+  const withoutTankCodes = codes(V.validateState(withoutTank));
+  assert.ok(withoutTankCodes.includes("recipe.input.mana_tank"));
+  assert.ok(withoutTankCodes.includes("recipe.output.mana_tank"));
+
+  const insufficient = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.mana = V.createMana();
+    value.capabilities.mana.capacity = 500;
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "mana_insuficiente";
+    recipe.inputRows = [V.createRecipeInputRow("mana")];
+    recipe.inputRows[0].amount = "1000";
+    recipe.outputRows = [V.createRecipeOutputRow("mana")];
+    recipe.outputRows[0].amount = "600";
+  });
+  const insufficientCodes = codes(V.validateState(insufficient));
+  assert.ok(insufficientCodes.includes("recipe.input.mana_capacity"));
+  assert.ok(insufficientCodes.includes("recipe.output.mana_capacity"));
+});
+
+test("capabilities essentia exportam range e porta", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.capabilities.essentia.range = 16;
+    value.capabilityPorts = V.createCapabilityPorts();
+    value.capabilityPorts.essentia = ["C"];
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  const built = V.buildDefinition(state);
+  assert.deepEqual(built.capabilities.essentia, { range: 16 });
+  assert.deepEqual(built.capability_ports.essentia, ["C"]);
+
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "thaumaturge:essentia_machine",
+    type: "storage",
+    capabilities: { essentia: { range: 20 } },
+    capability_ports: { essentia: ["C"] },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+  assert.equal(imported.state.capabilities.essentia.range, 20);
+  assert.deepEqual(imported.state.capabilityPorts.essentia, ["C"]);
+  assert.deepEqual(V.buildDefinition(imported.state).capabilities.essentia, { range: 20 });
+});
+
+test("capabilities essentia usa range padrao e rejeita range invalido", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "thaumaturge:essentia_default",
+    type: "storage",
+    capabilities: { essentia: {} },
+    pattern: { anchor: "C", layers: [["ICI"]], matchers: { I: "minecraft:iron_block" } }
+  });
+  assert.equal(imported.state.capabilities.essentia.range, 12);
+  assert.deepEqual(V.buildDefinition(imported.state).capabilities.essentia, { range: 12 });
+
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.capabilities.essentia.range = 33;
+  });
+  assert.ok(codes(V.validateState(state)).includes("essentia.range.invalid"));
+});
+
+test("gui resource_list exporta e valida capability essentia", () => {
+  const state = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.gui = V.parseGui({
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "resource_list", x: 8, y: 16, width: 36, height: 54, capability: "essentia" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    }, []);
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.equal(V.guiProblem(state.gui, state), "");
+  assert.deepEqual(V.buildDefinition(state).gui.elements[0], {
+    type: "resource_list",
+    x: 8,
+    y: 16,
+    width: 36,
+    height: 54,
+    capability: "essentia"
+  });
+
+  const withoutCapability = withState((value) => {
+    value.gui = V.parseGui({
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "resource_list", x: 8, y: 16, width: 36, height: 54, capability: "essentia" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    }, []);
+  });
+  assert.ok(codes(V.validateState(withoutCapability)).includes("gui.essentia.required"));
+
+  const wrongSize = withState((value) => {
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.gui = V.parseGui({
+      width: 176,
+      height: 166,
+      elements: [
+        { type: "resource_list", x: 8, y: 16, width: 20, height: 54, capability: "essentia" },
+        { type: "player_inventory", x: 8, y: 84 }
+      ]
+    }, []);
+  });
+  assert.ok(codes(V.validateState(wrongSize)).includes("gui.element.size.invalid"));
+});
+
+test("receita essentia exporta input e output tipados", () => {
+  const state = withState((value) => {
+    value.type = "recipe";
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "essentia_converter";
+    recipe.inputRows = [V.createRecipeInputRow("essentia")];
+    recipe.inputRows[0].resource = "thaumaturge:aer";
+    recipe.inputRows[0].amount = "8";
+    recipe.outputRows = [V.createRecipeOutputRow("essentia")];
+    recipe.outputRows[0].resource = "thaumaturge:lux";
+    recipe.outputRows[0].amount = "4";
+    recipe.outputRows[0].tank = "jars";
+    recipe.outputRows[0].chance = "0.5";
+  });
+  const result = V.validateState(state);
+  assert.deepEqual(result.errors, []);
+  assert.ok(result.checks.find((check) => check.id === "recipes").ok);
+  const built = V.buildRecipe(state.recipes[0], {
+    definitionId: state.namespace + ":" + state.path
+  });
+  assert.deepEqual(built.inputs, [
+    { type: "essentia", aspect: "thaumaturge:aer", amount: 8 }
+  ]);
+  assert.deepEqual(built.outputs, [
+    { type: "essentia", aspect: "thaumaturge:lux", amount: 4, tank: "jars", chance: 0.5 }
+  ]);
+
+  const notes = [];
+  const parsed = V.parseRecipe({
+    inputs: [{ type: "essentia", aspect: "thaumaturge:ignis", amount: 6 }],
+    outputs: [{ type: "essentia", aspect: "thaumaturge:aqua", amount: 3, tank: "jars" }]
+  }, notes);
+  assert.deepEqual(notes, []);
+  assert.equal(parsed.inputRows[0].resource, "thaumaturge:ignis");
+  assert.equal(parsed.inputRows[0].amount, "6");
+  assert.equal(parsed.outputRows[0].resource, "thaumaturge:aqua");
+  assert.equal(parsed.outputRows[0].tank, "jars");
+});
+
+test("receita essentia rejeita falta de capability, aspecto e tanque", () => {
+  const withoutCapability = withState((value) => {
+    value.type = "recipe";
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "essentia_sem_capability";
+    recipe.inputRows = [V.createRecipeInputRow("essentia")];
+    recipe.inputRows[0].resource = "thaumaturge:aer";
+    recipe.outputRows = [V.createRecipeOutputRow("essentia")];
+    recipe.outputRows[0].resource = "thaumaturge:lux";
+  });
+  const withoutCapabilityCodes = codes(V.validateState(withoutCapability));
+  assert.ok(withoutCapabilityCodes.includes("recipe.input.essentia_tank"));
+  assert.ok(withoutCapabilityCodes.includes("recipe.output.essentia_tank"));
+
+  const invalid = withState((value) => {
+    value.type = "recipe";
+    value.capabilities = V.createCapabilities();
+    value.capabilities.essentia = V.createEssentia();
+    value.recipes = [V.createRecipe()];
+    const recipe = value.recipes[0];
+    recipe.file = "essentia_invalida";
+    recipe.inputRows = [V.createRecipeInputRow("essentia")];
+    recipe.inputRows[0].resource = "minecraft:aer";
+    recipe.outputRows = [V.createRecipeOutputRow("essentia")];
+    recipe.outputRows[0].resource = "thaumaturge:lux";
+    recipe.outputRows[0].tank = "other";
+  });
+  const invalidCodes = codes(V.validateState(invalid));
+  assert.ok(invalidCodes.includes("recipe.input.essentia_invalid"));
+  assert.ok(invalidCodes.includes("recipe.output.essentia_tank_unknown"));
+});
+
 if (process.exitCode) {
   console.error("Falhas encontradas.");
 } else {

@@ -2,6 +2,7 @@ package com.Infinity.Nexus.Multiblock.compat.jei;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +19,9 @@ import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout.SlotPlacement;
 import com.Infinity.Nexus.Multiblock.api.SlotPosition;
 import com.Infinity.Nexus.Multiblock.api.addon.JeiResourceBridge;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
+import com.Infinity.Nexus.Multiblock.api.addon.client.MultiblockClientAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.client.ResourceListRenderer;
 import com.Infinity.Nexus.Multiblock.client.MultiblockGuiRender;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
 import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
@@ -42,6 +46,7 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.AbstractRecipeCategory;
 import mezz.jei.api.recipe.types.IRecipeType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
@@ -318,6 +323,19 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
             }
         }
 
+        int energyInput = recipe.energy();
+        if (energyInput > 0) {
+            int energyCapacity = definition.energy()
+                    .map(energy -> energy.capacity())
+                    .orElse(energyInput);
+            for (GuiElement element : layout.elements()) {
+                if (element.type() == GuiElementType.ENERGY_BAR
+                        && fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
+                    builder.addWidget(new EnergyBarWidget(layout, element, energyInput, energyCapacity));
+                }
+            }
+        }
+
         GuiElement arrow = findElement(layout, GuiElementType.ARROW).orElse(null);
         if (arrow != null) {
             SlotPosition arrowPosition = arrowPosition(arrow);
@@ -353,6 +371,25 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
                         && fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
                     builder.addWidget(new EntityWidget(List.copyOf(entityPreviews), element));
                 }
+            }
+        }
+
+        Map<String, Map<String, Long>> resourceInputs = new LinkedHashMap<>();
+        for (MultiblockRecipeIngredient.Resource input : recipe.resourceInputs()) {
+            resourceInputs.computeIfAbsent(input.typeId(), key -> new LinkedHashMap<>())
+                    .merge(input.id(), (long) input.amount(), Long::sum);
+        }
+        if (!resourceInputs.isEmpty()) {
+            for (GuiElement element : layout.elements()) {
+                if (element.type() != GuiElementType.RESOURCE_LIST
+                        || !fits(element.x(), element.y() + HEADER, element.width(), element.height())) {
+                    continue;
+                }
+                Map<String, Long> entries = resourceInputs.get(element.capability());
+                if (entries == null || entries.isEmpty()) {
+                    continue;
+                }
+                builder.addWidget(new ResourceListWidget(entries, element));
             }
         }
 
@@ -661,6 +698,167 @@ public final class MultiblockJeiCategory extends AbstractRecipeCategory<Multiblo
     }
 
     private record EntityPreview(EntityType<?> entityType, boolean output, int count, float chance) {
+    }
+
+    private record ResourcePreview(String id, long amount) {
+    }
+
+    private static final class ResourceListWidget implements IRecipeWidget {
+        private final List<ResourcePreview> previews;
+        private final GuiElement element;
+
+        private ResourceListWidget(Map<String, Long> entries, GuiElement element) {
+            List<ResourcePreview> previews = new ArrayList<>(entries.size());
+            entries.forEach((id, amount) -> previews.add(new ResourcePreview(id, amount)));
+            this.previews = List.copyOf(previews);
+            this.element = element;
+        }
+
+        @Override
+        public ScreenPosition getPosition() {
+            return new ScreenPosition(this.element.x(), this.element.y() + HEADER);
+        }
+
+        @Override
+        public ScreenRectangle getScreenRectangle() {
+            return new ScreenRectangle(this.element.x(), this.element.y() + HEADER,
+                    this.element.width(), this.element.height());
+        }
+
+        @Override
+        public void drawWidget(GuiGraphicsExtractor graphics, double mouseX, double mouseY) {
+            int width = this.element.width();
+            int height = this.element.height();
+            MultiblockGuiRender.drawFrame(graphics, 0, 0, width, height);
+            ResourceListRenderer renderer = MultiblockClientAddons.resourceListRenderer(this.element.capability());
+            MultiblockResourceType type = MultiblockAddons.get(this.element.capability());
+            Font font = Minecraft.getInstance().font;
+            int cellSize = GuiElement.RESOURCE_LIST_CELL_SIZE;
+            int columns = Math.max(1, width / cellSize);
+            for (int index = 0; index < this.previews.size(); index++) {
+                int column = index % columns;
+                int row = index / columns;
+                int cellX = column * cellSize;
+                int cellY = row * cellSize;
+                if (cellX + cellSize > width || cellY + cellSize > height) {
+                    break;
+                }
+                ResourcePreview preview = this.previews.get(index);
+                int iconX = cellX + 1;
+                int iconY = cellY + 1;
+                int iconSize = Math.min(16, cellSize - 2);
+                if (renderer != null) {
+                    renderer.renderIcon(graphics, iconX, iconY, iconSize, preview.id(), preview.amount());
+                } else {
+                    int color = type == null ? 0xFFFFFFFF : type.color(preview.id());
+                    graphics.fill(iconX, iconY, iconX + iconSize, iconY + iconSize, color);
+                }
+                String text = MultiblockGuiRender.formatCount(preview.amount());
+                int textWidth = font.width(text);
+                int textX = cellX + cellSize - textWidth - 1;
+                int textY = cellY + cellSize - 9;
+                graphics.fill(textX - 1, textY - 1, cellX + cellSize - 1, cellY + cellSize - 1, 0x99000000);
+                graphics.text(font, Component.literal(text), textX, textY, 0xFFFFFFFF, true);
+            }
+            MultiblockGuiRender.drawBorder(graphics, 0, 0, width, height);
+        }
+
+        @Override
+        public void getTooltip(ITooltipBuilder tooltip, double mouseX, double mouseY) {
+            int cellSize = GuiElement.RESOURCE_LIST_CELL_SIZE;
+            int columns = Math.max(1, this.element.width() / cellSize);
+            for (int index = 0; index < this.previews.size(); index++) {
+                int column = index % columns;
+                int row = index / columns;
+                int cellX = column * cellSize;
+                int cellY = row * cellSize;
+                if (mouseX < cellX || mouseX >= cellX + cellSize
+                        || mouseY < cellY || mouseY >= cellY + cellSize) {
+                    continue;
+                }
+                ResourcePreview preview = this.previews.get(index);
+                MultiblockResourceType type = MultiblockAddons.get(this.element.capability());
+                tooltip.add(type == null
+                        ? Component.literal(preview.id())
+                        : type.displayName(preview.id()));
+                tooltip.add(Component.translatable(
+                        "gui.infinity_nexus_multiblock.jei.amount", preview.amount()));
+                return;
+            }
+        }
+    }
+
+    private static final class EnergyBarWidget implements IRecipeWidget {
+        private final MultiblockMenuLayout layout;
+        private final GuiElement element;
+        private final int energy;
+        private final int capacity;
+
+        private EnergyBarWidget(MultiblockMenuLayout layout, GuiElement element, int energy, int capacity) {
+            this.layout = layout;
+            this.element = element;
+            this.energy = Math.max(0, energy);
+            this.capacity = Math.max(1, capacity);
+        }
+
+        @Override
+        public ScreenPosition getPosition() {
+            return new ScreenPosition(this.element.x(), this.element.y() + HEADER);
+        }
+
+        @Override
+        public ScreenRectangle getScreenRectangle() {
+            return new ScreenRectangle(this.element.x(), this.element.y() + HEADER,
+                    this.element.width(), this.element.height());
+        }
+
+        @Override
+        public void drawWidget(GuiGraphicsExtractor graphics, double mouseX, double mouseY) {
+            int width = this.element.width();
+            int height = this.element.height();
+            drawBase(graphics, width, height);
+            int innerWidth = Math.max(0, width - BAR_INSET * 2);
+            int innerHeight = Math.max(0, height - BAR_INSET * 2);
+            boolean vertical = isVertical(this.element.direction());
+            int length = vertical ? innerHeight : innerWidth;
+            int filled = Math.max(1, Math.min(length,
+                    (int) ((long) Math.min(this.energy, this.capacity) * length / this.capacity)));
+            switch (this.element.direction()) {
+                case UP -> graphics.fill(BAR_INSET, BAR_INSET + innerHeight - filled,
+                        BAR_INSET + innerWidth, BAR_INSET + innerHeight, this.element.color());
+                case DOWN -> graphics.fill(BAR_INSET, BAR_INSET,
+                        BAR_INSET + innerWidth, BAR_INSET + filled, this.element.color());
+                case LEFT -> graphics.fill(BAR_INSET + innerWidth - filled, BAR_INSET,
+                        BAR_INSET + innerWidth, BAR_INSET + innerHeight, this.element.color());
+                case RIGHT -> graphics.fill(BAR_INSET, BAR_INSET,
+                        BAR_INSET + filled, BAR_INSET + innerHeight, this.element.color());
+            }
+        }
+
+        private void drawBase(GuiGraphicsExtractor graphics, int width, int height) {
+            Identifier texture = this.layout.texture();
+            if (texture == null || MultiblockMenuLayout.DEFAULT_TEXTURE.equals(texture)) {
+                MultiblockGuiRender.drawFrame(graphics, 0, 0, width, height);
+                return;
+            }
+            int u = this.element.u() >= 0 ? this.element.u() : this.element.x();
+            int v = this.element.v() >= 0 ? this.element.v() : this.element.y();
+            graphics.blit(RenderPipelines.GUI_TEXTURED, texture, 0, 0, u, v,
+                    width, height, width, height,
+                    this.layout.textureWidth(), this.layout.textureHeight());
+        }
+
+        @Override
+        public void getTooltip(ITooltipBuilder tooltip, double mouseX, double mouseY) {
+            tooltip.add(Component.translatable("gui.infinity_nexus_multiblock.energy"));
+            tooltip.add(Component.translatable(
+                    "gui.infinity_nexus_multiblock.jei.energy_stored",
+                    this.energy, this.capacity));
+        }
+
+        private static boolean isVertical(GuiDirection direction) {
+            return direction == GuiDirection.UP || direction == GuiDirection.DOWN;
+        }
     }
 
     private static final class ProgressBarWidget implements IRecipeWidget {

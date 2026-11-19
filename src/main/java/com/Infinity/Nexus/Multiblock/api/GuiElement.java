@@ -31,6 +31,7 @@ public record GuiElement(
     public static final int DEFAULT_ENERGY_COLOR = 0xFFFF0000;
     public static final int DEFAULT_PROGRESS_COLOR = 0xFF00AA00;
     public static final int ENTITY_CELL_SIZE = 18;
+    public static final int RESOURCE_LIST_CELL_SIZE = 18;
 
     public static final Codec<GuiElement> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             GuiElementType.CODEC.fieldOf("type").forGetter(GuiElement::type),
@@ -156,5 +157,10 @@ public record GuiElement(
     public static GuiElement entity(int x, int y, int width, int height) {
         return new GuiElement(GuiElementType.ENTITY, x, y, width, height, "", "", "", DEFAULT_TEXT_COLOR, false,
                 GuiDirection.UP, -1, -1);
+    }
+
+    public static GuiElement resourceList(int x, int y, int width, int height, String kind) {
+        return new GuiElement(GuiElementType.RESOURCE_LIST, x, y, width, height, "", "", kind,
+                DEFAULT_TEXT_COLOR, false, GuiDirection.UP, -1, -1);
     }
 }

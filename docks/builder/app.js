@@ -52,7 +52,7 @@
     { id: "pattern", label: "Pattern", hint: "camadas e âncora" },
     { id: "matchers", label: "Matchers", hint: "blocos e tags" },
     { id: "slots", label: "Slots", hint: "item_slots" },
-    { id: "capabilities", label: "Capabilities", hint: "energia, fluidos e portas" },
+    { id: "capabilities", label: "Capabilities", hint: "energia, tanques, essentia e portas" },
     { id: "controller", label: "Controller", hint: "texturas, item e receita" },
     { id: "gui", label: "GUI", hint: "layout e elementos" },
     { id: "sounds", label: "Sons", hint: "vanilla ou custom" },
@@ -1735,7 +1735,7 @@
   function capabilitySummaryText() {
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
     if (!capabilities) {
-      return "Sem capabilities; a máquina não expõe energia/fluidos/chemicals.";
+      return "Sem capabilities; a máquina não expõe energia/fluidos/chemicals/mana/essentia.";
     }
     var energy = isPlainObject(capabilities.energy) ? capabilities.energy : null;
     var fluids = Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
@@ -1743,11 +1743,22 @@
       && Array.isArray(capabilities.chemical.tanks)
       ? capabilities.chemical.tanks
       : [];
+    var mana = isPlainObject(capabilities.mana) ? capabilities.mana : null;
+    var essentia = isPlainObject(capabilities.essentia) ? capabilities.essentia : null;
     var energyText = energy
       ? "Energia " + (trim(energy.id) || "sem id") + " · " + capabilityFieldValue(energy.capacity) + " FE"
       : "Sem energia";
+    var manaText = "Sem mana";
+    if (mana) {
+      manaText = "Mana " + capabilityFieldValue(mana.capacity) +
+        " (R " + capabilityFieldValue(mana.maxReceive) +
+        " / E " + capabilityFieldValue(mana.maxExtract) + ")" +
+        (trim(mana.port) ? " · porta " + trim(mana.port) : "");
+    }
     return energyText + " · " + (fluids.length === 1 ? "1 tanque" : fluids.length + " tanques") +
-      " · " + (chemicalTanks.length === 1 ? "1 tanque chemical" : chemicalTanks.length + " tanques chemical");
+      " · " + (chemicalTanks.length === 1 ? "1 tanque chemical" : chemicalTanks.length + " tanques chemical") +
+      " · " + manaText +
+      " · " + (essentia ? "Essentia raio " + capabilityFieldValue(essentia.range) : "Sem essentia");
   }
 
   function updateCapabilitySummary() {
@@ -1771,7 +1782,7 @@
     }
     var parts = [];
     var availability = V.capabilityPortAvailability(state.capabilities);
-    ["item", "energy", "fluid", "chemical"].forEach(function (key) {
+    ["item", "energy", "fluid", "chemical", "mana", "essentia"].forEach(function (key) {
       if (!availability[key] || !Array.isArray(ports[key])) {
         return;
       }
@@ -1800,6 +1811,12 @@
     if (!availability.chemical) {
       unavailable.push("chemical (adicione um tanque chemical)");
     }
+    if (!availability.mana) {
+      unavailable.push("mana (adicione um tanque de mana)");
+    }
+    if (!availability.essentia) {
+      unavailable.push("essentia (adicione a capability essentia)");
+    }
     var hint = $("capabilityPortAvailability");
     if (hint) {
       hint.textContent = unavailable.length > 0
@@ -1812,7 +1829,7 @@
   function renderCapabilityPorts() {
     var ports = isPlainObject(state.capabilityPorts) ? state.capabilityPorts : null;
     var availability = V.capabilityPortAvailability(state.capabilities);
-    ["item", "energy", "fluid", "chemical"].forEach(function (key) {
+    ["item", "energy", "fluid", "chemical", "mana", "essentia"].forEach(function (key) {
       var input = document.querySelector("[data-capability-port='" + key + "']");
       if (!input) {
         return;
@@ -1936,6 +1953,46 @@
       (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
   }
 
+  function manaCardHtml(mana) {
+    var problem = V.manaProblem(mana);
+    var serialized = JSON.stringify(V.buildMana(mana));
+    var summary = capabilityFieldValue(mana.capacity) + " de capacidade · recebe " +
+      capabilityFieldValue(mana.maxReceive) + " · extrai " + capabilityFieldValue(mana.maxExtract) +
+      (trim(mana.port) ? " · porta " + trim(mana.port) : "");
+    return "<div class='slot-card capability-card" + (problem ? " is-problem" : "") +
+      "' data-capability='mana'><div class='matcher-head'><span class='slot-index'>M</span>" +
+      "<div class='matcher-title'><strong>Tanque de mana</strong><small>" + esc(summary) +
+      "</small></div><button type='button' class='btn btn-tiny btn-danger matcher-remove' data-action='remove-mana'>remover</button></div>" +
+      "<div class='capability-form'>" +
+      "<div class='field'><label>capacity</label><input type='number' data-mana-field='capacity' min='1' step='1' value='" +
+      esc(capabilityFieldValue(mana.capacity)) + "' placeholder='1000000'></div>" +
+      "<div class='field'><label>max_receive</label><input type='number' data-mana-field='maxReceive' min='0' step='1' value='" +
+      esc(capabilityFieldValue(mana.maxReceive)) + "' placeholder='1000000'></div>" +
+      "<div class='field'><label>max_extract</label><input type='number' data-mana-field='maxExtract' min='0' step='1' value='" +
+      esc(capabilityFieldValue(mana.maxExtract)) + "' placeholder='1000000'></div>" +
+      "<div class='field'><label>port</label><input type='text' data-mana-field='port' value='" +
+      esc(mana.port || "") + "' placeholder='key do pattern (ex.: M)' spellcheck='false' autocomplete='off'></div>" +
+      "</div><code class='matcher-json slot-json'>" + esc(serialized === undefined ? "null" : serialized) +
+      "</code><p class='matcher-feedback capability-feedback" + (problem ? " is-error" : "") + "'" +
+      (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
+  }
+
+  function essentiaCardHtml(essentia) {
+    var problem = V.essentiaProblem(essentia);
+    var serialized = JSON.stringify(V.buildEssentia(essentia));
+    var summary = "raio " + (capabilityFieldValue(essentia.range) || "12") + " blocos";
+    return "<div class='slot-card capability-card" + (problem ? " is-problem" : "") +
+      "' data-capability='essentia'><div class='matcher-head'><span class='slot-index'>E</span>" +
+      "<div class='matcher-title'><strong>Essentia</strong><small>" + esc(summary) +
+      "</small></div><button type='button' class='btn btn-tiny btn-danger matcher-remove' data-action='remove-essentia'>remover</button></div>" +
+      "<div class='capability-form'>" +
+      "<div class='field'><label>range</label><input type='number' data-essentia-field='range' min='1' max='32' step='1' value='" +
+      esc(capabilityFieldValue(essentia.range)) + "' placeholder='12'></div>" +
+      "</div><code class='matcher-json slot-json'>" + esc(serialized === undefined ? "null" : serialized) +
+      "</code><p class='matcher-feedback capability-feedback" + (problem ? " is-error" : "") + "'" +
+      (problem ? "" : " hidden") + ">" + esc(problem || "") + "</p></div>";
+  }
+
   function renderCapabilities() {
     renderCapabilityPorts();
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
@@ -1946,12 +2003,14 @@
     if (!capabilities) {
       summary.textContent = capabilitySummaryText();
       empty.hidden = false;
-      empty.textContent = "Nenhuma capability definida. Adicione energia ou um tanque para expor FE/fluidos/chemicals.";
+      empty.textContent = "Nenhuma capability definida. Adicione energia, tanque ou essentia para expor FE/fluidos/chemicals/mana/essentia.";
       list.innerHTML = "";
       removeButton.disabled = true;
       $("addEnergyBtn").disabled = false;
       $("addFluidBtn").disabled = false;
       $("addChemicalBtn").disabled = false;
+      $("addManaBtn").disabled = false;
+      $("addEssentiaBtn").disabled = false;
       return;
     }
     var energy = isPlainObject(capabilities.energy) ? capabilities.energy : null;
@@ -1960,6 +2019,8 @@
       && Array.isArray(capabilities.chemical.tanks)
       ? capabilities.chemical.tanks
       : [];
+    var mana = isPlainObject(capabilities.mana) ? capabilities.mana : null;
+    var essentia = isPlainObject(capabilities.essentia) ? capabilities.essentia : null;
     var parts = [];
     if (energy) {
       parts.push(energyCardHtml(energy));
@@ -1974,16 +2035,24 @@
         parts.push(chemicalCardHtml(chemical, index));
       }
     });
+    if (mana) {
+      parts.push(manaCardHtml(mana));
+    }
+    if (essentia) {
+      parts.push(essentiaCardHtml(essentia));
+    }
     summary.textContent = capabilitySummaryText();
     empty.hidden = parts.length > 0;
     empty.textContent = parts.length === 0
-      ? "Capabilities ativas, mas sem energia ou tanques. Use + energia, + tanque ou + chemical."
+      ? "Capabilities ativas, mas sem energia ou tanques. Use + energia, + tanque, + chemical, + mana ou + essentia."
       : "";
     list.innerHTML = parts.join("");
     removeButton.disabled = false;
     $("addEnergyBtn").disabled = Boolean(energy);
     $("addFluidBtn").disabled = false;
     $("addChemicalBtn").disabled = false;
+    $("addManaBtn").disabled = Boolean(mana);
+    $("addEssentiaBtn").disabled = Boolean(essentia);
   }
 
   function energyCardElement() {
@@ -1996,6 +2065,14 @@
 
   function chemicalCardElement(index) {
     return document.querySelector(".capability-card[data-chemical-index='" + index + "']");
+  }
+
+  function manaCardElement() {
+    return document.querySelector(".capability-card[data-capability='mana']");
+  }
+
+  function essentiaCardElement() {
+    return document.querySelector(".capability-card[data-capability='essentia']");
   }
 
   function updateEnergyCard() {
@@ -2085,6 +2162,58 @@
     card.classList.toggle("is-problem", Boolean(problem));
   }
 
+  function updateManaCard() {
+    var card = manaCardElement();
+    var mana = isPlainObject(state.capabilities) ? state.capabilities.mana : null;
+    if (!card || !isPlainObject(mana)) {
+      return;
+    }
+    var problem = V.manaProblem(mana);
+    var feedback = card.querySelector(".capability-feedback");
+    if (feedback) {
+      feedback.className = "matcher-feedback capability-feedback" + (problem ? " is-error" : "");
+      feedback.textContent = problem || "";
+      feedback.hidden = !problem;
+    }
+    var jsonElement = card.querySelector(".slot-json");
+    if (jsonElement) {
+      var serialized = JSON.stringify(V.buildMana(mana));
+      jsonElement.textContent = serialized === undefined ? "null" : serialized;
+    }
+    var title = card.querySelector(".matcher-title small");
+    if (title) {
+      title.textContent = capabilityFieldValue(mana.capacity) + " de capacidade · recebe " +
+        capabilityFieldValue(mana.maxReceive) + " · extrai " + capabilityFieldValue(mana.maxExtract) +
+        (trim(mana.port) ? " · porta " + trim(mana.port) : "");
+    }
+    card.classList.toggle("is-problem", Boolean(problem));
+  }
+
+  function updateEssentiaCard() {
+    var card = essentiaCardElement();
+    var essentia = isPlainObject(state.capabilities) ? state.capabilities.essentia : null;
+    if (!card || !isPlainObject(essentia)) {
+      return;
+    }
+    var problem = V.essentiaProblem(essentia);
+    var feedback = card.querySelector(".capability-feedback");
+    if (feedback) {
+      feedback.className = "matcher-feedback capability-feedback" + (problem ? " is-error" : "");
+      feedback.textContent = problem || "";
+      feedback.hidden = !problem;
+    }
+    var jsonElement = card.querySelector(".slot-json");
+    if (jsonElement) {
+      var serialized = JSON.stringify(V.buildEssentia(essentia));
+      jsonElement.textContent = serialized === undefined ? "null" : serialized;
+    }
+    var title = card.querySelector(".matcher-title small");
+    if (title) {
+      title.textContent = "raio " + (capabilityFieldValue(essentia.range) || "12") + " blocos";
+    }
+    card.classList.toggle("is-problem", Boolean(problem));
+  }
+
   function nextChemicalId() {
     var used = {};
     var capabilities = isPlainObject(state.capabilities) ? state.capabilities : null;
@@ -2160,6 +2289,54 @@
     focusElement(input || card, false);
   }
 
+  function addMana() {
+    var capabilities = ensureCapabilities();
+    if (isPlainObject(capabilities.mana)) {
+      showToast("O tanque de mana ja esta definido. Remova o atual para adicionar outro.", "error");
+      return;
+    }
+    capabilities.mana = V.createMana();
+    refresh();
+    var card = manaCardElement();
+    var input = card ? card.querySelector("[data-mana-field='capacity']") : null;
+    focusElement(input || card, false);
+  }
+
+  function removeMana() {
+    if (!isPlainObject(state.capabilities) || !isPlainObject(state.capabilities.mana)) {
+      return;
+    }
+    if (!window.confirm("Remover o tanque de mana da maquina?")) {
+      return;
+    }
+    state.capabilities.mana = null;
+    refresh();
+  }
+
+  function addEssentia() {
+    var capabilities = ensureCapabilities();
+    if (isPlainObject(capabilities.essentia)) {
+      showToast("A capability essentia ja esta definida. Remova a atual para adicionar outra.", "error");
+      return;
+    }
+    capabilities.essentia = V.createEssentia();
+    refresh();
+    var card = essentiaCardElement();
+    var input = card ? card.querySelector("[data-essentia-field='range']") : null;
+    focusElement(input || card, false);
+  }
+
+  function removeEssentia() {
+    if (!isPlainObject(state.capabilities) || !isPlainObject(state.capabilities.essentia)) {
+      return;
+    }
+    if (!window.confirm("Remover a capability essentia da maquina?")) {
+      return;
+    }
+    state.capabilities.essentia = null;
+    refresh();
+  }
+
   function removeEnergy() {
     if (!isPlainObject(state.capabilities) || !isPlainObject(state.capabilities.energy)) {
       return;
@@ -2206,7 +2383,7 @@
     if (!isPlainObject(state.capabilities)) {
       return;
     }
-    if (!window.confirm("Remover todas as capabilities da máquina? Portas e receitas chemical existentes serão ignoradas.")) {
+    if (!window.confirm("Remover todas as capabilities da máquina? Portas e receitas chemical/mana/essentia existentes serão ignoradas.")) {
       return;
     }
     state.capabilities = null;
@@ -2227,6 +2404,25 @@
       }
       energy[energyField] = target.value;
       updateEnergyCard();
+      updateCapabilitySummary();
+      refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
+      return;
+    }
+    var manaField = target.getAttribute("data-mana-field");
+    var mana = isPlainObject(state.capabilities) ? state.capabilities.mana : null;
+    if (manaField && isPlainObject(mana)
+        && ["capacity", "maxReceive", "maxExtract", "port"].indexOf(manaField) !== -1) {
+      mana[manaField] = target.value;
+      updateManaCard();
+      updateCapabilitySummary();
+      refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
+      return;
+    }
+    var essentiaField = target.getAttribute("data-essentia-field");
+    var essentia = isPlainObject(state.capabilities) ? state.capabilities.essentia : null;
+    if (essentiaField && isPlainObject(essentia) && essentiaField === "range") {
+      essentia.range = target.value;
+      updateEssentiaCard();
       updateCapabilitySummary();
       refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
       return;
@@ -2263,6 +2459,14 @@
   function onCapabilityListClick(event) {
     if (closest(event.target, "[data-action='remove-energy']")) {
       removeEnergy();
+      return;
+    }
+    if (closest(event.target, "[data-action='remove-mana']")) {
+      removeMana();
+      return;
+    }
+    if (closest(event.target, "[data-action='remove-essentia']")) {
+      removeEssentia();
       return;
     }
     var chemicalAction = closest(event.target, "[data-action='remove-chemical']");
@@ -2677,6 +2881,8 @@
     energy_bar: "barra de energia",
     fluid_bar: "barra de fluido",
     chemical_bar: "barra de chemical",
+    mana_bar: "barra de mana",
+    resource_list: "lista de essentia",
     progress_bar: "barra de progresso",
     arrow: "seta",
     entity: "entidade"
@@ -2687,7 +2893,7 @@
   }
 
   function guiElementUsesSize(type) {
-    return ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow", "entity"].indexOf(type) !== -1;
+    return ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity"].indexOf(type) !== -1;
   }
 
   function guiElementUsesText(type) {
@@ -2695,7 +2901,7 @@
   }
 
   function guiElementUsesDirection(type) {
-    return ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow"].indexOf(type) !== -1;
+    return ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "progress_bar", "arrow"].indexOf(type) !== -1;
   }
 
   function guiElementUsesTexture(type) {
@@ -2727,6 +2933,8 @@
       energy_bar: Boolean(capabilities && isPlainObject(capabilities.energy)),
       fluid_bar: fluids.length > 0,
       chemical_bar: chemicalTanks.length > 0,
+      mana_bar: Boolean(capabilities && isPlainObject(capabilities.mana)),
+      resource_list: Boolean(capabilities && isPlainObject(capabilities.essentia)),
       progress_bar: hasRecipe,
       arrow: hasRecipe,
       entity: hasRecipe
@@ -2742,6 +2950,12 @@
     }
     if (type === "chemical_bar") {
       return "Adicione um tanque chemical na etapa 05 para liberar chemical_bar.";
+    }
+    if (type === "mana_bar") {
+      return "Adicione um tanque de mana na etapa 05 para liberar mana_bar.";
+    }
+    if (type === "resource_list") {
+      return "Adicione a capability essentia na etapa 05 para liberar resource_list.";
     }
     if (type === "progress_bar" || type === "arrow" || type === "entity") {
       return "Use type=recipe para liberar progress_bar, arrow e entity.";
@@ -2762,6 +2976,12 @@
     }
     if (!availability.chemical_bar) {
       missing.push("chemical_bar (tanque chemical)");
+    }
+    if (!availability.mana_bar) {
+      missing.push("mana_bar (tanque de mana)");
+    }
+    if (!availability.resource_list) {
+      missing.push("resource_list (essentia)");
     }
     if (!availability.progress_bar) {
       missing.push("progress_bar/arrow/entity (recipe)");
@@ -2898,6 +3118,11 @@
     } else if (type === "chemical_bar") {
       html += guiInputField("capability", "capability", element.capability, "text", undefined, "chemical");
       html += guiInputField("slot", "slot", element.slot, "text", undefined, "id do tanque chemical");
+    } else if (type === "mana_bar") {
+      html += guiInputField("capability", "capability", element.capability || "mana", "text", undefined, "mana");
+      html += guiInputField("slot", "slot", element.slot || "mana", "text", undefined, "mana");
+    } else if (type === "resource_list") {
+      html += guiInputField("capability", "capability", element.capability || "essentia", "text", undefined, "essentia");
     }
     return html + "</div>";
   }
@@ -2986,8 +3211,11 @@
     if (type === "slot") {
       return { width: 18, height: 18 };
     }
-    if (type === "energy_bar" || type === "fluid_bar" || type === "chemical_bar") {
+    if (type === "energy_bar" || type === "fluid_bar" || type === "chemical_bar" || type === "mana_bar") {
       return { width: safeWidth || 12, height: safeHeight || 52 };
+    }
+    if (type === "resource_list") {
+      return { width: safeWidth || 36, height: safeHeight || 54 };
     }
     if (type === "progress_bar") {
       return { width: safeWidth || 57, height: safeHeight || 3 };
@@ -3020,6 +3248,12 @@
     if (type === "chemical_bar") {
       return trim(element.slot) || "chemical";
     }
+    if (type === "mana_bar") {
+      return trim(element.slot) || "mana";
+    }
+    if (type === "resource_list") {
+      return trim(element.capability) || "essentia";
+    }
     if (type === "progress_bar") {
       return "progresso";
     }
@@ -3043,7 +3277,7 @@
     var offsetY = type === "player_inventory" ? -1 : 0;
     var style = "left:" + (x === null ? 0 : x + offsetX) + "px;top:" + (y === null ? 0 : y + offsetY) +
       "px;width:" + size.width + "px;height:" + size.height + "px;";
-    var isBar = ["energy_bar", "fluid_bar", "chemical_bar", "progress_bar"].indexOf(type) !== -1;
+    var isBar = ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "progress_bar"].indexOf(type) !== -1;
     var textColor = guiPreviewColor(element.color);
     if (textColor && (type === "title" || type === "text" || type === "player_inventory")) {
       style += "--element-text:" + textColor + ";";
@@ -3054,6 +3288,8 @@
       var barColor = guiPreviewColor(element.color);
       if (!barColor && type === "energy_bar") {
         barColor = "#ff0000";
+      } else if (!barColor && type === "mana_bar") {
+        barColor = "#00aaff";
       } else if (!barColor && type === "progress_bar") {
         barColor = "#00aa00";
       }
@@ -3860,8 +4096,8 @@
 
   function recipeRowTypes(isOutput) {
     return isOutput
-      ? ["item", "fluid", "entity", "energy"]
-      : ["item", "fluid", "entity", "energy"];
+      ? ["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"]
+      : ["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"];
   }
 
   function recipeRowTypeAvailable(type, availability, isOutput) {
@@ -3870,6 +4106,15 @@
     }
     if (type === "fluid") {
       return availability.fluid;
+    }
+    if (type === "chemical") {
+      return availability.chemical;
+    }
+    if (type === "mana") {
+      return availability.mana;
+    }
+    if (type === "essentia") {
+      return availability.essentia;
     }
     if (type === "energy") {
       return availability.energy;
@@ -3905,6 +4150,7 @@
     var amountField = "";
     var componentsField = "";
     var spawnField = "";
+    var tankField = "";
     var chanceField = "";
     if (kind === "item") {
       resourceField = "<label class='field'><span>id / tag</span>" +
@@ -3925,6 +4171,34 @@
       amountField = "<label class='field'><span>quantidade (mB)</span>" +
         "<input " + field + "='amount' type='number' min='1' step='1' value='" +
         esc(row.amount) + "'></label>";
+    } else if (kind === "chemical") {
+      resourceField = "<label class='field'><span>chemical / tag</span>" +
+        "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.resource) + "' placeholder='mekanism:hydrogen'></label>";
+      amountField = "<label class='field'><span>quantidade</span>" +
+        "<input " + field + "='amount' type='number' min='1' step='1' value='" +
+        esc(row.amount) + "'></label>";
+      if (isOutput) {
+        tankField = "<label class='field'><span>tank</span>" +
+          "<input " + field + "='tank' type='text' spellcheck='false' autocomplete='off' " +
+          "value='" + esc(row.tank) + "' placeholder='id do tanque chemical'></label>";
+      }
+    } else if (kind === "mana") {
+      amountField = "<label class='field'><span>mana</span>" +
+        "<input " + field + "='amount' type='number' min='1' step='1' value='" +
+        esc(row.amount) + "'></label>";
+    } else if (kind === "essentia") {
+      resourceField = "<label class='field'><span>aspecto</span>" +
+        "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
+        "value='" + esc(row.resource) + "' placeholder='thaumaturge:aer'></label>";
+      amountField = "<label class='field'><span>quantidade</span>" +
+        "<input " + field + "='amount' type='number' min='1' step='1' value='" +
+        esc(row.amount) + "'></label>";
+      if (isOutput) {
+        tankField = "<label class='field'><span>tank</span>" +
+          "<input " + field + "='tank' type='text' spellcheck='false' autocomplete='off' " +
+          "value='" + esc(row.tank) + "' placeholder='jars'></label>";
+      }
     } else if (kind === "entity") {
       resourceField = "<label class='field'><span>id / tag</span>" +
         "<input " + field + "='resource' type='text' spellcheck='false' autocomplete='off' " +
@@ -3952,7 +4226,7 @@
       "<button type='button' class='btn btn-tiny btn-danger' data-action='remove-" + section +
       "'>remover</button></div>" +
       "<div class='recipe-entry-grid'>" + typeField + resourceField + amountField +
-      spawnField + chanceField + "</div>" + componentsField + "</div>";
+      spawnField + tankField + chanceField + "</div>" + componentsField + "</div>";
   }
 
   function recipeCardElement(index) {
@@ -3985,6 +4259,21 @@
     })) {
       notices.push("Fluidos ignorados: esta maquina nao tem tanque.");
     }
+    if (!availability.chemical && inputRows.concat(outputRows).some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "chemical";
+    })) {
+      notices.push("Chemicals ignorados: esta maquina nao tem tanque chemical.");
+    }
+    if (!availability.mana && inputRows.concat(outputRows).some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "mana";
+    })) {
+      notices.push("Mana ignorada: esta maquina nao tem capabilities.mana.");
+    }
+    if (!availability.essentia && inputRows.concat(outputRows).some(function (row) {
+      return V.recipeRowKind(row && row.kind) === "essentia";
+    })) {
+      notices.push("Essentia ignorada: esta maquina nao tem capabilities.essentia.");
+    }
     if (!availability.energy && inputRows.concat(outputRows).some(function (row) {
       return V.recipeRowKind(row && row.kind) === "energy";
     })) {
@@ -3999,12 +4288,12 @@
       ? inputRows.map(function (row, rowIndex) {
         return recipeRowHtml(row, rowIndex, false, availability);
       }).join("")
-      : "<div class='recipe-entry-empty'>Nenhum input. Adicione item, fluido, entidade ou energia.</div>";
+      : "<div class='recipe-entry-empty'>Nenhum input. Adicione item, fluido, chemical, mana, essentia, entidade ou energia.</div>";
     var outputRowsHtml = outputRows.length > 0
       ? outputRows.map(function (row, rowIndex) {
         return recipeRowHtml(row, rowIndex, true, availability);
       }).join("")
-      : "<div class='recipe-entry-empty'>Nenhum output. Adicione item, fluido, entidade ou energia.</div>";
+      : "<div class='recipe-entry-empty'>Nenhum output. Adicione item, fluido, chemical, mana, essentia, entidade ou energia.</div>";
     var inputAddHtml = "<div class='recipe-add-row'>" +
       "<select data-recipe-add-input aria-label='Tipo de input'>" +
       recipeAddOptions(availability, false) + "</select>" +
@@ -4135,7 +4424,7 @@
       return null;
     }
     var type = trim(parsed.type).toLowerCase();
-    if (["item", "fluid", "entity", "energy"].indexOf(type) === -1) {
+    if (["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"].indexOf(type) === -1) {
       type = "";
     }
     var components = parsed.components;
@@ -4160,6 +4449,9 @@
     } else if (typeof parsed.items === "string" && trim(parsed.items)) {
       source = "ingredient";
       resource = trim(parsed.items);
+    } else if (typeof parsed.aspect === "string" && trim(parsed.aspect)) {
+      source = "entry";
+      resource = trim(parsed.aspect);
     } else if (typeof parsed.id === "string" && trim(parsed.id)) {
       source = "entry";
       resource = trim(parsed.id);
@@ -4180,6 +4472,7 @@
       count: parsed.count,
       amount: parsed.amount,
       spawn: typeof parsed.spawn === "string" ? trim(parsed.spawn) : "",
+      tank: typeof parsed.tank === "string" ? trim(parsed.tank) : "",
       chance: parsed.chance
     };
   }
@@ -4209,6 +4502,19 @@
         row.amount = String(amount);
       } else if (!row.amount) {
         row.amount = "1000";
+      }
+    } else if (kind === "chemical" || kind === "mana" || kind === "essentia") {
+      var resourceAmount = parseIntStrict(parsed.amount);
+      if (resourceAmount === null) {
+        resourceAmount = parseIntStrict(parsed.count);
+      }
+      if (resourceAmount !== null && resourceAmount > 0) {
+        row.amount = String(resourceAmount);
+      } else if (!row.amount) {
+        row.amount = kind === "essentia" ? "8" : "1000";
+      }
+      if (kind === "essentia" && isOutput && parsed.tank) {
+        row.tank = parsed.tank;
       }
     } else if (kind === "entity") {
       row.spawn = parsed.spawn || row.spawn || "";
@@ -5577,6 +5883,8 @@
     $("addEnergyBtn").addEventListener("click", addEnergy);
     $("addFluidBtn").addEventListener("click", addFluidTank);
     $("addChemicalBtn").addEventListener("click", addChemicalTank);
+    $("addManaBtn").addEventListener("click", addMana);
+    $("addEssentiaBtn").addEventListener("click", addEssentia);
     $("removeCapabilitiesBtn").addEventListener("click", removeCapabilities);
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);

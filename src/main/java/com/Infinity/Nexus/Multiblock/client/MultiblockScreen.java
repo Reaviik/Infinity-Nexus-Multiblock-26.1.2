@@ -2,6 +2,7 @@ package com.Infinity.Nexus.Multiblock.client;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,7 +14,12 @@ import com.Infinity.Nexus.Multiblock.api.GuiElementType;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceStorage;
+import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
+import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
+import com.Infinity.Nexus.Multiblock.api.addon.client.MultiblockClientAddons;
+import com.Infinity.Nexus.Multiblock.api.addon.client.ResourceListRenderer;
 import com.Infinity.Nexus.Multiblock.block.MultiblockEnergyStorage;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
@@ -61,6 +67,7 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
 
     private final Map<String, FluidTankRenderer> fluidRenderers = new HashMap<>();
     private final Map<GuiElement, Integer> entityPages = new HashMap<>();
+    private final Map<GuiElement, Integer> resourceListPages = new HashMap<>();
     private List<MultiblockControllerBlockEntity.AreaEntityCount> cachedAreaEntityCounts = List.of();
     private List<EntityType<?>> cachedRecipeEntityTypes = List.of();
     private List<EntityPreview> entityPreviews = List.of();
@@ -146,6 +153,27 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                         this.entityPages.getOrDefault(element, 0) + (scrollY < 0 ? 1 : -1),
                         pageCount);
                 this.entityPages.put(element, page);
+                return true;
+            }
+            for (GuiElement element : this.menu.layout().elements()) {
+                if (element.type() != GuiElementType.RESOURCE_LIST) {
+                    continue;
+                }
+                int x = this.leftPos + element.x();
+                int y = this.topPos + element.y();
+                if (!isMouseOver((int) mouseX, (int) mouseY, x, y, element.width(), element.height())) {
+                    continue;
+                }
+                int entries = resourceEntries(element).size();
+                int pageCount = MultiblockGuiRender.resourcePageCount(
+                        element.width(), element.height(), entries);
+                if (pageCount <= 1) {
+                    return false;
+                }
+                int page = Math.floorMod(
+                        this.resourceListPages.getOrDefault(element, 0) + (scrollY < 0 ? 1 : -1),
+                        pageCount);
+                this.resourceListPages.put(element, page);
                 return true;
             }
         }
@@ -256,6 +284,7 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         }
 
         drawBars(graphics, x, y, layout);
+        drawResourceLists(graphics, x, y, layout);
         drawEntityElements(graphics, x, y, layout);
     }
 
@@ -381,6 +410,28 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                                 ItemStack.EMPTY, mouseX, mouseY);
                     }
                 }
+            } else if (element.type() == GuiElementType.RESOURCE_LIST) {
+                List<StoredResource> entries = resourceEntries(element);
+                int page = resourceListPage(element, entries.size());
+                MultiblockGuiRender.ResourcePage pageInfo = MultiblockGuiRender.resourcePage(
+                        x, y, element.width(), element.height(), entries.size(), page);
+                for (int index = 0; index < pageInfo.cells().size(); index++) {
+                    MultiblockGuiRender.ResourceCell cell = pageInfo.cells().get(index);
+                    if (!isMouseOver(mouseX, mouseY, cell.x(), cell.y(), cell.width(), cell.height())) {
+                        continue;
+                    }
+                    StoredResource entry = entries.get(pageInfo.firstIndex() + index);
+                    MultiblockResourceType type = MultiblockAddons.get(element.capability());
+                    Component name = type == null
+                            ? Component.literal(entry.id())
+                            : type.displayName(entry.id());
+                    List<Component> lines = List.of(
+                            name,
+                            Component.translatable("gui.infinity_nexus_multiblock.jei.amount", entry.amount()));
+                    graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY,
+                            mouseX, mouseY);
+                    return;
+                }
             } else if (element.type() == GuiElementType.PROGRESS_BAR || element.type() == GuiElementType.ARROW) {
                 int max = this.menu.maxProgress();
                 int progress = this.menu.progress();
@@ -455,6 +506,78 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                     element.width(), element.height(), pageInfo);
             MultiblockGuiRender.drawBorder(graphics, x, y, element.width(), element.height());
         }
+    }
+
+    private void drawResourceLists(GuiGraphicsExtractor graphics, int originX, int originY,
+            MultiblockMenuLayout layout) {
+        for (GuiElement element : layout.elements()) {
+            if (element.type() != GuiElementType.RESOURCE_LIST) {
+                continue;
+            }
+            int x = originX + element.x();
+            int y = originY + element.y();
+            MultiblockGuiRender.drawFrame(graphics, x, y, element.width(), element.height());
+            List<StoredResource> entries = resourceEntries(element);
+            int page = resourceListPage(element, entries.size());
+            MultiblockGuiRender.ResourcePage pageInfo = MultiblockGuiRender.resourcePage(
+                    x, y, element.width(), element.height(), entries.size(), page);
+            ResourceListRenderer renderer = MultiblockClientAddons.resourceListRenderer(element.capability());
+            MultiblockResourceType type = MultiblockAddons.get(element.capability());
+            for (int index = 0; index < pageInfo.cells().size(); index++) {
+                StoredResource entry = entries.get(pageInfo.firstIndex() + index);
+                MultiblockGuiRender.ResourceCell cell = pageInfo.cells().get(index);
+                int iconX = cell.x() + 1;
+                int iconY = cell.y() + 1;
+                int iconSize = Math.min(16, Math.min(cell.width(), cell.height()) - 2);
+                if (renderer != null) {
+                    renderer.renderIcon(graphics, iconX, iconY, iconSize, entry.id(), entry.amount());
+                } else {
+                    int color = type == null ? 0xFFFFFFFF : type.color(entry.id());
+                    graphics.fill(iconX, iconY, iconX + iconSize, iconY + iconSize, color);
+                }
+                String text = MultiblockGuiRender.formatCount(entry.amount());
+                int textWidth = this.font.width(text);
+                int textX = cell.x() + cell.width() - textWidth - 1;
+                int textY = cell.y() + cell.height() - 9;
+                graphics.fill(textX - 1, textY - 1, cell.x() + cell.width() - 1,
+                        cell.y() + cell.height() - 1, 0x99000000);
+                graphics.text(this.font, Component.literal(text), textX, textY, 0xFFFFFFFF, true);
+            }
+            MultiblockGuiRender.drawPageIndicator(graphics, this.font, x, y,
+                    element.width(), element.height(), pageInfo);
+            MultiblockGuiRender.drawBorder(graphics, x, y, element.width(), element.height());
+        }
+    }
+
+    private List<StoredResource> resourceEntries(GuiElement element) {
+        MultiblockResourceStorage storage = this.menu.blockEntity().resourceStorage(element.capability());
+        if (storage == null) {
+            return List.of();
+        }
+        Map<String, Long> totals = new LinkedHashMap<>();
+        for (StoredResource resource : storage.snapshot()) {
+            if (!element.capability().equals(resource.kind())
+                    || resource.id().isBlank()
+                    || resource.amount() <= 0L) {
+                continue;
+            }
+            totals.merge(resource.id(), resource.amount(), Long::sum);
+        }
+        List<StoredResource> entries = new ArrayList<>(totals.size());
+        totals.forEach((id, amount) -> entries.add(
+                new StoredResource(element.capability(), "list", id, amount)));
+        return List.copyOf(entries);
+    }
+
+    private int resourceListPage(GuiElement element, int count) {
+        int pageCount = MultiblockGuiRender.resourcePageCount(element.width(), element.height(), count);
+        if (pageCount <= 1) {
+            this.resourceListPages.remove(element);
+            return 0;
+        }
+        int page = Math.floorMod(this.resourceListPages.getOrDefault(element, 0), pageCount);
+        this.resourceListPages.put(element, page);
+        return page;
     }
 
     private int entityPage(GuiElement element, int count) {

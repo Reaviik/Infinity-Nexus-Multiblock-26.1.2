@@ -28,6 +28,36 @@ public final class MultiblockGuiRender {
     private static final float ENTITY_SCALE_FACTOR = 0.72F;
     private static final float ENTITY_OFFSET_Y = 0.0625F;
     private static final float ENTITY_VIEW_X_ANGLE = 1.15F;
+    private static final String[] COUNT_SUFFIXES = {"k", "M", "G", "T"};
+
+    public static String formatCount(long amount) {
+        if (amount < 0L) {
+            return "-" + formatCount(-amount);
+        }
+        if (amount < 1_000L) {
+            return Long.toString(amount);
+        }
+        double value = amount;
+        int suffix = -1;
+        while (value >= 1_000.0D && suffix < COUNT_SUFFIXES.length - 1) {
+            value /= 1_000.0D;
+            suffix++;
+        }
+        if (value < 10.0D) {
+            long rounded = Math.round(value * 10.0D);
+            long whole = rounded / 10L;
+            long decimal = rounded % 10L;
+            return decimal == 0L
+                    ? whole + COUNT_SUFFIXES[suffix]
+                    : whole + "." + decimal + COUNT_SUFFIXES[suffix];
+        }
+        long rounded = Math.round(value);
+        if (rounded >= 1_000L && suffix < COUNT_SUFFIXES.length - 1) {
+            suffix++;
+            return "1" + COUNT_SUFFIXES[suffix];
+        }
+        return rounded + COUNT_SUFFIXES[suffix];
+    }
     private static final float ENTITY_VIEW_Y_ANGLE = 0.45F;
 
     private MultiblockGuiRender() {
@@ -106,10 +136,20 @@ public final class MultiblockGuiRender {
 
     public static void drawPageIndicator(GuiGraphicsExtractor graphics, Font font,
             int x, int y, int width, int height, EntityPage page) {
-        if (page.pageCount() <= 1) {
+        drawPageIndicator(graphics, font, x, y, width, height, page.page(), page.pageCount());
+    }
+
+    public static void drawPageIndicator(GuiGraphicsExtractor graphics, Font font,
+            int x, int y, int width, int height, ResourcePage page) {
+        drawPageIndicator(graphics, font, x, y, width, height, page.page(), page.pageCount());
+    }
+
+    private static void drawPageIndicator(GuiGraphicsExtractor graphics, Font font,
+            int x, int y, int width, int height, int page, int pageCount) {
+        if (pageCount <= 1) {
             return;
         }
-        String text = (page.page() + 1) + "/" + page.pageCount();
+        String text = (page + 1) + "/" + pageCount;
         int textWidth = font.width(text);
         int textX = x + width - textWidth - 2;
         int textY = y + height - 9;
@@ -117,9 +157,52 @@ public final class MultiblockGuiRender {
         graphics.text(font, Component.literal(text), textX, textY, 0xFFFFFFFF, true);
     }
 
+    public static int resourcePageCount(int width, int height, int count) {
+        if (count <= 0 || width <= 0 || height <= 0) {
+            return 0;
+        }
+        if (count == 1) {
+            return 1;
+        }
+        int capacity = capacity(width, height, GuiElement.RESOURCE_LIST_CELL_SIZE);
+        return (count + capacity - 1) / capacity;
+    }
+
+    public static ResourcePage resourcePage(int x, int y, int width, int height, int count, int page) {
+        if (count <= 0 || width <= 0 || height <= 0) {
+            return new ResourcePage(0, 0, 0, 0, List.of());
+        }
+        if (count == 1) {
+            return new ResourcePage(0, 1, 1, 0, List.of(new ResourceCell(x, y, width, height)));
+        }
+
+        int cellSize = GuiElement.RESOURCE_LIST_CELL_SIZE;
+        int columns = Math.max(1, width / cellSize);
+        int capacity = capacity(width, height, cellSize);
+        int pages = (count + capacity - 1) / capacity;
+        int currentPage = Math.floorMod(page, pages);
+        int firstIndex = currentPage * capacity;
+        int pageSize = Math.min(capacity, count - firstIndex);
+        List<ResourceCell> cells = new ArrayList<>(pageSize);
+        for (int index = 0; index < pageSize; index++) {
+            int column = index % columns;
+            int row = index / columns;
+            cells.add(new ResourceCell(
+                    x + column * cellSize,
+                    y + row * cellSize,
+                    cellSize,
+                    cellSize));
+        }
+        return new ResourcePage(currentPage, pages, pageSize, firstIndex, List.copyOf(cells));
+    }
+
     private static int capacity(int width, int height) {
-        int columns = Math.max(1, width / GuiElement.ENTITY_CELL_SIZE);
-        int rows = Math.max(1, height / GuiElement.ENTITY_CELL_SIZE);
+        return capacity(width, height, GuiElement.ENTITY_CELL_SIZE);
+    }
+
+    private static int capacity(int width, int height, int cellSize) {
+        int columns = Math.max(1, width / cellSize);
+        int rows = Math.max(1, height / cellSize);
         return columns * rows;
     }
 
@@ -157,5 +240,11 @@ public final class MultiblockGuiRender {
     }
 
     public record EntityPage(int page, int pageCount, int pageSize, int firstIndex, List<EntityCell> cells) {
+    }
+
+    public record ResourceCell(int x, int y, int width, int height) {
+    }
+
+    public record ResourcePage(int page, int pageCount, int pageSize, int firstIndex, List<ResourceCell> cells) {
     }
 }

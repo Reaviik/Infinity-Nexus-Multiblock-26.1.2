@@ -18,17 +18,23 @@
   var ITEM_SLOT_KEYS = ["id", "role", "filter", "limit", "faces", "x", "y"];
   var DIRECTIONS = ["north", "south", "east", "west", "up", "down"];
   var CAPABILITY_MAX = 2147483647;
-  var CAPABILITY_PORT_KEYS = ["item", "energy", "fluid", "chemical"];
+  var CAPABILITY_PORT_KEYS = ["item", "energy", "fluid", "chemical", "mana", "essentia"];
   var ENERGY_KEYS = ["id", "capacity", "max_receive", "max_extract"];
   var FLUID_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter", "port"];
   var CHEMICAL_KEYS = ["id", "capacity", "max_receive", "max_extract", "filter"];
+  var MANA_KEYS = ["capacity", "max_receive", "max_extract", "port"];
+  var ESSENTIA_KEYS = ["range"];
+  var ESSENTIA_DEFAULT_RANGE = 12;
+  var ESSENTIA_MAX_RANGE = 32;
+  var ESSENTIA_TANK_ID = "jars";
+  var RESOURCE_KINDS = ["essentia"];
   var CONTROLLER_FACES = ["front", "back", "left", "right", "top", "bottom"];
   var CONTROLLER_KEYS = ["block", "textures", "formed_textures", "particle", "light_level"];
   var TEXTURE_SET_KEYS = ["front", "side", "top", "bottom", "particle"];
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
   var CONTROLLER_RECIPE_MAX_SIZE = 3;
   var MAX_LIGHT_LEVEL = 15;
-  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "chemical_bar", "progress_bar", "arrow", "entity"];
+  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity"];
   var GUI_ELEMENT_KEYS = ["type", "x", "y", "width", "height", "text", "slot", "capability", "color", "shadow", "direction", "u", "v"];
   var GUI_DIRECTIONS = ["up", "down", "left", "right"];
   var GUI_KEYS = ["texture", "width", "height", "texture_width", "texture_height", "elements"];
@@ -39,6 +45,7 @@
   var GUI_MAX_SIZE = 4096;
   var GUI_SLOT_SIZE = 18;
   var GUI_ENTITY_CELL_SIZE = 18;
+  var GUI_RESOURCE_LIST_CELL_SIZE = 18;
   var GUI_PLAYER_WIDTH = 162;
   var GUI_PLAYER_HEIGHT = 76;
   var KNOWN_ROOT_KEYS = [
@@ -416,6 +423,12 @@
     if (kind === "chemical") {
       return { kind: "chemical", resource: "", amount: "1000" };
     }
+    if (kind === "mana") {
+      return { kind: "mana", amount: "1000" };
+    }
+    if (kind === "essentia") {
+      return { kind: "essentia", resource: "", amount: "8" };
+    }
     if (kind === "entity") {
       return { kind: "entity", resource: "", spawn: "", count: "1" };
     }
@@ -431,6 +444,12 @@
     }
     if (kind === "chemical") {
       return { kind: "chemical", resource: "", amount: "1000", tank: "", chance: "1" };
+    }
+    if (kind === "mana") {
+      return { kind: "mana", amount: "1000", chance: "1" };
+    }
+    if (kind === "essentia") {
+      return { kind: "essentia", resource: "", amount: "8", tank: "", chance: "1" };
     }
     if (kind === "entity") {
       return { kind: "entity", resource: "", spawn: "", count: "1", chance: "1" };
@@ -453,7 +472,9 @@
 
   function recipeRowKind(value) {
     var kind = trimString(value) || "item";
-    return ["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1 ? "item" : kind;
+    return ["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"].indexOf(kind) === -1
+      ? "item"
+      : kind;
   }
 
   function parseRecipe(raw, notes) {
@@ -495,6 +516,13 @@
             ? parseRecipeResource(entry.ingredient)
             : parseRecipeResource(entry.chemical);
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+        } else if (kind === "mana") {
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+        } else if (kind === "essentia") {
+          row.resource = typeof entry.aspect === "string"
+            ? entry.aspect
+            : parseRecipeResource(entry.ingredient);
+          row.amount = entry.amount === undefined ? "8" : String(entry.amount);
         } else if (kind === "entity") {
           row.resource = entityResourceFromEntry(entry);
           if (typeof entry.id === "string" && typeof entry.tag === "string"
@@ -564,6 +592,16 @@
           row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
           row.tank = typeof entry.tank === "string" ? entry.tank : "";
           row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        } else if (kind === "mana") {
+          row.amount = entry.amount === undefined ? "1000" : String(entry.amount);
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
+        } else if (kind === "essentia") {
+          row.resource = typeof entry.aspect === "string"
+            ? entry.aspect
+            : (typeof entry.id === "string" ? entry.id : "");
+          row.amount = entry.amount === undefined ? "8" : String(entry.amount);
+          row.tank = typeof entry.tank === "string" ? entry.tank : "";
+          row.chance = entry.chance === undefined ? "1" : String(entry.chance);
         } else if (kind === "entity") {
           row.resource = entityResourceFromEntry(entry);
           if (typeof entry.id === "string" && typeof entry.tag === "string"
@@ -588,11 +626,20 @@
           ? (typeof raw.output.chemical === "string"
             ? raw.output.chemical
             : (typeof raw.output.id === "string" ? raw.output.id : ""))
-          : (typeof raw.output.id === "string" ? raw.output.id : "");
+          : outputKind === "essentia"
+            ? (typeof raw.output.aspect === "string"
+              ? raw.output.aspect
+              : (typeof raw.output.id === "string" ? raw.output.id : ""))
+            : (typeof raw.output.id === "string" ? raw.output.id : "");
       if (outputKind === "fluid") {
         outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
       } else if (outputKind === "chemical") {
         outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
+        outputRow.tank = typeof raw.output.tank === "string" ? raw.output.tank : "";
+      } else if (outputKind === "mana") {
+        outputRow.amount = raw.output.amount === undefined ? "1000" : String(raw.output.amount);
+      } else if (outputKind === "essentia") {
+        outputRow.amount = raw.output.amount === undefined ? "8" : String(raw.output.amount);
         outputRow.tank = typeof raw.output.tank === "string" ? raw.output.tank : "";
       } else if (outputKind === "entity") {
         outputRow.spawn = typeof raw.output.spawn === "string" ? raw.output.spawn : "";
@@ -730,6 +777,8 @@
     var fluids = capabilities && Array.isArray(capabilities.fluids) ? capabilities.fluids : [];
     var chemical = capabilities && isPlainObject(capabilities.chemical) ? capabilities.chemical : null;
     var chemicalTanks = chemical && Array.isArray(chemical.tanks) ? chemical.tanks : [];
+    var mana = capabilities && isPlainObject(capabilities.mana) ? capabilities.mana : null;
+    var essentia = capabilities && isPlainObject(capabilities.essentia) ? capabilities.essentia : null;
     var slots = Array.isArray(source.itemSlots) ? source.itemSlots : [];
     var inputSlots = slots.filter(function (slot) {
       return isPlainObject(slot) && slot.role === "input";
@@ -745,6 +794,10 @@
       energy: !!(capabilities && isPlainObject(capabilities.energy)),
       fluid: fluids.length > 0,
       chemical: chemicalTanks.length > 0,
+      mana: Boolean(mana),
+      manaCapacity: mana ? toIntOr(mana.capacity, 0) : 0,
+      essentia: Boolean(essentia),
+      essentiaTankIds: [ESSENTIA_TANK_ID],
       itemInput: inputSlots.length > 0,
       itemOutput: outputSlots.length > 0,
       symbols: recipePatternSymbols(source),
@@ -820,6 +873,11 @@
     return isPlainObject(value);
   }
 
+  function validEssentiaAspect(value) {
+    var aspect = trimString(value);
+    return isValidIdentifier(aspect) && aspect.indexOf("thaumaturge:") === 0;
+  }
+
   function recipeChance(value) {
     if (value === undefined || value === null || value === "") {
       return 1;
@@ -864,6 +922,19 @@
           return;
         }
         inputs.push({ type: "chemical", chemical: chemicalId, amount: chemicalAmount });
+      } else if (kind === "mana") {
+        var manaAmount = toIntOr(row.amount, 1000);
+        if (manaAmount < 1) {
+          return;
+        }
+        inputs.push({ type: "mana", amount: manaAmount });
+      } else if (kind === "essentia") {
+        var aspect = trimString(row.resource);
+        var essentiaAmount = toIntOr(row.amount, 8);
+        if (!aspect || essentiaAmount < 1) {
+          return;
+        }
+        inputs.push({ type: "essentia", aspect: aspect, amount: essentiaAmount });
       } else if (kind === "entity") {
         var entitySelector = parseEntitySelector(row.resource);
         if (entitySelector === null) {
@@ -941,6 +1012,31 @@
           chemicalOutput.chance = chance;
         }
         outputs.push(chemicalOutput);
+      } else if (kind === "mana") {
+        var manaAmount = toIntOr(row.amount, 1000);
+        if (manaAmount < 1) {
+          return;
+        }
+        var manaOutput = { type: "mana", amount: manaAmount };
+        if (chance !== 1) {
+          manaOutput.chance = chance;
+        }
+        outputs.push(manaOutput);
+      } else if (kind === "essentia") {
+        var aspect = trimString(row.resource);
+        var essentiaAmount = toIntOr(row.amount, 8);
+        if (!aspect || essentiaAmount < 1) {
+          return;
+        }
+        var essentiaOutput = { type: "essentia", aspect: aspect, amount: essentiaAmount };
+        var essentiaTank = trimString(row.tank);
+        if (essentiaTank) {
+          essentiaOutput.tank = essentiaTank;
+        }
+        if (chance !== 1) {
+          essentiaOutput.chance = chance;
+        }
+        outputs.push(essentiaOutput);
       } else if (kind === "entity") {
         var entitySelector = parseEntitySelector(row.resource);
         var spawn = trimString(row.spawn);
@@ -1012,6 +1108,7 @@
     var chemicalCapacities = Array.isArray(settings.chemicalCapacities) ? settings.chemicalCapacities : null;
     var chemicalTankIds = Array.isArray(settings.chemicalTankIds) ? settings.chemicalTankIds : [];
     var energyCapacity = toInt(settings.energyCapacity);
+    var manaCapacity = toInt(settings.manaCapacity);
 
     function addRecipeIssue(code, severity, index, field, message) {
       issues.push(issue(code, severity, "recipes", "recipe:" + index + ":" + field, message));
@@ -1079,6 +1176,7 @@
       var fluidInputTotal = 0;
       var chemicalInputRows = 0;
       var chemicalInputTotal = 0;
+      var manaInputTotal = 0;
       inputRows.forEach(function (row, rowIndex) {
         var field = "input:" + rowIndex + ":";
         if (!isPlainObject(row)) {
@@ -1086,9 +1184,9 @@
           return;
         }
         var kind = trimString(row.kind) || "item";
-        if (["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1) {
+        if (["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"].indexOf(kind) === -1) {
           addRecipeIssue("recipe.input.type", "error", index, field + "kind",
-            "input.kind precisa ser item, fluid, chemical, entity ou energy.");
+            "input.kind precisa ser item, fluid, chemical, mana, essentia, entity ou energy.");
           return;
         }
         if (kind === "item") {
@@ -1163,6 +1261,33 @@
                 "A quantidade do input de chemical excede a capacidade de um unico tanque.");
             }
           }
+        } else if (kind === "mana") {
+          if (!availabilityAllowed(settings, "mana")) {
+            addRecipeIssue("recipe.input.mana_tank", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.mana.");
+          }
+          var manaAmount = toInt(row.amount);
+          if (manaAmount === null || manaAmount < 1 || manaAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.input.mana_invalid", "error", index, field + "amount",
+              "mana precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            manaInputTotal += manaAmount;
+          }
+        } else if (kind === "essentia") {
+          if (!availabilityAllowed(settings, "essentia")) {
+            addRecipeIssue("recipe.input.essentia_tank", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.essentia.");
+          }
+          var aspect = trimString(row.resource);
+          if (!validEssentiaAspect(aspect)) {
+            addRecipeIssue("recipe.input.essentia_invalid", "error", index, field + "resource",
+              "O aspecto precisa ser thaumaturge:<aspect>.");
+          }
+          var essentiaAmount = toInt(row.amount);
+          if (essentiaAmount === null || essentiaAmount < 1 || essentiaAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.input.essentia_amount", "error", index, field + "amount",
+              "A quantidade de essentia precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          }
         } else if (kind === "entity") {
           var entityId = trimString(row.resource);
           if (parseEntitySelector(entityId) === null) {
@@ -1201,6 +1326,7 @@
       var fluidOutputTotal = 0;
       var chemicalOutputRows = 0;
       var chemicalOutputTotal = 0;
+      var manaOutputTotal = 0;
       outputRows.forEach(function (row, rowIndex) {
         var field = "output:" + rowIndex + ":";
         if (!isPlainObject(row)) {
@@ -1208,9 +1334,9 @@
           return;
         }
         var kind = trimString(row.kind) || "item";
-        if (["item", "fluid", "chemical", "entity", "energy"].indexOf(kind) === -1) {
+        if (["item", "fluid", "chemical", "mana", "essentia", "entity", "energy"].indexOf(kind) === -1) {
           addRecipeIssue("recipe.output.type", "error", index, field + "kind",
-            "output.kind precisa ser item, fluid, chemical, entity ou energy.");
+            "output.kind precisa ser item, fluid, chemical, mana, essentia, entity ou energy.");
           return;
         }
         var chance = recipeChance(row.chance);
@@ -1286,6 +1412,39 @@
                 addRecipeIssue("recipe.output.chemical_tank_capacity", "error", index, field + "amount",
                   "A quantidade do output excede a capacidade do tanque \"" + chemicalTank + "\".");
               }
+            }
+          }
+        } else if (kind === "mana") {
+          if (!availabilityAllowed(settings, "mana")) {
+            addRecipeIssue("recipe.output.mana_tank", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.mana.");
+          }
+          var manaAmount = toInt(row.amount);
+          if (manaAmount === null || manaAmount < 1 || manaAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.output.mana_invalid", "error", index, field + "amount",
+              "mana precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            manaOutputTotal += manaAmount;
+          }
+        } else if (kind === "essentia") {
+          if (!availabilityAllowed(settings, "essentia")) {
+            addRecipeIssue("recipe.output.essentia_tank", "error", index, field + "kind",
+              "Esta maquina nao tem capabilities.essentia.");
+          }
+          var aspect = trimString(row.resource);
+          if (!validEssentiaAspect(aspect)) {
+            addRecipeIssue("recipe.output.essentia_invalid", "error", index, field + "resource",
+              "O aspecto precisa ser thaumaturge:<aspect>.");
+          }
+          var essentiaAmount = toInt(row.amount);
+          if (essentiaAmount === null || essentiaAmount < 1 || essentiaAmount > CAPABILITY_MAX) {
+            addRecipeIssue("recipe.output.essentia_amount", "error", index, field + "amount",
+              "A quantidade de essentia precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+          } else {
+            var essentiaTank = trimString(row.tank);
+            if (essentiaTank && essentiaTank !== ESSENTIA_TANK_ID) {
+              addRecipeIssue("recipe.output.essentia_tank_unknown", "error", index, field + "tank",
+                "O tank do output precisa ser \"" + ESSENTIA_TANK_ID + "\".");
             }
           }
         } else if (kind === "entity") {
@@ -1386,6 +1545,16 @@
             "A receita tem mais chemicals de entrada e saida do que tanques disponiveis.");
         }
       }
+      if (manaCapacity !== null) {
+        if (manaInputTotal > manaCapacity) {
+          addRecipeIssue("recipe.input.mana_capacity", "error", index, "inputs",
+            "A quantidade total de mana de input excede a capacidade do tanque de mana.");
+        }
+        if (manaOutputTotal > manaCapacity) {
+          addRecipeIssue("recipe.output.mana_capacity", "error", index, "outputs",
+            "A quantidade total de mana de output excede a capacidade do tanque de mana.");
+        }
+      }
 
       var time = toInt(recipe.time);
       if (time === null || time < 1 || time > CAPABILITY_MAX) {
@@ -1402,6 +1571,8 @@
       energy: null,
       fluids: null,
       chemical: null,
+      mana: null,
+      essentia: null,
       extras: {}
     };
   }
@@ -1412,6 +1583,8 @@
       energy: null,
       fluid: null,
       chemical: null,
+      mana: null,
+      essentia: null,
       extras: {}
     };
   }
@@ -1423,7 +1596,9 @@
       energy: Boolean(caps && isPlainObject(caps.energy)),
       fluid: Boolean(caps && Array.isArray(caps.fluids) && caps.fluids.length > 0),
       chemical: Boolean(caps && isPlainObject(caps.chemical)
-        && Array.isArray(caps.chemical.tanks) && caps.chemical.tanks.length > 0)
+        && Array.isArray(caps.chemical.tanks) && caps.chemical.tanks.length > 0),
+      mana: Boolean(caps && isPlainObject(caps.mana)),
+      essentia: Boolean(caps && isPlainObject(caps.essentia))
     };
   }
 
@@ -1476,6 +1651,23 @@
       maxReceive: 1000,
       maxExtract: 0,
       filter: "",
+      extras: {}
+    };
+  }
+
+  function createMana() {
+    return {
+      capacity: 1000000,
+      maxReceive: 1000000,
+      maxExtract: 1000000,
+      port: "",
+      extras: {}
+    };
+  }
+
+  function createEssentia() {
+    return {
+      range: ESSENTIA_DEFAULT_RANGE,
       extras: {}
     };
   }
@@ -1682,6 +1874,74 @@
     return chemical;
   }
 
+  function parseMana(value, notes) {
+    if (value === undefined) {
+      return null;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.mana invalido foi ignorado."
+      });
+      return null;
+    }
+    var mana = createMana();
+    if (value.capacity === undefined) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.mana esta sem capacity."
+      });
+    }
+    mana.capacity = parseCapabilityNumber(value.capacity, 0);
+    mana.maxReceive = value.max_receive === undefined
+      ? mana.capacity
+      : parseCapabilityNumber(value.max_receive, mana.capacity);
+    mana.maxExtract = value.max_extract === undefined
+      ? mana.capacity
+      : parseCapabilityNumber(value.max_extract, mana.capacity);
+    if (typeof value.port === "string") {
+      mana.port = value.port;
+    } else if (value.port !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.mana.port invalido foi ignorado."
+      });
+    }
+    Object.keys(value).forEach(function (key) {
+      if (!MANA_KEYS.includes(key)) {
+        mana.extras[key] = clone(value[key]);
+      }
+    });
+    return mana;
+  }
+
+  function parseEssentia(value, notes) {
+    if (value === undefined) {
+      return null;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.essentia invalido foi ignorado."
+      });
+      return null;
+    }
+    var essentia = createEssentia();
+    if (value.range === undefined) {
+      notes.push({
+        severity: "warning",
+        message: "capabilities.essentia esta sem range."
+      });
+    }
+    essentia.range = parseCapabilityNumber(value.range, ESSENTIA_DEFAULT_RANGE);
+    Object.keys(value).forEach(function (key) {
+      if (!ESSENTIA_KEYS.includes(key)) {
+        essentia.extras[key] = clone(value[key]);
+      }
+    });
+    return essentia;
+  }
+
   function parseCapabilities(value, notes) {
     if (value === undefined) {
       return null;
@@ -1699,8 +1959,11 @@
     }
     capabilities.fluids = parseFluids(value.fluids, notes);
     capabilities.chemical = parseChemical(value.chemical, notes);
+    capabilities.mana = parseMana(value.mana, notes);
+    capabilities.essentia = parseEssentia(value.essentia, notes);
     Object.keys(value).forEach(function (key) {
-      if (key !== "energy" && key !== "fluids" && key !== "chemical") {
+      if (key !== "energy" && key !== "fluids" && key !== "chemical"
+          && key !== "mana" && key !== "essentia") {
         capabilities.extras[key] = clone(value[key]);
       }
     });
@@ -1833,7 +2096,7 @@
       return "O filtro do tanque precisa ser um fluido ou tag válido.";
     }
     var port = trimString(fluid.port);
-    if (port && !validFluidPortText(port)) {
+    if (port && !validPortText(port)) {
       return "A porta do tanque precisa ser uma key do pattern, um bloco ou uma tag válida.";
     }
     return "";
@@ -1867,6 +2130,40 @@
     return "";
   }
 
+  function manaProblem(mana) {
+    if (!isPlainObject(mana)) {
+      return "Mana invalida.";
+    }
+    var problem = capabilityNumberProblem(mana.capacity, 1, "capacity do tanque de mana");
+    if (problem) {
+      return problem;
+    }
+    problem = capabilityNumberProblem(mana.maxReceive, 0, "max_receive do tanque de mana");
+    if (problem) {
+      return problem;
+    }
+    problem = capabilityNumberProblem(mana.maxExtract, 0, "max_extract do tanque de mana");
+    if (problem) {
+      return problem;
+    }
+    var port = trimString(mana.port);
+    if (port && !validPortText(port)) {
+      return "A porta do tanque de mana precisa ser uma key do pattern, um bloco ou uma tag valida.";
+    }
+    return "";
+  }
+
+  function essentiaProblem(essentia) {
+    if (!isPlainObject(essentia)) {
+      return "Essentia invalida.";
+    }
+    var range = toInt(essentia.range);
+    if (range === null || range < 1 || range > ESSENTIA_MAX_RANGE) {
+      return "O range de essentia precisa ser um inteiro de 1 a " + ESSENTIA_MAX_RANGE + ".";
+    }
+    return "";
+  }
+
   function chemicalFilterList(value) {
     if (Array.isArray(value)) {
       return value.map(function (entry) {
@@ -1880,7 +2177,7 @@
     });
   }
 
-  function validFluidPortText(value) {
+  function validPortText(value) {
     var text = trimString(value);
     if (!text) {
       return true;
@@ -1995,6 +2292,54 @@
     return result;
   }
 
+  function buildMana(mana) {
+    if (!isPlainObject(mana)) {
+      return clone(mana);
+    }
+    var result = {};
+    var capacity = toInt(mana.capacity);
+    var maxReceive = toInt(mana.maxReceive);
+    var maxExtract = toInt(mana.maxExtract);
+    var port = trimString(mana.port);
+    if (capacity !== null) {
+      result.capacity = capacity;
+    }
+    if (maxReceive !== null) {
+      result.max_receive = maxReceive;
+    }
+    if (maxExtract !== null) {
+      result.max_extract = maxExtract;
+    }
+    if (port) {
+      result.port = port;
+    }
+    var extras = isPlainObject(mana.extras) ? mana.extras : {};
+    Object.keys(extras).forEach(function (key) {
+      if (!MANA_KEYS.includes(key)) {
+        result[key] = clone(extras[key]);
+      }
+    });
+    return result;
+  }
+
+  function buildEssentia(essentia) {
+    if (!isPlainObject(essentia)) {
+      return clone(essentia);
+    }
+    var result = {};
+    var range = toInt(essentia.range);
+    if (range !== null) {
+      result.range = range;
+    }
+    var extras = isPlainObject(essentia.extras) ? essentia.extras : {};
+    Object.keys(extras).forEach(function (key) {
+      if (!ESSENTIA_KEYS.includes(key)) {
+        result[key] = clone(extras[key]);
+      }
+    });
+    return result;
+  }
+
   function buildCapabilities(capabilities) {
     if (!isPlainObject(capabilities)) {
       return clone(capabilities);
@@ -2023,9 +2368,20 @@
     } else if (capabilities.chemical !== null && capabilities.chemical !== undefined) {
       result.chemical = clone(capabilities.chemical);
     }
+    if (isPlainObject(capabilities.mana)) {
+      result.mana = buildMana(capabilities.mana);
+    } else if (capabilities.mana !== null && capabilities.mana !== undefined) {
+      result.mana = clone(capabilities.mana);
+    }
+    if (isPlainObject(capabilities.essentia)) {
+      result.essentia = buildEssentia(capabilities.essentia);
+    } else if (capabilities.essentia !== null && capabilities.essentia !== undefined) {
+      result.essentia = clone(capabilities.essentia);
+    }
     var extras = isPlainObject(capabilities.extras) ? capabilities.extras : {};
     Object.keys(extras).forEach(function (key) {
-      if (key !== "energy" && key !== "fluids" && key !== "chemical") {
+      if (key !== "energy" && key !== "fluids" && key !== "chemical"
+          && key !== "mana" && key !== "essentia") {
         result[key] = clone(extras[key]);
       }
     });
@@ -2661,6 +3017,19 @@
       element.width = 8;
       element.height = 54;
       element.capability = "chemical";
+    } else if (element.type === "mana_bar") {
+      element.x = 158;
+      element.y = 16;
+      element.width = 8;
+      element.height = 54;
+      element.capability = "mana";
+      element.slot = "mana";
+    } else if (element.type === "resource_list") {
+      element.x = 98;
+      element.y = 16;
+      element.width = GUI_RESOURCE_LIST_CELL_SIZE * 2;
+      element.height = GUI_RESOURCE_LIST_CELL_SIZE * 3;
+      element.capability = "essentia";
     } else if (element.type === "progress_bar") {
       element.x = 138;
       element.y = 16;
@@ -2754,9 +3123,12 @@
       } else {
         notes.push({
           severity: "warning",
-          message: "gui.elements[" + index + "].capability inválido foi ignorado."
+          message: "gui.elements[" + index + "].capability invǭlido foi ignorado."
         });
       }
+    }
+    if (element.type === "chemical_bar" && element.capability === "mana") {
+      element.type = "mana_bar";
     }
     if (value.color !== undefined) {
       if (typeof value.color === "string") {
@@ -2887,7 +3259,7 @@
     if (GUI_ELEMENT_TYPES.indexOf(type) === -1) {
       return clone(element);
     }
-    var result = { type: type };
+    var result = { type: type === "mana_bar" ? "chemical_bar" : type };
     var x = toIntOr(element.x, 0);
     var y = toIntOr(element.y, 0);
     var width = toIntOr(element.width, 0);
@@ -3086,8 +3458,8 @@
         return "player_inventory excede os limites da GUI.";
       }
     } else if (type === "energy_bar" || type === "fluid_bar"
-        || type === "chemical_bar" || type === "progress_bar"
-        || type === "arrow" || type === "entity") {
+        || type === "chemical_bar" || type === "mana_bar" || type === "resource_list"
+        || type === "progress_bar" || type === "arrow" || type === "entity") {
       if (width <= 0 || height <= 0) {
         return "Elementos size-dependentes de GUI precisam de width e height positivos.";
       }
@@ -3096,6 +3468,12 @@
             || width % GUI_ENTITY_CELL_SIZE !== 0 || height % GUI_ENTITY_CELL_SIZE !== 0)) {
         return "O elemento entity precisa de width/height múltiplos de "
           + GUI_ENTITY_CELL_SIZE + " (mínimo " + GUI_ENTITY_CELL_SIZE + ").";
+      }
+      if (type === "resource_list"
+          && (width < GUI_RESOURCE_LIST_CELL_SIZE || height < GUI_RESOURCE_LIST_CELL_SIZE
+            || width % GUI_RESOURCE_LIST_CELL_SIZE !== 0 || height % GUI_RESOURCE_LIST_CELL_SIZE !== 0)) {
+        return "O elemento resource_list precisa de width/height múltiplos de "
+          + GUI_RESOURCE_LIST_CELL_SIZE + " (mínimo " + GUI_RESOURCE_LIST_CELL_SIZE + ").";
       }
       if (!guiInside(gui, x, y, width, height)) {
         return "O elemento " + type + " excede os limites da GUI.";
@@ -3167,6 +3545,17 @@
     var tanks = isPlainObject(state.capabilities) && Array.isArray(state.capabilities.fluids)
       ? state.capabilities.fluids
       : [];
+    var chemicalTanks = isPlainObject(state.capabilities)
+      && isPlainObject(state.capabilities.chemical)
+      && Array.isArray(state.capabilities.chemical.tanks)
+      ? state.capabilities.chemical.tanks
+      : [];
+    var mana = isPlainObject(state.capabilities) && isPlainObject(state.capabilities.mana)
+      ? state.capabilities.mana
+      : null;
+    var essentia = isPlainObject(state.capabilities) && isPlainObject(state.capabilities.essentia)
+      ? state.capabilities.essentia
+      : null;
     var slotIds = {};
     itemSlots.forEach(function (slot) {
       if (isPlainObject(slot) && trimString(slot.id)) {
@@ -3199,6 +3588,33 @@
         });
         if (!knownTank) {
           return "fluid_bar.capability precisa ser o id de um tanque.";
+        }
+      } else if (type === "chemical_bar") {
+        if (chemicalTanks.length === 0 || trimString(element.capability) !== "chemical") {
+          return "chemical_bar exige capability=chemical e capabilities.chemical.tanks.";
+        }
+        var knownChemicalTank = chemicalTanks.some(function (tank) {
+          return isPlainObject(tank) && trimString(tank.id) === trimString(element.slot);
+        });
+        if (!knownChemicalTank) {
+          return "chemical_bar.slot precisa ser o id de um tanque chemical.";
+        }
+      } else if (type === "mana_bar") {
+        if (!mana) {
+          return "mana_bar exige capabilities.mana.";
+        }
+        if (trimString(element.capability) !== "mana") {
+          return "mana_bar.capability precisa ser mana.";
+        }
+        if (trimString(element.slot) !== "mana") {
+          return "mana_bar.slot precisa ser mana.";
+        }
+      } else if (type === "resource_list") {
+        if (!essentia) {
+          return "resource_list exige capabilities.essentia.";
+        }
+        if (RESOURCE_KINDS.indexOf(trimString(element.capability)) === -1) {
+          return "resource_list.capability precisa ser essentia.";
         }
       } else if ((type === "progress_bar" || type === "arrow" || type === "entity")
           && state.type !== "recipe") {
@@ -4117,8 +4533,8 @@
                   "player_inventory excede os limites da GUI.");
               }
             } else if (type === "energy_bar" || type === "fluid_bar"
-                || type === "chemical_bar" || type === "progress_bar"
-                || type === "arrow" || type === "entity") {
+                || type === "chemical_bar" || type === "mana_bar" || type === "resource_list"
+                || type === "progress_bar" || type === "arrow" || type === "entity") {
               if (width === null || width <= 0 || height === null || height <= 0) {
                 add("gui.element.size.invalid", "error", "gui", field,
                   "Elementos size-dependentes de GUI precisam de width e height positivos.");
@@ -4128,6 +4544,13 @@
                 add("gui.element.size.invalid", "error", "gui", field,
                   "O elemento entity precisa de width/height múltiplos de "
                   + GUI_ENTITY_CELL_SIZE + " (mínimo " + GUI_ENTITY_CELL_SIZE + ").");
+              } else if (type === "resource_list"
+                  && (width < GUI_RESOURCE_LIST_CELL_SIZE || height < GUI_RESOURCE_LIST_CELL_SIZE
+                    || width % GUI_RESOURCE_LIST_CELL_SIZE !== 0
+                    || height % GUI_RESOURCE_LIST_CELL_SIZE !== 0)) {
+                add("gui.element.size.invalid", "error", "gui", field,
+                  "O elemento resource_list precisa de width/height múltiplos de "
+                  + GUI_RESOURCE_LIST_CELL_SIZE + " (mínimo " + GUI_RESOURCE_LIST_CELL_SIZE + ").");
               } else if (x !== null && y !== null && guiWidth !== null && guiHeight !== null
                   && !guiInside(guiBounds, x, y, width, height)) {
                 add("gui.bounds.exceeded", "error", "gui", field,
@@ -4169,6 +4592,13 @@
               && Array.isArray(state.capabilities.chemical.tanks)
               ? state.capabilities.chemical.tanks
               : [];
+            var guiMana = isPlainObject(state.capabilities) && isPlainObject(state.capabilities.mana)
+              ? state.capabilities.mana
+              : null;
+            var guiEssentia = isPlainObject(state.capabilities)
+              && isPlainObject(state.capabilities.essentia)
+              ? state.capabilities.essentia
+              : null;
             guiElements.forEach(function (element, index) {
               if (!isPlainObject(element)) {
                 return;
@@ -4198,7 +4628,15 @@
                     "fluid_bar.capability precisa ser o id de um tanque.");
                 }
               } else if (type === "chemical_bar") {
-                if (guiChemicalTanks.length === 0 || trimString(element.capability) !== "chemical") {
+                if (trimString(element.capability) === "mana") {
+                  if (!guiMana) {
+                    add("gui.mana.required", "error", "gui", field,
+                      "chemical_bar com capability=mana exige capabilities.mana.");
+                  } else if (trimString(element.slot) !== "mana") {
+                    add("gui.mana.unknown", "error", "gui", field,
+                      "chemical_bar com capability=mana precisa ter slot=mana.");
+                  }
+                } else if (guiChemicalTanks.length === 0 || trimString(element.capability) !== "chemical") {
                   add("gui.chemical.required", "error", "gui", field,
                     "chemical_bar exige capability=chemical e capabilities.chemical.tanks.");
                 } else {
@@ -4209,6 +4647,25 @@
                     add("gui.chemical.unknown", "error", "gui", field,
                       "chemical_bar.slot precisa ser o id de um tanque chemical.");
                   }
+                }
+              } else if (type === "mana_bar") {
+                if (!guiMana) {
+                  add("gui.mana.required", "error", "gui", field,
+                    "mana_bar exige capabilities.mana.");
+                } else if (trimString(element.capability) !== "mana") {
+                  add("gui.mana.capability", "error", "gui", field,
+                    "mana_bar.capability precisa ser mana.");
+                } else if (trimString(element.slot) !== "mana") {
+                  add("gui.mana.unknown", "error", "gui", field,
+                    "mana_bar.slot precisa ser mana.");
+                }
+              } else if (type === "resource_list") {
+                if (!guiEssentia) {
+                  add("gui.essentia.required", "error", "gui", field,
+                    "resource_list exige capabilities.essentia.");
+                } else if (RESOURCE_KINDS.indexOf(trimString(element.capability)) === -1) {
+                  add("gui.essentia.capability", "error", "gui", field,
+                    "resource_list.capability precisa ser essentia.");
                 }
               } else if ((type === "progress_bar" || type === "arrow" || type === "entity")
                   && state.type !== "recipe") {
@@ -4720,10 +5177,70 @@
           }
         }
 
+        var mana = capabilities.mana;
+        if (mana !== null && mana !== undefined) {
+          if (!isPlainObject(mana)) {
+            capabilitiesOk = false;
+            add("capability.mana.invalid", "error", "capabilities", "mana",
+              "capabilities.mana precisa ser um objeto.");
+          } else {
+            var manaCapacity = toInt(mana.capacity);
+            if (manaCapacity === null || manaCapacity < 1 || manaCapacity > CAPABILITY_MAX) {
+              capabilitiesOk = false;
+              add("mana.capacity.invalid", "error", "capabilities", "mana",
+                "A capacidade do tanque de mana precisa ser um inteiro de 1 a " + CAPABILITY_MAX + ".");
+            }
+            var manaReceive = toInt(mana.maxReceive);
+            if (manaReceive === null || manaReceive < 0 || manaReceive > CAPABILITY_MAX) {
+              capabilitiesOk = false;
+              add("mana.max_receive.invalid", "error", "capabilities", "mana",
+                "max_receive do tanque de mana precisa ser um inteiro de 0 a " + CAPABILITY_MAX + ".");
+            }
+            var manaExtract = toInt(mana.maxExtract);
+            if (manaExtract === null || manaExtract < 0 || manaExtract > CAPABILITY_MAX) {
+              capabilitiesOk = false;
+              add("mana.max_extract.invalid", "error", "capabilities", "mana",
+                "max_extract do tanque de mana precisa ser um inteiro de 0 a " + CAPABILITY_MAX + ".");
+            }
+            var manaPort = trimString(mana.port);
+            if (manaPort && !validCapabilityPortSelector(manaPort, capabilityPatternSymbols)) {
+              capabilitiesOk = false;
+              add("mana.port.invalid", "error", "capabilities", "mana",
+                "A porta do tanque de mana precisa ser uma key do pattern, um bloco ou uma tag valida.");
+            } else if (manaPort.length === 1 && isPlainObject(state.capabilityPorts) &&
+              Array.isArray(state.capabilityPorts.mana)) {
+              var manaPortExposed = state.capabilityPorts.mana.some(function (selector) {
+                var text = trimString(selector);
+                return text.length > 1 || text === manaPort;
+              });
+              if (!manaPortExposed) {
+                add("mana.port.not_exposed", "warning", "capabilities", "mana",
+                  "A key \"" + manaPort + "\" do tanque de mana nao esta em capability_ports.mana; o tanque ficara inacessivel.");
+              }
+            }
+          }
+        }
+
+        var essentia = capabilities.essentia;
+        if (essentia !== null && essentia !== undefined) {
+          if (!isPlainObject(essentia)) {
+            capabilitiesOk = false;
+            add("capability.essentia.invalid", "error", "capabilities", "essentia",
+              "capabilities.essentia precisa ser um objeto.");
+          } else {
+            var essentiaRange = toInt(essentia.range);
+            if (essentiaRange === null || essentiaRange < 1 || essentiaRange > ESSENTIA_MAX_RANGE) {
+              capabilitiesOk = false;
+              add("essentia.range.invalid", "error", "capabilities", "essentia",
+                "O range de essentia precisa ser um inteiro de 1 a " + ESSENTIA_MAX_RANGE + ".");
+            }
+          }
+        }
+
         if (energyId && (fluidIds.has(energyId) || chemicalIds.has(energyId))) {
           capabilitiesOk = false;
           add("energy.id.conflict", "error", "capabilities", "energy",
-            "O id da energia \"" + energyId + "\" não pode ser igual ao id de um tanque.");
+            "O id da energia \"" + energyId + "\" nǜo pode ser igual ao id de um tanque.");
         }
       }
     }
@@ -4871,6 +5388,7 @@
         "gui.slot.unknown", "gui.slot.mixed", "gui.item_slots.required",
         "gui.player_inventory.count", "gui.energy.required", "gui.energy.unknown",
         "gui.fluid.unknown", "gui.chemical.required", "gui.chemical.unknown",
+        "gui.essentia.required", "gui.essentia.capability",
         "gui.recipe.required", "gui.bounds.exceeded"].some(function (code) {
         return errorCodes.has(code);
       }),
@@ -5002,6 +5520,7 @@
     recipeAvailability: recipeAvailability,
     recipePatternSymbols: recipePatternSymbols,
     validSpawnSelector: validSpawnSelector,
+    validEssentiaAspect: validEssentiaAspect,
     validCapabilityPortSelector: validCapabilityPortSelector,
     parseIngredientLines: parseIngredientLines,
     parseFluidLines: parseFluidLines,
@@ -5013,6 +5532,8 @@
     createEnergy: createEnergy,
     createFluidTank: createFluidTank,
     createChemicalTank: createChemicalTank,
+    createMana: createMana,
+    createEssentia: createEssentia,
     createTextureSet: createTextureSet,
     createTextures: createTextures,
     parseTextures: parseTextures,
@@ -5030,6 +5551,8 @@
     parseItemSlots: parseItemSlots,
     parseCapabilities: parseCapabilities,
     parseCapabilityPorts: parseCapabilityPorts,
+    parseMana: parseMana,
+    parseEssentia: parseEssentia,
     parseController: parseController,
     parseControllerRecipe: parseControllerRecipe,
     parseGui: parseGui,
@@ -5039,6 +5562,8 @@
     buildEnergy: buildEnergy,
     buildFluidTank: buildFluidTank,
     buildChemicalTank: buildChemicalTank,
+    buildMana: buildMana,
+    buildEssentia: buildEssentia,
     buildCapabilities: buildCapabilities,
     buildCapabilityPorts: buildCapabilityPorts,
     buildController: buildController,
@@ -5058,6 +5583,8 @@
     energyProblem: energyProblem,
     fluidProblem: fluidProblem,
     chemicalProblem: chemicalProblem,
+    manaProblem: manaProblem,
+    essentiaProblem: essentiaProblem,
     controllerProblem: controllerProblem,
     controllerRecipeProblem: controllerRecipeProblem,
     controllerRecipeIssues: controllerRecipeIssues,
