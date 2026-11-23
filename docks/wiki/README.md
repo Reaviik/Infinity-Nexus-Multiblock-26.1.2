@@ -5,7 +5,7 @@ Guia prático para criar máquinas multibloco com o **Infinity Nexus Multiblock*
 - Minecraft: `26.1.2`
 - NeoForge: `26.1.2.121`
 - Java: `25`
-- Idioma dos exemplos: português
+- Idioma dos exemplos: Português
 - Schema atual: `schema_version: 2`
 
 Este guia documenta **tudo o que o JSON aceita hoje** e mostra exemplos completos. O objetivo é que você consiga sair de uma ideia e chegar a uma máquina formável, com inventário, energia, fluidos, GUI e receita.
