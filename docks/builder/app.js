@@ -2819,7 +2819,8 @@
       return;
     }
     if (!ModelPreview) {
-      showToast("modelpreview3d.js não carregou.", "error");
+      showToast("O preview 3D não carregou (modelpreview3d.js). " +
+        "Confira se o arquivo foi publicado junto do builder.", "error");
       return;
     }
     var reader = new FileReader();
@@ -3031,8 +3032,15 @@
     }).then(function (text) {
       applyShapeFromModel(ModelPreview.parseModel(text, { namespace: parts.namespace }));
     }).catch(function (error) {
-      showToast("Não foi possível carregar " + entry.id + ": " +
-        (error && error.message ? error.message : error) + ". Confira o campo model.");
+      var reason = error && error.message ? error.message : String(error);
+      if (/HTTP 404|Not Found/i.test(reason)) {
+        showToast("Modelo " + entry.id +
+          " não está publicado no site. Use importar no campo " + entry.key +
+          " para carregar o JSON do seu computador.", "error");
+        return;
+      }
+      showToast("Não foi possível carregar " + entry.id + ": " + reason +
+        ". Confira o campo model.", "error");
     });
   }
 
@@ -6055,8 +6063,12 @@
       modelPreviewState.source = "none";
       modelPreviewState.fieldId = "";
       modelPreviewState.fieldKey = "";
-      modelPreviewState.error = "Não foi possível carregar " + entry.id +
-        " (" + (error && error.message ? error.message : error) + "). Confira o campo model e o servidor HTTP.";
+      var reason = error && error.message ? error.message : String(error);
+      modelPreviewState.error = /HTTP 404|Not Found/i.test(reason)
+        ? "Modelo " + entry.id +
+          " não está publicado no site. Use importar no campo " + entry.key +
+          " para carregar o JSON do seu computador."
+        : "Não foi possível carregar " + entry.id + " (" + reason + ").";
       renderModelPreview();
     });
   }
@@ -6211,7 +6223,8 @@
     var feedback = $("modelPreviewFeedback");
     if (!ModelPreview) {
       if (feedback) {
-        feedback.textContent = "modelpreview3d.js não carregou.";
+        feedback.textContent = "O preview 3D não carregou (modelpreview3d.js). " +
+          "Confira se o arquivo foi publicado junto do builder.";
         feedback.hidden = false;
       }
       return;
