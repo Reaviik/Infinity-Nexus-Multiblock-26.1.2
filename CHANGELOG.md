@@ -138,7 +138,7 @@
 - Recipe support to entity input and output
 - Entity preview in JEI recipes and multiblock controller
 ### <span style="color:#F1C40F;"> **Fix**:</span>
-- Controller and JEI energy/fluid/progress bar
+- Controller and JEI energy/fluid/progress bar 
 - Slots position in JEI and controller gui
 ### <span style="color:#E67E23;"> **Change**:</span>
 - Short command alias changed from `/inm` to `/inmb` to avoid a command-root collision with Infinity Nexus Mod.
