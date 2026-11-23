@@ -1,6 +1,7 @@
 [build]
   base = "/"
   publish = "docks"
+  command = "node docks/builder/sync-model-assets.js"
 
 [[redirects]]
   from = "/"
