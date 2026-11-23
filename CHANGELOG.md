@@ -4,6 +4,15 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+## <span style="color:#2DC26B;">` V: 1.1.7`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Custom model for controller idle/building/formed
+- Custom controller shape 
+### <span style="color:#E67E23;"> **Change**:</span>
+- Update builder
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.1.6`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
 - Support resource list

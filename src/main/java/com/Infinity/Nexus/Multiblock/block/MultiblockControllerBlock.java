@@ -3,6 +3,7 @@ package com.Infinity.Nexus.Multiblock.block;
 import java.util.List;
 import java.util.function.Supplier;
 
+import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.serialization.MapCodec;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -35,6 +37,9 @@ import net.minecraft.world.level.redstone.Orientation;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
 public class MultiblockControllerBlock extends BaseEntityBlock {
@@ -98,6 +103,41 @@ public class MultiblockControllerBlock extends BaseEntityBlock {
     @Override
     protected BlockState mirror(BlockState state, Mirror mirror) {
         return state.setValue(FACING, mirror.mirror(state.getValue(FACING)));
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return controllerShape(state, level, pos);
+    }
+
+    @Override
+    protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos,
+            CollisionContext context) {
+        return controllerShape(state, level, pos);
+    }
+
+    @Override
+    protected boolean isCollisionShapeFullBlock(BlockState state, BlockGetter level, BlockPos pos) {
+        return Block.isShapeFullBlock(getCollisionShape(state, level, pos, CollisionContext.empty()));
+    }
+
+    private static VoxelShape controllerShape(BlockState state, BlockGetter level, BlockPos pos) {
+        if (level.getBlockEntity(pos) instanceof MultiblockControllerBlockEntity controller) {
+            MultiblockDefinition definition = controller.definition();
+            if (definition != null && !definition.shape().isEmpty()) {
+                return definition.shape().voxelShape(modelRotation(state.getValue(FACING)));
+            }
+        }
+        return Shapes.block();
+    }
+
+    private static Rotation modelRotation(Direction facing) {
+        return switch (facing) {
+            case EAST -> Rotation.CLOCKWISE_90;
+            case SOUTH -> Rotation.CLOCKWISE_180;
+            case WEST -> Rotation.COUNTERCLOCKWISE_90;
+            default -> Rotation.NONE;
+        };
     }
 
     @Override

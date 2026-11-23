@@ -22,7 +22,9 @@ import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
+import com.Infinity.Nexus.Multiblock.api.MultiblockModel;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockShape;
 import com.Infinity.Nexus.Multiblock.api.MultiblockSounds;
 import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
@@ -99,6 +101,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             MultiblockGui.CODEC.optionalFieldOf("gui").forGetter(DefinitionFile::gui),
             SoundsFile.CODEC.optionalFieldOf("sounds").forGetter(DefinitionFile::sounds),
             MultiblockTextures.CODEC.codec().optionalFieldOf("textures").forGetter(DefinitionFile::textures),
+            MultiblockModel.CODEC.codec().optionalFieldOf("model").forGetter(DefinitionFile::model),
+            MultiblockShape.CODEC.optionalFieldOf("shape").forGetter(DefinitionFile::shape),
             PortsFile.CODEC.optionalFieldOf("capability_ports").forGetter(DefinitionFile::capabilityPorts),
             PatternFile.CODEC.fieldOf("pattern").forGetter(DefinitionFile::pattern))
             .apply(instance, DefinitionFile::new));
@@ -165,6 +169,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .resourceTanks(resourceTanks)
                 .sounds(file.sounds().map(SoundsFile::toSounds).orElse(MultiblockSounds.EMPTY))
                 .textures(file.textures().orElse(MultiblockTextures.EMPTY))
+                .model(file.model().orElse(MultiblockModel.EMPTY))
+                .shape(file.shape().orElse(MultiblockShape.EMPTY))
                 .capabilityPorts(capabilityPorts)
                 .pattern(pattern.build());
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
@@ -361,6 +367,8 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             Optional<MultiblockGui> gui,
             Optional<SoundsFile> sounds,
             Optional<MultiblockTextures> textures,
+            Optional<MultiblockModel> model,
+            Optional<MultiblockShape> shape,
             Optional<PortsFile> capabilityPorts,
             PatternFile pattern) {
     }

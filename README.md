@@ -76,7 +76,7 @@ Abra `docks/builder/index.html` no navegador. O estado fica no `localStorage`; a
 3. matchers;
 4. `item_slots`, incluindo filtros, limites e `faces` de automação;
 5. capabilities de energia, fluidos, chemical, mana e essentia, incluindo os filtros de `capability_ports`;
-6. controller;
+6. controller, incluindo `textures`, `model` e `shape` opcionais por definição;
 7. GUI customizada;
 8. sons `processing`/`finish`, com seletor de sons vanilla ou ID próprio;
 9. receitas data-driven;
@@ -88,6 +88,12 @@ A etapa 08 usa o catálogo `docks/builder/data/minecraft_sounds.json`, gerado a 
 A etapa 09 edita receitas separadas em `data/<namespace>/recipe/<arquivo>.json`. Ingredientes usam uma linha por item/tag; fluidos, chemicals e mana usam `recurso quantidade`; essentia usa `thaumaturge:<aspecto> quantidade`. O `type` da receita precisa ser o mesmo `recipe_type` da máquina. O JEI é gerado pelo runtime a partir do controller, não existe JSON extra de JEI.
 
 A etapa 10 edita `extends`/`family`, `template` e `overrides`; o pai é resolvido pelo loader, não pelo builder. A revisão mostra os caminhos de definição, receitas e assets esperados, mas o builder não cria PNGs, modelos, blockstates ou classes Java para controllers externos.
+
+Na etapa 06, escolha **Controller padrão** ou **Controller custom** antes de configurar. O padrão usa o modelo e as texturas embutidos e não usa `model` nem `shape`; as texturas resolvidas podem ser sobrescritas importando um PNG em cada linha abaixo do preview. O custom edita `model` (idle/active/building) e `shape`; as texturas do próprio modelo também podem ser sobrescritas importando um PNG nas linhas do preview, mas no custom isso é só para visualização do builder e não altera o JSON. O builder não expõe um painel `textures` separado.
+
+O painel `preview do modelo` carrega automaticamente o modelo e os PNGs do projeto quando o builder é servido por HTTP, alterna entre `idle`, `active` e `building` e resolve as texturas do modelo. No controller padrão, a lista abaixo do preview mostra as seis faces semânticas na ordem `front`, `top`, `down`, `left`, `right`, `back`, com `particle` como linha extra; cada linha suportada tem **importar**, e **limpar** aparece quando há override. `down` grava no slot `bottom`; `left`, `right` e `back` são independentes e `side` continua como fallback legado no preview. No controller custom, a lista mostra as chaves de textura do próprio JSON do modelo (ex.: `#all`, `#side`, `#front`), não as seis faces padrão; **importar** é só para visualização e aplica a imagem a todas as faces que usam aquela chave, sem alterar `textures` nem o JSON. Se a chave não tiver identifier resolvido, o builder gera um `minecraft:...` apenas no preview. As imagens importadas ficam salvas por estado (`idle`, `active`, `building`) e voltam ao alternar o preview. Em `file://` o carregamento automático não funciona. O preview tem rotação por arraste, zoom pela roda, piso cinza e dois blocos listrados de referência (ambos opcionais), com listras horizontais de 16 faixas; a câmera enquadra automaticamente os limites do modelo. Texturas sem namespace usam o namespace do modelo; faces sem textura ou sem PNG recebem uma cor sólida determinística.
+
+O código do `model` fica em um acordeão. Cada caixa de `shape` também é um acordeão, com seis campos compactos (min/max X, Y e Z) e o JSON do shape em outro acordeão. O botão **usar model** gera as caixas a partir do `model.idle`, preservando coordenadas fracionárias, ignorando elementos com rotação fora de 90° e caixas sem volume; elementos fora de 0–16 são ajustados ao limite e o builder avisa.
 
 A exportação da definição não inclui receitas. Baixe cada receita no card correspondente ou na revisão; os nomes dos arquivos precisam bater com o caminho mostrado.
 

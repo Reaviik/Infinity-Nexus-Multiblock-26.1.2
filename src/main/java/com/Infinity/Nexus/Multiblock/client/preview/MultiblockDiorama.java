@@ -2,9 +2,14 @@ package com.Infinity.Nexus.Multiblock.client.preview;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
+import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
+import com.Infinity.Nexus.Multiblock.client.model.ControllerBlockStateModel;
 import com.mojang.blaze3d.platform.Lighting.Entry;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -13,9 +18,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.render.pip.PictureInPictureRenderer;
 import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.BlockModelRenderState;
 import net.minecraft.client.renderer.block.BlockModelSet;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.block.model.BlockDisplayContext;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.item.ItemStackRenderState;
@@ -182,7 +190,12 @@ public final class MultiblockDiorama {
                 }
                 BlockState blockState = previewState(cell, pattern, time);
                 if (blockState != null) {
-                    this.renderBlock(poseStack, collector, blockState, cell);
+                    if (cell.anchor() && blockState.getBlock() instanceof MultiblockControllerBlock) {
+                        this.renderController(
+                                poseStack, collector, blockState, cell, structure.definition());
+                    } else {
+                        this.renderBlock(poseStack, collector, blockState, cell);
+                    }
                 } else {
                     ItemStack stack = shownStack(cell, time);
                     if (!stack.isEmpty()) {
@@ -190,6 +203,37 @@ public final class MultiblockDiorama {
                     }
                 }
             }
+        }
+
+        private void renderController(
+                PoseStack poseStack,
+                SubmitNodeCollector collector,
+                BlockState state,
+                MultiblockStructureData.Cell cell,
+                MultiblockDefinition definition) {
+            BlockStateModel model = Minecraft.getInstance()
+                    .getModelManager()
+                    .getBlockStateModelSet()
+                    .get(state);
+            if (!(model instanceof ControllerBlockStateModel controller)) {
+                this.renderBlock(poseStack, collector, state, cell);
+                return;
+            }
+            BlockStateModelPart part = controller.part(definition, MultiblockTextures.State.IDLE);
+            poseStack.pushPose();
+            poseStack.translate(cell.x() + 0.5F, cell.y() + 0.5F, cell.z() + 0.5F);
+            poseStack.translate(-0.5F, -0.5F, -0.5F);
+            collector.submitBlockModel(
+                    poseStack,
+                    (part.materialFlags() & 1) != 0
+                            ? Sheets.translucentBlockSheet()
+                            : Sheets.cutoutBlockSheet(),
+                    List.of(part),
+                    BlockModelRenderState.EMPTY_TINTS,
+                    LIGHT,
+                    OverlayTexture.NO_OVERLAY,
+                    0);
+            poseStack.popPose();
         }
 
         private void renderBlock(

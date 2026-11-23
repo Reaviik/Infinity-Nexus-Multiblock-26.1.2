@@ -104,6 +104,43 @@
   var toastTimer = null;
   var minecraftSoundData = null;
   var minecraftSoundOptionsRendered = false;
+  var ModelPreview = window.ModelPreview3D;
+  var MODEL_KEYS = ["idle", "active", "building"];
+  var DEFAULT_MODEL_IDS = {
+    idle: "infinity_nexus_multiblock:block/multiblock_controller",
+    active: "infinity_nexus_multiblock:block/multiblock_controller_on",
+    building: "infinity_nexus_multiblock:block/multiblock_controller_building"
+  };
+  var controllerMode = "default";
+  var modelPreviewState = {
+    parsed: null,
+    baseParsed: null,
+    fileName: "",
+    source: "none",
+    fieldId: "",
+    fieldKey: "",
+    previewState: "idle",
+    loadingField: false,
+    fieldRequest: 0,
+    images: [],
+    textureImages: {},
+    localModels: {},
+    importTarget: "",
+    textureTarget: "",
+    textureTargetId: "",
+    textureTargetRow: "",
+    textureTargetKey: "",
+    textureLabel: "",
+    previewTextureKeys: { idle: {}, active: {}, building: {} },
+    error: "",
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    view: { yaw: 2.95, pitch: 0.42, zoom: 1 },
+    showFloor: true,
+    showReference: true
+  };
+  var modelPreviewFieldTimer = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -272,7 +309,8 @@
         version: STORAGE_VERSION,
         state: state,
         importNotes: importNotes,
-        activeStep: activeStep
+        activeStep: activeStep,
+        controllerMode: controllerMode
       }));
     } catch (error) {
       return;
@@ -382,6 +420,19 @@
       isPlainObject(state.textures.building) ? state.textures.building : {}
     );
     delete state.extras.textures;
+    if (!isPlainObject(state.model)) {
+      state.model = isPlainObject(state.extras.model)
+        ? V.parseModel(state.extras.model, [])
+        : V.createModel();
+    }
+    state.model = Object.assign(V.createModel(), state.model);
+    delete state.extras.model;
+    if (!Array.isArray(state.shape)) {
+      state.shape = Array.isArray(state.extras.shape)
+        ? V.parseShape(state.extras.shape, [])
+        : V.createShape();
+    }
+    delete state.extras.shape;
     delete state.controller;
     delete state.recipeType;
     delete state.extras.controller;
@@ -441,6 +492,15 @@
       });
     }
     activeStep = STEP_IDS.indexOf(saved.activeStep) >= 0 ? saved.activeStep : "identity";
+    controllerMode = saved.controllerMode === "custom" || saved.controllerMode === "default"
+      ? saved.controllerMode
+      : deriveControllerMode();
+    modelPreviewState.localModels = {};
+    resetPreviewTextureOverrides();
+    if (controllerMode === "default") {
+      state.model = V.createModel();
+      state.shape = V.createShape();
+    }
     return true;
   }
 
@@ -2582,92 +2642,411 @@
     return "Shaped " + rows.length + "x" + width + " -> infinity_nexus_multiblock:multiblock_controller";
   }
 
-  function textureSetCount(textures) {
-    if (!isPlainObject(textures)) {
-      return 0;
+  function deriveControllerMode() {
+    if (V.hasModel && V.hasModel(state.model)) {
+      return "custom";
     }
-    return ["front", "side", "top", "bottom", "particle"].filter(function (key) {
-      return Boolean(trim(textures[key]));
-    }).length;
+    if (Array.isArray(state.shape) && state.shape.length > 0) {
+      return "custom";
+    }
+    return "default";
   }
 
-  function texturesSummaryText() {
-    var textures = isPlainObject(state.textures) ? state.textures : null;
-    if (!textures) {
-      return "Sem texturas por definição; usa o modelo padrão do controller.";
+  function controllerModeSummaryText() {
+    if (controllerMode === "custom") {
+      return "Controller custom: model e shape por definição; texturas do modelo com overrides opcionais.";
     }
-    var idle = textureSetCount(textures.idle);
-    var active = textureSetCount(textures.active);
-    var building = textureSetCount(textures.building);
-    if (idle === 0 && active === 0 && building === 0) {
-      return "Sem texturas por defini��ǜo; usa o modelo padrǜo do controller.";
-    }
-    var parts = [];
-    if (idle > 0) {
-      parts.push(idle + (idle === 1 ? " face idle" : " faces idle"));
-    }
-    if (active > 0) {
-      parts.push(active + (active === 1 ? " face active" : " faces active"));
-    }
-    if (building > 0) {
-      parts.push(building + (building === 1 ? " face building" : " faces building"));
-    }
-    return parts.join(" + ") + " configurada(s).";
+    return "Controller padrão: modelo embutido com fallback; texturas custom são opcionais.";
   }
 
-  function updateTexturesCard() {
-    var textures = isPlainObject(state.textures) ? state.textures : V.createTextures();
-    var summary = $("texturesSummary");
-    var feedback = $("texturesFeedback");
-    var jsonElement = $("texturesJson");
+  function renderControllerMode() {
+    $$("input[name='controllerMode']").forEach(function (input) {
+      input.checked = input.value === controllerMode;
+    });
+    var summary = $("controllerModeSummary");
     if (summary) {
-      summary.textContent = texturesSummaryText();
+      summary.textContent = controllerModeSummaryText();
+    }
+    var modelPanel = $("modelPanel");
+    var shapePanel = $("shapePanel");
+    if (modelPanel) {
+      modelPanel.hidden = controllerMode !== "custom";
+    }
+    if (shapePanel) {
+      shapePanel.hidden = controllerMode !== "custom";
+    }
+  }
+
+  function setControllerMode(mode) {
+    if (mode !== "custom" && mode !== "default") {
+      return;
+    }
+    if (mode === controllerMode) {
+      return;
+    }
+    controllerMode = mode;
+    modelPreviewState.localModels = {};
+    resetPreviewTextureOverrides();
+    if (mode === "default") {
+      state.model = V.createModel();
+      state.shape = V.createShape();
+      modelPreviewState.previewState = "idle";
+    }
+    renderControllerMode();
+    refresh({ skipControllerRecipe: true });
+    loadModelPreviewFromField(true);
+    showToast(mode === "custom"
+      ? "Controller custom: configure model e shape; texturas do preview são só visuais."
+      : "Controller padrão: model e shape removidos; texturas importadas vão para o JSON.");
+  }
+
+  function onControllerModeChange(event) {
+    var input = closest(event.target, "input[name='controllerMode']");
+    if (!input) {
+      return;
+    }
+    setControllerMode(input.value);
+  }
+
+  function modelSummaryText() {
+    var model = isPlainObject(state.model) ? state.model : null;
+    var parts = model ? ["idle", "active", "building"].filter(function (key) {
+      return Boolean(trim(model[key]));
+    }) : [];
+    if (parts.length === 0) {
+      return "Sem modelo por definição; usa o modelo padrão do controller.";
+    }
+    return parts.join(" + ") + " configurado(s).";
+  }
+
+  function updateModelCard() {
+    var model = isPlainObject(state.model) ? state.model : V.createModel();
+    var summary = $("modelSummary");
+    var feedback = $("modelFeedback");
+    var jsonElement = $("modelJson");
+    if (summary) {
+      summary.textContent = modelSummaryText();
     }
     if (feedback) {
-      var problem = V.texturesProblem(textures);
+      var problem = V.modelProblem(model);
       feedback.textContent = problem;
       feedback.hidden = !problem;
       feedback.className = "matcher-feedback controller-feedback" + (problem ? " is-error" : "");
     }
     if (jsonElement) {
-      jsonElement.textContent = JSON.stringify(V.buildTextures(textures), null, 2);
+      jsonElement.textContent = JSON.stringify(V.buildModel(model), null, 2);
     }
   }
 
-  function renderTextures() {
-    var textures = isPlainObject(state.textures) ? state.textures : V.createTextures();
-    $$("[data-texture-set]").forEach(function (input) {
-      var setName = input.getAttribute("data-texture-set");
-      var field = input.getAttribute("data-texture-field");
-      var set = isPlainObject(textures[setName]) ? textures[setName] : {};
-      input.value = trim(set[field]);
+  function renderModel() {
+    var model = isPlainObject(state.model) ? state.model : V.createModel();
+    $$("[data-model-field]").forEach(function (input) {
+      var field = input.getAttribute("data-model-field");
+      input.value = trim(model[field]);
       input.classList.remove("is-invalid");
     });
-    updateTexturesCard();
+    updateModelCard();
   }
 
-  function onTexturesInput(event) {
-    var input = closest(event.target, "[data-texture-set]");
+  function onModelInput(event) {
+    var input = closest(event.target, "[data-model-field]");
     if (!input) {
       return;
     }
-    var setName = input.getAttribute("data-texture-set");
-    var field = input.getAttribute("data-texture-field");
-    if (!isPlainObject(state.textures)) {
-      state.textures = V.createTextures();
+    var field = input.getAttribute("data-model-field");
+    if (!isPlainObject(state.model)) {
+      state.model = V.createModel();
     }
-    if (!isPlainObject(state.textures[setName])) {
-      state.textures[setName] = V.createTextureSet();
-    }
-    state.textures[setName][field] = input.value;
-    updateTexturesCard();
-    refresh({ skipTextures: true, skipControllerRecipe: true });
+    state.model[field] = input.value;
+    delete modelPreviewState.localModels[field];
+    modelPreviewState.previewState = MODEL_KEYS.indexOf(field) >= 0 ? field : "idle";
+    updateModelCard();
+    refresh({ skipModel: true, skipTextures: true, skipControllerRecipe: true });
+    scheduleModelPreviewFieldLoad();
   }
 
-  function resetTextures() {
-    state.textures = V.createTextures();
-    refresh({ skipControllerRecipe: true });
-    showToast("Texturas por definição removidas.");
+  function currentNamespace() {
+    var namespace = trim(state.namespace);
+    return namespace && V.isValidNamespace(namespace) ? namespace : "minecraft";
+  }
+
+  function namespaceFromPath(path) {
+    var text = String(path || "").replace(/\\/g, "/");
+    var match = text.match(/(?:^|\/)assets\/([a-z0-9_.-]+)\/models\//i);
+    return match ? match[1] : "";
+  }
+
+  function modelImportId(field, file) {
+    var relative = String(file && (file.webkitRelativePath || file.relativePath) || "")
+      .replace(/\\/g, "/");
+    var namespace = namespaceFromPath(relative) || currentNamespace();
+    var pathMatch = relative.match(/(?:^|\/)assets\/[a-z0-9_.-]+\/models\/(.+)\.json$/i);
+    if (pathMatch) {
+      return namespace + ":" + pathMatch[1];
+    }
+    var base = String(file && file.name || field).replace(/\.json$/i, "").trim().toLowerCase();
+    base = base.replace(/[^a-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!base) {
+      base = field;
+    }
+    return namespace + ":block/" + base;
+  }
+
+  function onModelImportClick(event) {
+    var button = closest(event.target, "[data-model-import]");
+    if (!button) {
+      return;
+    }
+    var field = button.getAttribute("data-model-import");
+    if (MODEL_KEYS.indexOf(field) < 0) {
+      return;
+    }
+    modelPreviewState.importTarget = field;
+    var input = $("modelImportInput");
+    if (input) {
+      input.value = "";
+      input.click();
+    }
+  }
+
+  function onModelImportChange(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    var field = modelPreviewState.importTarget;
+    input.value = "";
+    modelPreviewState.importTarget = "";
+    if (!file || MODEL_KEYS.indexOf(field) < 0) {
+      return;
+    }
+    if (!ModelPreview) {
+      showToast("modelpreview3d.js não carregou.", "error");
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var suggested = modelImportId(field, file);
+        var parts = splitPreviewIdentifier(suggested);
+        var parsed = ModelPreview.parseModel(String(reader.result || ""), {
+          namespace: parts ? parts.namespace : currentNamespace()
+        });
+        if (!isPlainObject(state.model)) {
+          state.model = V.createModel();
+        }
+        state.model[field] = suggested;
+        modelPreviewState.localModels[field] = parsed;
+        resetPreviewTextureOverrides();
+        modelPreviewState.previewState = field;
+        refresh({ skipTextures: true, skipControllerRecipe: true, skipModelPreview: true });
+        loadModelPreviewFromField(true);
+        showToast("Modelo " + field + " importado: " + suggested + ".");
+      } catch (error) {
+        showToast("Modelo inválido: " + (error && error.message ? error.message : error), "error");
+      }
+    };
+    reader.onerror = function () {
+      showToast("Falha ao ler o modelo.", "error");
+    };
+    reader.readAsText(file);
+  }
+
+  function resetModel() {
+    state.model = V.createModel();
+    modelPreviewState.localModels = {};
+    resetPreviewTextureOverrides();
+    modelPreviewState.previewState = "idle";
+    refresh({ skipTextures: true, skipControllerRecipe: true });
+    loadModelPreviewFromField(true);
+    showToast("Modelo por definição removido.");
+  }
+
+  function shapeSummaryText() {
+    var shape = Array.isArray(state.shape) ? state.shape : [];
+    if (shape.length === 0) {
+      return "Sem shape por definição; colisão e seleção usam o cubo completo.";
+    }
+    return shape.length + (shape.length === 1 ? " caixa" : " caixas") +
+      " de colisão/seleção configurada(s).";
+  }
+
+  function updateShapeCard() {
+    var shape = Array.isArray(state.shape) ? state.shape : V.createShape();
+    var summary = $("shapeSummary");
+    var feedback = $("shapeFeedback");
+    var jsonElement = $("shapeJson");
+    var codeHint = $("shapeCodeHint");
+    if (summary) {
+      summary.textContent = shapeSummaryText();
+    }
+    if (codeHint) {
+      codeHint.textContent = shape.length + (shape.length === 1 ? " caixa" : " caixas");
+    }
+    if (feedback) {
+      var problem = V.shapeProblem(shape);
+      feedback.textContent = problem;
+      feedback.hidden = !problem;
+      feedback.className = "matcher-feedback controller-feedback" + (problem ? " is-error" : "");
+    }
+    if (jsonElement) {
+      jsonElement.textContent = JSON.stringify(V.buildShape(shape), null, 2);
+    }
+  }
+
+  function shapeInputValue(box, fieldIndex) {
+    if (!Array.isArray(box)) {
+      return "";
+    }
+    var value = box[fieldIndex];
+    return value === undefined || value === null ? "" : String(value);
+  }
+
+  function renderShape() {
+    var shape = Array.isArray(state.shape) ? state.shape : V.createShape();
+    var list = $("shapeList");
+    if (!list) {
+      return;
+    }
+    var labels = ["min x", "min y", "min z", "max x", "max y", "max z"];
+    if (shape.length === 0) {
+      list.innerHTML = "<p class='field-hint'>Nenhuma caixa. Sem shape, a colisão e a seleção usam o cubo completo.</p>";
+    } else {
+      list.innerHTML = shape.map(function (box, index) {
+        var fields = labels.map(function (label, fieldIndex) {
+          return "<div class='field'><label for='shape" + index + "Field" + fieldIndex + "'>" + label +
+            "</label><input id='shape" + index + "Field" + fieldIndex +
+            "' type='number' min='0' max='16' step='0.5' data-shape-index='" + index +
+            "' data-shape-field='" + fieldIndex + "' value='" + esc(shapeInputValue(box, fieldIndex)) + "'></div>";
+        }).join("");
+        return "<details class='card-advanced shape-box'" + (index === 0 ? " open" : "") +
+          "><summary><span>Caixa " + (index + 1) + "</span><span class='card-advanced-hint'>6 campos</span></summary>" +
+          "<div class='card-advanced-body'><div class='shape-box-head'><span>min/max em pixels</span>" +
+          "<button type='button' class='btn btn-tiny btn-danger' data-shape-remove='" + index +
+          "'>remover</button></div><div class='shape-fields'>" + fields + "</div></div></details>";
+      }).join("");
+    }
+    updateShapeCard();
+  }
+
+  function shapeInputNumber(value) {
+    var text = String(value === undefined || value === null ? "" : value).trim();
+    if (text === "") {
+      return "";
+    }
+    var parsed = Number(text);
+    return Number.isFinite(parsed) ? parsed : text;
+  }
+
+  function onShapeInput(event) {
+    var input = closest(event.target, "[data-shape-field]");
+    if (!input) {
+      return;
+    }
+    var index = Number.parseInt(input.getAttribute("data-shape-index"), 10);
+    var fieldIndex = Number.parseInt(input.getAttribute("data-shape-field"), 10);
+    if (!Array.isArray(state.shape) || !Array.isArray(state.shape[index])) {
+      return;
+    }
+    state.shape[index][fieldIndex] = shapeInputNumber(input.value);
+    updateShapeCard();
+    refresh({ skipShape: true, skipModel: true, skipTextures: true, skipControllerRecipe: true });
+  }
+
+  function addShapeBox() {
+    if (!Array.isArray(state.shape)) {
+      state.shape = V.createShape();
+    }
+    state.shape.push([0, 0, 0, 16, 16, 16]);
+    refresh({ skipModel: true, skipTextures: true, skipControllerRecipe: true });
+  }
+
+  function resetShape() {
+    state.shape = V.createShape();
+    refresh({ skipModel: true, skipTextures: true, skipControllerRecipe: true });
+    showToast("Shape por definição removido.");
+  }
+
+  function applyShapeFromModel(parsed) {
+    if (!ModelPreview || typeof ModelPreview.shapeBoxes !== "function") {
+      showToast("Preview do modelo indisponível para gerar o shape.");
+      return;
+    }
+    var result = ModelPreview.shapeBoxes(parsed, { precision: 0.0001, limit: 16 });
+    if (!result.boxes.length) {
+      var reason = result.skippedRotation > 0
+        ? " Nenhum elemento com rotação de 90° ou sem rotação."
+        : "";
+      showToast("Nenhuma caixa gerada do modelo." + reason);
+      return;
+    }
+    state.shape = result.boxes;
+    refresh({ skipModel: true, skipTextures: true, skipControllerRecipe: true });
+    var message = result.boxes.length + (result.boxes.length === 1 ? " caixa gerada" : " caixas geradas");
+    if (result.skippedRotation > 0) {
+      message += "; " + result.skippedRotation + " ignorada(s) por rotação fora de 90°";
+    }
+    if (result.skippedFlat > 0) {
+      message += "; " + result.skippedFlat + " sem volume";
+    }
+    if (result.clipped > 0) {
+      message += "; " + result.clipped + " ajustada(s) ao limite 0–16";
+    }
+    showToast(message + ".");
+  }
+
+  function useShapeFromModel() {
+    if (!ModelPreview) {
+      showToast("Preview do modelo indisponível.");
+      return;
+    }
+    if (modelPreviewState.previewState === "idle" && modelPreviewState.parsed) {
+      applyShapeFromModel(modelPreviewState.parsed);
+      return;
+    }
+    var local = modelPreviewState.localModels.idle;
+    if (local) {
+      applyShapeFromModel(applyPreviewTextureOverrides(local));
+      return;
+    }
+    var entry = previewModelEntry("idle");
+    if (!entry) {
+      showToast("Preencha model.idle para gerar o shape.");
+      return;
+    }
+    var parts = splitPreviewIdentifier(entry.id);
+    if (!parts || typeof fetch !== "function") {
+      showToast("Não foi possível carregar o modelo do campo. Confira model e o servidor HTTP.");
+      return;
+    }
+    var url = modelPreviewAssetUrl(entry.id, "models", ".json");
+    if (!url) {
+      showToast("Identificador de modelo inválido no campo " + entry.key + ".");
+      return;
+    }
+    showToast("Carregando modelo do campo " + entry.key + "...");
+    fetch(url, { cache: "no-store" }).then(function (response) {
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+      return response.text();
+    }).then(function (text) {
+      applyShapeFromModel(ModelPreview.parseModel(text, { namespace: parts.namespace }));
+    }).catch(function (error) {
+      showToast("Não foi possível carregar " + entry.id + ": " +
+        (error && error.message ? error.message : error) + ". Confira o campo model.");
+    });
+  }
+
+  function onShapeListClick(event) {
+    var button = closest(event.target, "[data-shape-remove]");
+    if (!button) {
+      return;
+    }
+    var index = Number.parseInt(button.getAttribute("data-shape-remove"), 10);
+    if (!Array.isArray(state.shape) || index < 0 || index >= state.shape.length) {
+      return;
+    }
+    state.shape.splice(index, 1);
+    refresh({ skipModel: true, skipTextures: true, skipControllerRecipe: true });
   }
 
   function updateControllerRecipeCard() {
@@ -5001,6 +5380,1031 @@
     banner.hidden = false;
   }
 
+  function previewModelEntry(key) {
+    var requested = MODEL_KEYS.indexOf(key) >= 0 ? key : "idle";
+    if (controllerMode !== "custom") {
+      return { key: requested, id: DEFAULT_MODEL_IDS[requested] };
+    }
+    var model = isPlainObject(state.model) ? state.model : null;
+    if (!model) {
+      return null;
+    }
+    var order = requested === "building"
+      ? ["building", "active", "idle"]
+      : requested === "active" ? ["active", "idle"] : ["idle"];
+    for (var index = 0; index < order.length; index += 1) {
+      var id = trim(model[order[index]]);
+      if (id) {
+        return { key: order[index], id: id };
+      }
+    }
+    return null;
+  }
+
+  function mergePreviewTextureSet(target, set) {
+    if (!isPlainObject(set)) {
+      return;
+    }
+    ["all", "front", "back", "left", "right", "top", "bottom", "side", "particle"].forEach(function (key) {
+      var value = trim(set[key]);
+      if (value) {
+        target[key] = value;
+      }
+    });
+    var side = trim(set.side);
+    if (side) {
+      if (!trim(set.back)) {
+        target.back = side;
+      }
+      if (!trim(set.left)) {
+        target.left = side;
+      }
+      if (!trim(set.right)) {
+        target.right = side;
+      }
+    }
+  }
+
+  function previewTextureOverrides() {
+    var textures = isPlainObject(state.textures) ? state.textures : null;
+    if (!textures) {
+      return {};
+    }
+    var result = {};
+    mergePreviewTextureSet(result, textures.idle);
+    if (modelPreviewState.previewState !== "idle") {
+      mergePreviewTextureSet(result, textures.active);
+    }
+    if (modelPreviewState.previewState === "building") {
+      mergePreviewTextureSet(result, textures.building);
+    }
+    if (!result.particle) {
+      if (result.front) {
+        result.particle = result.front;
+      } else if (result.all) {
+        result.particle = result.all;
+      }
+    }
+    var overrides = {};
+    if (result.all) {
+      overrides.all = result.all;
+    }
+    if (result.front) {
+      overrides.front = result.front;
+      overrides.north = result.front;
+    }
+    var back = result.back || result.side;
+    if (back) {
+      overrides.back = back;
+      overrides.south = back;
+    }
+    var left = result.left || result.side;
+    if (left) {
+      overrides.left = left;
+      overrides.west = left;
+    }
+    var right = result.right || result.side;
+    if (right) {
+      overrides.right = right;
+      overrides.east = right;
+    }
+    if (result.top) {
+      overrides.top = result.top;
+      overrides.up = result.top;
+    }
+    if (result.bottom) {
+      overrides.bottom = result.bottom;
+      overrides.down = result.bottom;
+    }
+    if (result.side) {
+      overrides.side = result.side;
+    }
+    if (result.particle) {
+      overrides.particle = result.particle;
+    }
+    return overrides;
+  }
+
+  function applyPreviewKeyTextures(parsed) {
+    if (!ModelPreview || typeof ModelPreview.applyKeyOverrides !== "function") {
+      return parsed;
+    }
+    return ModelPreview.applyKeyOverrides(parsed, currentPreviewTextureKeys());
+  }
+
+  function applyPreviewTextureOverrides(parsed) {
+    if (!parsed || !ModelPreview || typeof ModelPreview.applyTextureOverrides !== "function") {
+      return parsed;
+    }
+    var applied = ModelPreview.applyTextureOverrides(parsed, previewTextureOverrides(), {
+      namespace: parsed.namespace || "minecraft"
+    });
+    if (controllerMode === "custom") {
+      return applyPreviewKeyTextures(applied);
+    }
+    return applied;
+  }
+
+  function syncModelPreviewTextures() {
+    if (!modelPreviewState.baseParsed) {
+      return;
+    }
+    modelPreviewState.fieldRequest += 1;
+    var request = modelPreviewState.fieldRequest;
+    modelPreviewState.loadingField = false;
+    modelPreviewState.parsed = applyPreviewTextureOverrides(modelPreviewState.baseParsed);
+    loadModelPreviewAutoTextures(modelPreviewState.parsed, request);
+    renderModelPreview();
+  }
+
+  function previewTextureNamespace() {
+    return currentNamespace();
+  }
+
+  function previewTextureIdentifier(face, file, namespace) {
+    var base = String(file && file.name || face)
+      .replace(/\.(png|json)$/i, "")
+      .trim()
+      .toLowerCase();
+    base = base.replace(/[^a-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!base) {
+      base = face;
+    }
+    var ns = trim(namespace) || previewTextureNamespace();
+    return ns + ":block/" + base;
+  }
+
+  function currentPreviewTextureSet() {
+    var textures = isPlainObject(state.textures) ? state.textures : null;
+    var setName = modelPreviewState.previewState;
+    return textures && isPlainObject(textures[setName]) ? textures[setName] : {};
+  }
+
+  var PREVIEW_TEXTURE_SLOT_MAP = { down: "bottom" };
+  var PREVIEW_DIRECTION_SLOT_MAP = {
+    north: "front",
+    south: "back",
+    west: "left",
+    east: "right",
+    up: "top",
+    down: "bottom"
+  };
+  function previewTextureSlot(key) {
+    if (["all", "front", "back", "left", "right", "top", "bottom", "side", "particle"].indexOf(key) >= 0) {
+      return key;
+    }
+    return PREVIEW_TEXTURE_SLOT_MAP[key] || "";
+  }
+
+  function previewTextureRowSlot(row) {
+    if (!row) {
+      return "";
+    }
+    if (row.key === "particle") {
+      return "particle";
+    }
+    var raw = trim(row.raw);
+    if (raw.charAt(0) === "#") {
+      var key = raw.slice(1);
+      var slot = previewTextureSlot(key);
+      if (slot) {
+        return slot;
+      }
+      return PREVIEW_DIRECTION_SLOT_MAP[key] || "";
+    }
+    if (raw) {
+      return "";
+    }
+    return previewTextureSlot(row.key);
+  }
+
+  function currentPreviewTextureKeys() {
+    var key = modelPreviewState.previewState;
+    if (!isPlainObject(modelPreviewState.previewTextureKeys[key])) {
+      modelPreviewState.previewTextureKeys[key] = {};
+    }
+    return modelPreviewState.previewTextureKeys[key];
+  }
+
+  function imageAppliesToPreviewState(image) {
+    return !image.previewOnly || image.previewState === modelPreviewState.previewState;
+  }
+
+  function customPreviewTextureRows(parsed) {
+    if (!parsed || !isPlainObject(parsed.textures) || !ModelPreview
+      || typeof ModelPreview.resolveTextureId !== "function") {
+      return [];
+    }
+    var namespace = parsed.namespace || "minecraft";
+    var keys = [];
+    var seen = {};
+    function addKey(key) {
+      if (typeof key !== "string" || !key || seen[key]) {
+        return;
+      }
+      seen[key] = true;
+      keys.push(key);
+    }
+    var source = parsed.raw && isPlainObject(parsed.raw.textures)
+      ? parsed.raw.textures
+      : parsed.textures;
+    Object.keys(source).forEach(addKey);
+    if (keys.length > 0) {
+      (Array.isArray(parsed.elements) ? parsed.elements : []).forEach(function (element) {
+        var faces = element && element.faces;
+        if (!isPlainObject(faces)) {
+          return;
+        }
+        Object.keys(faces).forEach(function (direction) {
+          var face = faces[direction];
+          var raw = face && typeof face.texture === "string" ? face.texture : "";
+          if (raw.charAt(0) === "#") {
+            addKey(raw.slice(1));
+          }
+        });
+      });
+    }
+    if (keys.length === 0) {
+      Object.keys(parsed.textures).forEach(addKey);
+    }
+    return keys.map(function (key) {
+      var identifier = ModelPreview.resolveTextureId(parsed.textures, "#" + key, 0, namespace);
+      if (!identifier) {
+        identifier = trim(currentPreviewTextureKeys()[key]) || null;
+      }
+      return {
+        key: "#" + key,
+        textureKey: key,
+        raw: typeof parsed.textures[key] === "string" ? parsed.textures[key] : "",
+        identifier: identifier || null,
+        vanilla: Boolean(identifier) && identifier.indexOf("minecraft:") === 0
+      };
+    });
+  }
+
+  function previewOnlyImage(identifier) {
+    var id = trim(identifier);
+    if (!id) {
+      return null;
+    }
+    for (var index = 0; index < modelPreviewState.images.length; index += 1) {
+      var entry = modelPreviewState.images[index];
+      if (entry.manual && entry.previewOnly && entry.identifier === id
+        && entry.previewState === modelPreviewState.previewState) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  function previewTextureRowOverride(row) {
+    if (controllerMode === "custom") {
+      return previewOnlyImage(row.identifier) ? row.identifier : "";
+    }
+    var slot = previewTextureRowSlot(row);
+    if (!slot) {
+      return "";
+    }
+    return trim(currentPreviewTextureSet()[slot]);
+  }
+
+  function onModelPreviewTextureImportClick(event) {
+    var button = closest(event.target, "[data-preview-texture-import]");
+    if (!button) {
+      return;
+    }
+    var slot = button.getAttribute("data-preview-texture-slot");
+    if (!slot && controllerMode !== "custom") {
+      return;
+    }
+    modelPreviewState.textureTarget = slot;
+    modelPreviewState.textureTargetId = button.getAttribute("data-preview-texture-id") || "";
+    modelPreviewState.textureTargetRow = button.getAttribute("data-preview-texture-import") || "";
+    modelPreviewState.textureTargetKey = button.getAttribute("data-preview-texture-key") || "";
+    modelPreviewState.textureLabel = button.getAttribute("data-preview-texture-import") || slot;
+    var input = $("modelPreviewTextureInput");
+    if (input) {
+      input.value = "";
+      input.click();
+    }
+  }
+
+  function onModelPreviewTextureInputChange(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    var slot = modelPreviewState.textureTarget;
+    var targetId = trim(modelPreviewState.textureTargetId);
+    var targetRow = trim(modelPreviewState.textureTargetRow);
+    var targetKey = trim(modelPreviewState.textureTargetKey);
+    var label = modelPreviewState.textureLabel || slot || targetRow;
+    var custom = controllerMode === "custom";
+    input.value = "";
+    modelPreviewState.textureTarget = "";
+    modelPreviewState.textureTargetId = "";
+    modelPreviewState.textureTargetRow = "";
+    modelPreviewState.textureTargetKey = "";
+    modelPreviewState.textureLabel = "";
+    if (!file || (!slot && !targetRow)) {
+      return;
+    }
+    if (!/^image\//i.test(file.type) && !/\.png$/i.test(file.name)) {
+      showToast("Selecione um arquivo PNG.", "error");
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var dataUrl = String(reader.result || "");
+      var image = new Image();
+      image.onload = function () {
+        var identifier = custom
+          ? (targetId || previewTextureIdentifier(label, file, "minecraft"))
+          : previewTextureIdentifier(label, file);
+        var setName = modelPreviewState.previewState;
+        if (custom) {
+          if (!targetId && targetKey) {
+            currentPreviewTextureKeys()[targetKey] = identifier;
+          }
+        } else {
+          if (!isPlainObject(state.textures)) {
+            state.textures = V.createTextures();
+          }
+          if (!isPlainObject(state.textures[setName])) {
+            state.textures[setName] = V.createTextureSet();
+          }
+          state.textures[setName][slot] = identifier;
+        }
+        modelPreviewState.images = modelPreviewState.images.filter(function (entry) {
+          if (!entry.manual || entry.identifier !== identifier) {
+            return true;
+          }
+          if (!custom) {
+            return false;
+          }
+          return !(entry.previewOnly && entry.previewState === setName);
+        });
+        modelPreviewState.images.push({
+          name: file.name,
+          path: file.name,
+          dataUrl: dataUrl,
+          image: image,
+          manual: true,
+          previewOnly: custom,
+          previewState: setName,
+          identifier: identifier
+        });
+        modelPreviewState.textureImages[identifier] = image;
+        if (custom) {
+          syncModelPreviewTextures();
+          showToast("Textura " + label + " (preview, não vai para o JSON): " + identifier + ".");
+        } else {
+          refresh({ skipControllerRecipe: true, skipModelPreview: true });
+          syncModelPreviewTextures();
+          showToast("Textura " + label + (slot !== label ? " (slot " + slot + ")" : "") +
+            " (" + setName + "): " + identifier + ".");
+        }
+      };
+      image.onerror = function () {
+        showToast("Não foi possível ler a textura.", "error");
+      };
+      image.src = dataUrl;
+    };
+    reader.onerror = function () {
+      showToast("Falha ao ler a textura.", "error");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function restoreManualPreviewImage(identifier, onlyPreviewOnly, previewState) {
+    if (!identifier) {
+      return;
+    }
+    modelPreviewState.images = modelPreviewState.images.filter(function (entry) {
+      if (!entry.manual || entry.identifier !== identifier) {
+        return true;
+      }
+      if (previewState && entry.previewOnly && entry.previewState !== previewState) {
+        return true;
+      }
+      return onlyPreviewOnly && !entry.previewOnly;
+    });
+    var remaining = null;
+    var auto = null;
+    for (var index = 0; index < modelPreviewState.images.length; index += 1) {
+      var entry = modelPreviewState.images[index];
+      if (entry.identifier !== identifier) {
+        continue;
+      }
+      if (previewState && entry.previewOnly && entry.previewState !== previewState) {
+        continue;
+      }
+      if (entry.manual && !remaining) {
+        remaining = entry;
+      } else if (entry.auto && !auto) {
+        auto = entry;
+      }
+    }
+    if (remaining) {
+      modelPreviewState.textureImages[identifier] = remaining.image;
+    } else if (auto) {
+      modelPreviewState.textureImages[identifier] = auto.image;
+    } else {
+      delete modelPreviewState.textureImages[identifier];
+    }
+  }
+
+  function onModelPreviewTextureClearClick(event) {
+    var button = closest(event.target, "[data-preview-texture-clear]");
+    if (!button) {
+      return;
+    }
+    var label = button.getAttribute("data-preview-texture-clear");
+    var slot = button.getAttribute("data-preview-texture-slot") || previewTextureSlot(label);
+    var custom = controllerMode === "custom";
+    if (custom) {
+      var identifier = trim(button.getAttribute("data-preview-texture-id"));
+      var previewState = modelPreviewState.previewState;
+      var keys = currentPreviewTextureKeys();
+      if (identifier) {
+        Object.keys(keys).forEach(function (key) {
+          if (trim(keys[key]) === identifier) {
+            delete keys[key];
+          }
+        });
+      }
+      restoreManualPreviewImage(identifier, true, previewState);
+      syncModelPreviewTextures();
+      showToast("Textura " + label + " restaurada para o padrão do modelo.");
+      return;
+    }
+    if (!slot) {
+      return;
+    }
+    var setName = modelPreviewState.previewState;
+    if (!isPlainObject(state.textures) || !isPlainObject(state.textures[setName])) {
+      return;
+    }
+    var identifier = trim(state.textures[setName][slot]);
+    state.textures[setName][slot] = "";
+    restoreManualPreviewImage(identifier);
+    refresh({ skipControllerRecipe: true, skipModelPreview: true });
+    syncModelPreviewTextures();
+    showToast("Textura " + label + (slot !== label ? " (slot " + slot + ")" : "") +
+      " restaurada para o padrão.");
+  }
+
+  function splitPreviewIdentifier(identifier) {
+    var text = trim(identifier);
+    var separator = text.indexOf(":");
+    if (separator <= 0 || separator === text.length - 1) {
+      return null;
+    }
+    var namespace = text.slice(0, separator);
+    var path = text.slice(separator + 1);
+    if (!/^[a-z0-9_.-]+$/i.test(namespace) || !/^[a-z0-9_./-]+$/i.test(path)) {
+      return null;
+    }
+    var segments = path.split("/");
+    for (var index = 0; index < segments.length; index += 1) {
+      if (!segments[index] || segments[index] === "." || segments[index] === "..") {
+        return null;
+      }
+    }
+    return { namespace: namespace, path: path };
+  }
+
+  function modelPreviewAssetUrl(identifier, folder, extension) {
+    var parts = splitPreviewIdentifier(identifier);
+    if (!parts) {
+      return "";
+    }
+    return "../../src/main/resources/assets/" + parts.namespace + "/" + folder + "/" + parts.path + extension;
+  }
+
+  function modelPreviewNamespace() {
+    var entry = previewModelEntry(modelPreviewState.previewState);
+    var parts = entry ? splitPreviewIdentifier(entry.id) : null;
+    return parts ? parts.namespace : "minecraft";
+  }
+
+  function modelPreviewSummaryText() {
+    var requested = modelPreviewState.previewState;
+    var entry = previewModelEntry(requested);
+    if (modelPreviewState.loadingField) {
+      return "Carregando " + modelPreviewState.fieldId + " (" + requested + ")...";
+    }
+    if (!entry) {
+      return "Preencha model.idle para visualizar o controller custom.";
+    }
+    var label = controllerMode === "custom" ? "model" : "controller padrão";
+    if (modelPreviewState.source === "local") {
+      label += " (arquivo local)";
+    }
+    var stateLabel = requested + (entry.key !== requested ? " → " + entry.key : "");
+    var parsed = modelPreviewState.parsed;
+    if (!parsed) {
+      return label + " · " + stateLabel + ": " + entry.id;
+    }
+    var elementCount = parsed.elements.length;
+    var textureCount = Array.isArray(parsed.textureRows)
+      ? parsed.textureRows.length
+      : parsed.entries.length;
+    return label + " · " + stateLabel + ": " + entry.id + " · " +
+      elementCount + (elementCount === 1 ? " elemento" : " elementos") + " · " +
+      textureCount + (textureCount === 1 ? " textura" : " texturas") + ".";
+  }
+
+  function clearAutoPreviewImages() {
+    modelPreviewState.images = modelPreviewState.images.filter(function (image) {
+      return !image.auto;
+    });
+    modelPreviewState.textureImages = {};
+    modelPreviewState.images.forEach(function (image) {
+      if (image.manual && image.identifier && image.image && imageAppliesToPreviewState(image)) {
+        modelPreviewState.textureImages[image.identifier] = image.image;
+      }
+    });
+  }
+
+  function loadModelPreviewAutoTextures(parsed, request) {
+    var pending = 0;
+    var finish = function () {
+      pending -= 1;
+      if (pending <= 0 && request === modelPreviewState.fieldRequest) {
+        modelPreviewState.loadingField = false;
+        renderModelPreview();
+      }
+    };
+    parsed.entries.forEach(function (entry) {
+      if (entry.vanilla || modelPreviewState.textureImages[entry.identifier]) {
+        return;
+      }
+      if (modelPreviewState.images.some(function (image) {
+        return image.auto && image.identifier === entry.identifier;
+      })) {
+        return;
+      }
+      var parts = splitPreviewIdentifier(entry.identifier);
+      var url = modelPreviewAssetUrl(entry.identifier, "textures", ".png");
+      if (!parts || !url) {
+        return;
+      }
+      pending += 1;
+      var image = new Image();
+      image.onload = function () {
+        if (request === modelPreviewState.fieldRequest) {
+          modelPreviewState.images.push({
+            name: parts.path.split("/").pop() + ".png",
+            path: parts.path + ".png",
+            dataUrl: url,
+            image: image,
+            auto: true,
+            identifier: entry.identifier
+          });
+          modelPreviewState.textureImages[entry.identifier] = image;
+        }
+        finish();
+      };
+      image.onerror = finish;
+      image.src = url;
+    });
+    if (pending === 0) {
+      modelPreviewState.loadingField = false;
+      renderModelPreview();
+    }
+  }
+
+  function loadModelPreviewFromField(force) {
+    var entry = previewModelEntry(modelPreviewState.previewState);
+    if (!entry) {
+      clearModelPreview(true);
+      if (controllerMode === "custom") {
+        modelPreviewState.error = "Preencha model.idle para visualizar o controller custom.";
+        renderModelPreview();
+      }
+      return;
+    }
+    if (!force && modelPreviewState.source === "field" && modelPreviewState.fieldId === entry.id) {
+      return;
+    }
+    var local = modelPreviewState.localModels[entry.key];
+    if (local) {
+      if (!force && modelPreviewState.source === "local" && modelPreviewState.fieldId === entry.id) {
+        return;
+      }
+      var localRequest = modelPreviewState.fieldRequest + 1;
+      modelPreviewState.fieldRequest = localRequest;
+      modelPreviewState.source = "local";
+      modelPreviewState.fieldId = entry.id;
+      modelPreviewState.fieldKey = entry.key;
+      modelPreviewState.loadingField = false;
+      modelPreviewState.fileName = entry.id;
+      modelPreviewState.error = "";
+      modelPreviewState.baseParsed = local;
+      modelPreviewState.parsed = applyPreviewTextureOverrides(local);
+      clearAutoPreviewImages();
+      autoMatchModelPreviewTextures();
+      loadModelPreviewAutoTextures(modelPreviewState.parsed, localRequest);
+      renderModelPreview();
+      return;
+    }
+    var parts = splitPreviewIdentifier(entry.id);
+    if (!parts || typeof fetch !== "function") {
+      modelPreviewState.error = typeof fetch === "function"
+        ? "Modelo inválido no campo " + entry.key + "."
+        : "Carregamento automático indisponível; sirva o builder por HTTP.";
+      modelPreviewState.parsed = null;
+      modelPreviewState.baseParsed = null;
+      modelPreviewState.source = "none";
+      renderModelPreview();
+      return;
+    }
+    var request = modelPreviewState.fieldRequest + 1;
+    modelPreviewState.fieldRequest = request;
+    modelPreviewState.source = "field";
+    modelPreviewState.fieldId = entry.id;
+    modelPreviewState.fieldKey = entry.key;
+    modelPreviewState.loadingField = true;
+    modelPreviewState.error = "";
+    renderModelPreview();
+    var url = modelPreviewAssetUrl(entry.id, "models", ".json");
+    fetch(url, { cache: "no-store" }).then(function (response) {
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+      return response.text();
+    }).then(function (text) {
+      if (request !== modelPreviewState.fieldRequest) {
+        return;
+      }
+      var parsed = ModelPreview.parseModel(text, { namespace: parts.namespace });
+      modelPreviewState.baseParsed = parsed;
+      modelPreviewState.parsed = applyPreviewTextureOverrides(parsed);
+      modelPreviewState.fileName = entry.id;
+      modelPreviewState.error = "";
+      clearAutoPreviewImages();
+      autoMatchModelPreviewTextures();
+      loadModelPreviewAutoTextures(modelPreviewState.parsed, request);
+      renderModelPreview();
+    }).catch(function (error) {
+      if (request !== modelPreviewState.fieldRequest) {
+        return;
+      }
+      modelPreviewState.loadingField = false;
+      modelPreviewState.parsed = null;
+      modelPreviewState.baseParsed = null;
+      modelPreviewState.source = "none";
+      modelPreviewState.fieldId = "";
+      modelPreviewState.fieldKey = "";
+      modelPreviewState.error = "Não foi possível carregar " + entry.id +
+        " (" + (error && error.message ? error.message : error) + "). Confira o campo model e o servidor HTTP.";
+      renderModelPreview();
+    });
+  }
+
+  function cancelModelPreviewFieldLoad() {
+    if (modelPreviewFieldTimer) {
+      window.clearTimeout(modelPreviewFieldTimer);
+      modelPreviewFieldTimer = null;
+    }
+  }
+
+  function scheduleModelPreviewFieldLoad() {
+    cancelModelPreviewFieldLoad();
+    modelPreviewFieldTimer = window.setTimeout(function () {
+      modelPreviewFieldTimer = null;
+      loadModelPreviewFromField(false);
+    }, 350);
+  }
+
+  function drawModelPreview() {
+    var canvas = $("modelPreviewCanvas");
+    if (!canvas || !ModelPreview) {
+      return;
+    }
+    var stage = $("modelPreviewStage");
+    if (stage && stage.offsetParent === null) {
+      return;
+    }
+    ModelPreview.draw(canvas, modelPreviewState.parsed, {
+      yaw: modelPreviewState.view.yaw,
+      pitch: modelPreviewState.view.pitch,
+      zoom: modelPreviewState.view.zoom,
+      showFloor: modelPreviewState.showFloor,
+      showReference: modelPreviewState.showReference,
+      textureImages: modelPreviewState.textureImages
+    });
+    var empty = $("modelPreviewEmpty");
+    if (empty) {
+      empty.hidden = Boolean(modelPreviewState.parsed);
+    }
+  }
+
+  function renderModelPreviewTextures() {
+    var list = $("modelPreviewTextureList");
+    if (!list) {
+      return;
+    }
+    var parsed = modelPreviewState.parsed;
+    if (!parsed) {
+      list.innerHTML = "";
+      return;
+    }
+    var custom = controllerMode === "custom";
+    var rows = custom
+      ? customPreviewTextureRows(parsed)
+      : (Array.isArray(parsed.textureRows) ? parsed.textureRows : []);
+    if (rows.length === 0) {
+      if (custom) {
+        list.innerHTML = "<p class='field-hint'>O modelo não declara texturas em <code>textures</code>.</p>";
+        return;
+      }
+      rows = parsed.entries.map(function (entry) {
+        return {
+          key: entry.keys.join(", "),
+          raw: "",
+          identifier: entry.identifier,
+          vanilla: entry.vanilla
+        };
+      });
+    }
+    if (rows.length === 0) {
+      list.innerHTML = "<p class='field-hint'>O modelo não declara texturas próprias; as faces usam placeholders.</p>";
+      return;
+    }
+    list.innerHTML = rows.map(function (row) {
+      var image = row.identifier ? modelPreviewState.textureImages[row.identifier] : null;
+      var imageEntry = null;
+      if (image) {
+        for (var index = 0; index < modelPreviewState.images.length; index += 1) {
+          if (modelPreviewState.images[index].image === image) {
+            imageEntry = modelPreviewState.images[index];
+            break;
+          }
+        }
+      }
+      var matched = Boolean(image);
+      var tone = row.vanilla ? "ok" : matched ? "ok" : "error";
+      var toneAttribute = tone ? " data-tone='" + tone + "'" : "";
+      var label = row.vanilla ? "vanilla" : matched ? "resolvida" : "sem png";
+      var thumbnail = imageEntry && imageEntry.dataUrl
+        ? "<img class='model-preview-thumb' alt='' src='" + esc(imageEntry.dataUrl) + "'>"
+        : "<span class='model-preview-thumb is-empty'></span>";
+      var reference = row.raw && row.raw !== row.identifier
+        ? "<span class='model-preview-texture-ref'>" + esc(row.raw) + "</span>"
+        : "";
+      var slot = custom ? "" : previewTextureRowSlot(row);
+      var canImport = custom || Boolean(slot);
+      var override = canImport ? previewTextureRowOverride(row) : "";
+      var textureKey = row.textureKey || "";
+      var actions = canImport
+        ? "<div class='model-preview-texture-actions'>" +
+          "<button type='button' class='btn btn-tiny' data-preview-texture-import='" +
+          esc(row.key) + "' data-preview-texture-slot='" + esc(slot) +
+          "' data-preview-texture-id='" + esc(row.identifier || "") +
+          "' data-preview-texture-key='" + esc(textureKey) + "'>importar</button>" +
+          (override
+            ? "<button type='button' class='btn btn-tiny btn-danger' data-preview-texture-clear='" +
+              esc(row.key) + "' data-preview-texture-slot='" + esc(slot) +
+              "' data-preview-texture-id='" + esc(row.identifier || "") +
+              "' data-preview-texture-key='" + esc(textureKey) + "'>limpar</button>"
+            : "") +
+          "</div>"
+        : "";
+      return "<div class='model-preview-texture-row'>" +
+        thumbnail +
+        "<div class='model-preview-texture-info'>" +
+        "<span class='model-preview-texture-keys'>" + esc(row.key) + reference + "</span>" +
+        "<code>" + esc(row.identifier || "sem textura") + "</code>" +
+        "</div>" +
+        "<div class='model-preview-texture-side'>" +
+        "<span class='badge'" + toneAttribute + ">" + label + "</span>" +
+        actions +
+        "</div>" +
+        "</div>";
+    }).join("");
+  }
+
+  function renderModelPreviewStateButtons() {
+    $$("[data-preview-state]").forEach(function (button) {
+      var key = button.getAttribute("data-preview-state");
+      var entry = previewModelEntry(key);
+      button.classList.toggle("is-active", key === modelPreviewState.previewState);
+      button.disabled = !entry;
+      button.title = entry && entry.key !== key ? "Usa " + entry.key : "";
+    });
+  }
+
+  function onModelPreviewStateClick(event) {
+    var button = closest(event.target, "[data-preview-state]");
+    if (!button || button.disabled) {
+      return;
+    }
+    var key = button.getAttribute("data-preview-state");
+    if (MODEL_KEYS.indexOf(key) < 0 || key === modelPreviewState.previewState) {
+      return;
+    }
+    modelPreviewState.previewState = key;
+    loadModelPreviewFromField(true);
+  }
+
+  function renderModelPreview() {
+    var feedback = $("modelPreviewFeedback");
+    if (!ModelPreview) {
+      if (feedback) {
+        feedback.textContent = "modelpreview3d.js não carregou.";
+        feedback.hidden = false;
+      }
+      return;
+    }
+    var summary = $("modelPreviewSummary");
+    if (summary) {
+      summary.textContent = modelPreviewSummaryText();
+    }
+    var problem = modelPreviewState.error;
+    if (!problem && modelPreviewState.parsed && modelPreviewState.parsed.missingParent) {
+      problem = "Parent não encontrado: " + modelPreviewState.parsed.missingParent +
+        ". Usei o cubo completo como fallback.";
+    }
+    if (!problem && modelPreviewState.parsed && modelPreviewState.parsed.usedFallbackCube) {
+      problem = "Sem elements no modelo ou no parent; usei um cubo completo.";
+    }
+    if (feedback) {
+      feedback.textContent = problem;
+      feedback.hidden = !problem;
+      feedback.className = "matcher-feedback controller-feedback" +
+        (modelPreviewState.error ? " is-error" : "");
+    }
+    var floor = $("modelPreviewFloor");
+    if (floor) {
+      floor.checked = modelPreviewState.showFloor;
+    }
+    var reference = $("modelPreviewReference");
+    if (reference) {
+      reference.checked = modelPreviewState.showReference;
+    }
+    renderModelPreviewStateButtons();
+    renderModelPreviewTextures();
+    drawModelPreview();
+  }
+
+  function matchPreviewImage(entry) {
+    var identifier = entry.identifier;
+    var pathPart = identifier.slice(identifier.indexOf(":") + 1);
+    var normalizedPath = pathPart.toLowerCase();
+    var baseName = normalizedPath.split("/").pop();
+    var best = null;
+    modelPreviewState.images.forEach(function (image) {
+      if (image.previewOnly) {
+        return;
+      }
+      var name = String(image.name || "").toLowerCase();
+      var imagePath = String(image.path || "").replace(/\\/g, "/").toLowerCase();
+      var suffix = "/textures/" + normalizedPath + ".png";
+      if (imagePath === suffix.slice(1) || imagePath.slice(-suffix.length) === suffix) {
+        best = image;
+        return;
+      }
+      if (!best && name.replace(/\.png$/, "") === baseName) {
+        best = image;
+      }
+    });
+    return best;
+  }
+
+  function autoMatchModelPreviewTextures() {
+    var parsed = modelPreviewState.parsed;
+    if (!parsed) {
+      return;
+    }
+    parsed.entries.forEach(function (entry) {
+      if (modelPreviewState.textureImages[entry.identifier]) {
+        return;
+      }
+      var match = matchPreviewImage(entry);
+      if (match) {
+        modelPreviewState.textureImages[entry.identifier] = match.image;
+      }
+    });
+  }
+
+  function resetPreviewTextureOverrides() {
+    var identifiers = {};
+    modelPreviewState.images.forEach(function (entry) {
+      if (entry.manual && entry.previewOnly) {
+        identifiers[entry.identifier] = true;
+      }
+    });
+    modelPreviewState.images = modelPreviewState.images.filter(function (entry) {
+      return !(entry.manual && entry.previewOnly);
+    });
+    Object.keys(identifiers).forEach(function (identifier) {
+      var remaining = null;
+      var auto = null;
+      modelPreviewState.images.forEach(function (entry) {
+        if (entry.identifier !== identifier) {
+          return;
+        }
+        if (entry.manual && !remaining) {
+          remaining = entry;
+        } else if (entry.auto && !auto) {
+          auto = entry;
+        }
+      });
+      if (remaining) {
+        modelPreviewState.textureImages[identifier] = remaining.image;
+      } else if (auto) {
+        modelPreviewState.textureImages[identifier] = auto.image;
+      } else {
+        delete modelPreviewState.textureImages[identifier];
+      }
+    });
+    modelPreviewState.previewTextureKeys = { idle: {}, active: {}, building: {} };
+    modelPreviewState.textureTarget = "";
+    modelPreviewState.textureTargetId = "";
+    modelPreviewState.textureTargetRow = "";
+    modelPreviewState.textureTargetKey = "";
+    modelPreviewState.textureLabel = "";
+  }
+
+  function clearModelPreview(silent) {
+    cancelModelPreviewFieldLoad();
+    resetPreviewTextureOverrides();
+    modelPreviewState.fieldRequest += 1;
+    modelPreviewState.loadingField = false;
+    modelPreviewState.parsed = null;
+    modelPreviewState.baseParsed = null;
+    modelPreviewState.fileName = "";
+    modelPreviewState.source = "none";
+    modelPreviewState.fieldId = "";
+    modelPreviewState.fieldKey = "";
+    modelPreviewState.images = [];
+    modelPreviewState.textureImages = {};
+    modelPreviewState.error = "";
+    renderModelPreview();
+    if (!silent) {
+      showToast("Preview do modelo limpo.");
+    }
+  }
+
+  function resetModelPreviewView() {
+    modelPreviewState.view = { yaw: 2.95, pitch: 0.42, zoom: 1 };
+    drawModelPreview();
+  }
+
+  function onModelPreviewOptionChange() {
+    var floor = $("modelPreviewFloor");
+    var reference = $("modelPreviewReference");
+    modelPreviewState.showFloor = floor ? floor.checked : true;
+    modelPreviewState.showReference = reference ? reference.checked : true;
+    drawModelPreview();
+  }
+
+  function beginModelPreviewDrag(event) {
+    var canvas = $("modelPreviewCanvas");
+    if (!canvas || event.button !== 0) {
+      return;
+    }
+    if (canvas.setPointerCapture) {
+      canvas.setPointerCapture(event.pointerId);
+    }
+    canvas.classList.add("is-dragging");
+    modelPreviewState.dragging = true;
+    modelPreviewState.lastX = event.clientX;
+    modelPreviewState.lastY = event.clientY;
+  }
+
+  function moveModelPreviewDrag(event) {
+    if (!modelPreviewState.dragging) {
+      return;
+    }
+    var dx = event.clientX - modelPreviewState.lastX;
+    var dy = event.clientY - modelPreviewState.lastY;
+    modelPreviewState.lastX = event.clientX;
+    modelPreviewState.lastY = event.clientY;
+    modelPreviewState.view.yaw += dx * 0.01;
+    modelPreviewState.view.pitch = clamp(modelPreviewState.view.pitch + dy * 0.01, -1.45, 1.45);
+    drawModelPreview();
+  }
+
+  function endModelPreviewDrag(event) {
+    var canvas = $("modelPreviewCanvas");
+    if (!canvas) {
+      return;
+    }
+    if (canvas.hasPointerCapture && canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    canvas.classList.remove("is-dragging");
+    modelPreviewState.dragging = false;
+  }
+
+  function onModelPreviewWheel(event) {
+    event.preventDefault();
+    modelPreviewState.view.zoom = clamp(
+      modelPreviewState.view.zoom * Math.exp(-event.deltaY * 0.0015), 0.35, 4);
+    drawModelPreview();
+  }
+
   function drawPreview() {
     if (!Preview || !state) {
       return;
@@ -5038,8 +6442,17 @@
     if (activeStep === "capabilities" && !settings.skipCapabilities) {
       renderCapabilities();
     }
-    if (activeStep === "controller" && !settings.skipTextures) {
-      renderTextures();
+    if (activeStep === "controller" && !settings.skipControllerMode) {
+      renderControllerMode();
+    }
+    if (activeStep === "controller" && !settings.skipModel) {
+      renderModel();
+    }
+    if (activeStep === "controller" && !settings.skipShape) {
+      renderShape();
+    }
+    if (activeStep === "controller" && !settings.skipModelPreview) {
+      renderModelPreview();
     }
     if (activeStep === "controller" && !settings.skipControllerRecipe) {
       renderControllerRecipe();
@@ -5081,6 +6494,9 @@
     }
     activeStep = stepId;
     refresh();
+    if (stepId === "controller" && modelPreviewState.source === "none") {
+      scheduleModelPreviewFieldLoad();
+    }
     if (!options || !options.preserveScroll) {
       scrollToTop(true);
     }
@@ -5162,7 +6578,7 @@
       return;
     }
     if (field === "controller") {
-      focusElement($("controllerPanel"), false);
+      focusElement($("controllerModePanel"), false);
       return;
     }
     if (field === "controllerRecipe") {
@@ -5737,7 +7153,21 @@
         setPatternFullscreen(false);
         state = imported.state;
         state.recipes = [];
+        modelPreviewState.localModels = {};
+        resetPreviewTextureOverrides();
+        controllerMode = deriveControllerMode();
+        if (controllerMode === "default") {
+          state.model = V.createModel();
+          state.shape = V.createShape();
+        }
+        modelPreviewState.previewState = "idle";
         importNotes = imported.notes || [];
+        if (V.hasTextures(state.textures) && controllerMode === "custom") {
+          importNotes.push({
+            severity: "info",
+            message: "textures será aplicado sobre o model custom quando as faces usarem front/back/left/right/top/bottom/side ou as direções correspondentes."
+          });
+        }
         var importedBase = String(file.name || "").replace(/\.json$/i, "");
         var pathBase = trim(state.path).split("/").pop();
         if (importedBase && pathBase && importedBase !== pathBase) {
@@ -5889,8 +7319,28 @@
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);
     $("capabilityPortsPanel").addEventListener("input", onCapabilityPortsInput);
-    $("texturesForm").addEventListener("input", onTexturesInput);
-    $("resetTexturesBtn").addEventListener("click", resetTextures);
+    $("controllerModeOptions").addEventListener("change", onControllerModeChange);
+    $("modelForm").addEventListener("input", onModelInput);
+    $("modelForm").addEventListener("click", onModelImportClick);
+    $("modelImportInput").addEventListener("change", onModelImportChange);
+    $("resetModelBtn").addEventListener("click", resetModel);
+    $("shapeFromModelBtn").addEventListener("click", useShapeFromModel);
+    $("addShapeBoxBtn").addEventListener("click", addShapeBox);
+    $("resetShapeBtn").addEventListener("click", resetShape);
+    $("shapeList").addEventListener("input", onShapeInput);
+    $("shapeList").addEventListener("click", onShapeListClick);
+    $("modelPreviewStateButtons").addEventListener("click", onModelPreviewStateClick);
+    $("modelPreviewTextureList").addEventListener("click", onModelPreviewTextureImportClick);
+    $("modelPreviewTextureList").addEventListener("click", onModelPreviewTextureClearClick);
+    $("modelPreviewTextureInput").addEventListener("change", onModelPreviewTextureInputChange);
+    $("modelPreviewResetViewBtn").addEventListener("click", resetModelPreviewView);
+    $("modelPreviewFloor").addEventListener("change", onModelPreviewOptionChange);
+    $("modelPreviewReference").addEventListener("change", onModelPreviewOptionChange);
+    $("modelPreviewCanvas").addEventListener("pointerdown", beginModelPreviewDrag);
+    $("modelPreviewCanvas").addEventListener("pointermove", moveModelPreviewDrag);
+    $("modelPreviewCanvas").addEventListener("pointerup", endModelPreviewDrag);
+    $("modelPreviewCanvas").addEventListener("pointercancel", endModelPreviewDrag);
+    $("modelPreviewCanvas").addEventListener("wheel", onModelPreviewWheel, { passive: false });
     $("addControllerRecipeBtn").addEventListener("click", addControllerRecipe);
     $("removeControllerRecipeBtn").addEventListener("click", removeControllerRecipe);
     $("controllerRecipePalette").addEventListener("click", onControllerRecipePaletteClick);
@@ -5942,6 +7392,9 @@
       if (activeStep === "pattern") {
         window.setTimeout(drawPreview, 30);
       }
+      if (activeStep === "controller") {
+        window.setTimeout(drawModelPreview, 30);
+      }
     });
     window.addEventListener("beforeunload", saveNow);
   }
@@ -5962,6 +7415,9 @@
     syncInputs();
     renderImportNotes();
     refresh();
+    if (activeStep === "controller" && modelPreviewState.source === "none") {
+      scheduleModelPreviewFieldLoad();
+    }
   }
 
   if (document.readyState === "loading") {

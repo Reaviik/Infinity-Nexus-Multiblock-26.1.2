@@ -1,0 +1,18 @@
+{
+  "type": "infinity_nexus_multiblock:multiblock",
+  "definition": "infinity_nexus_multiblock:steam_generator",
+  "inputs": [
+    {
+      "type": "item",
+      "ingredient": "#minecraft:furnace_minecart_fuel",
+      "count": 1
+    }
+  ],
+  "outputs": [
+    {
+      "type": "energy",
+      "amount": 500
+    }
+  ],
+  "time": 20
+}

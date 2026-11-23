@@ -15,7 +15,9 @@ import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
 import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
+import com.Infinity.Nexus.Multiblock.api.MultiblockModel;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockShape;
 import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.api.MultiblockType;
 import com.Infinity.Nexus.Multiblock.api.SlotLock;
@@ -146,6 +148,8 @@ public final class MultiblockGameTests {
                 }
             }
             assertDefinitionTextures(helper);
+            assertDefinitionModel(helper);
+            assertMultiblockShape(helper);
             assertEarlySlotPositions(helper);
             assertFluidOnlyGui(helper);
             assertFluidPortBinding(helper);
@@ -263,12 +267,26 @@ public final class MultiblockGameTests {
             Map<String, Identifier> building = textures.resolve(MultiblockTextures.State.BUILDING);
             if (!stone.equals(idle.get("front"))
                     || !oakPlanks.equals(idle.get("side"))
+                    || !oakPlanks.equals(idle.get("left"))
+                    || !oakPlanks.equals(idle.get("right"))
+                    || !oakPlanks.equals(idle.get("back"))
+                    || !stone.equals(idle.get("north"))
+                    || !oakPlanks.equals(idle.get("west"))
+                    || !oakPlanks.equals(idle.get("east"))
+                    || !oakPlanks.equals(idle.get("south"))
                     || !stone.equals(idle.get("particle"))) {
                 throw helper.assertionException(Component.literal(
                         "Idle textures resolved incorrectly: " + idle));
             }
             if (!smoothStone.equals(active.get("front"))
-                    || !oakLog.equals(active.get("side"))) {
+                    || !oakLog.equals(active.get("side"))
+                    || !oakLog.equals(active.get("left"))
+                    || !oakLog.equals(active.get("right"))
+                    || !oakLog.equals(active.get("back"))
+                    || !smoothStone.equals(active.get("north"))
+                    || !oakLog.equals(active.get("west"))
+                    || !oakLog.equals(active.get("east"))
+                    || !oakLog.equals(active.get("south"))) {
                 throw helper.assertionException(Component.literal(
                         "Active textures did not overlay the idle textures: " + active));
             }
@@ -285,12 +303,36 @@ public final class MultiblockGameTests {
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()),
                     Optional.empty(),
                     Optional.empty());
             if (!front.equals(particleFallback.resolve(false).get("particle"))) {
                 throw helper.assertionException(Component.literal(
                         "Resolved textures must fall back from particle to front"));
+            }
+
+            Identifier all = Identifier.parse("minecraft:block/all_test");
+            MultiblockTextures allFallback = new MultiblockTextures(
+                    new MultiblockTextures.TextureSet(
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.of(all)),
+                    Optional.empty(),
+                    Optional.empty());
+            Map<String, Identifier> allResolved = allFallback.resolve(false);
+            if (!all.equals(allResolved.get("all")) || !all.equals(allResolved.get("particle"))) {
+                throw helper.assertionException(Component.literal(
+                        "Resolved textures must expose and fall back from all: " + allResolved));
             }
 
             Identifier buildingFront = Identifier.parse("minecraft:block/building_front_test");
@@ -300,10 +342,18 @@ public final class MultiblockGameTests {
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()),
                     Optional.empty(),
                     Optional.of(new MultiblockTextures.TextureSet(
                             Optional.of(buildingFront),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
@@ -339,6 +389,89 @@ public final class MultiblockGameTests {
                         "Multiblock textures failed to round-trip through their codec: "
                                 + textures + " != " + decoded));
             }
+        }
+
+        private static void assertDefinitionModel(GameTestHelper helper) {
+            Identifier definitionId = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "model_test");
+            MultiblockDefinition definition = MultiblockDefinitions.get(definitionId);
+            if (definition == null) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock definition is missing: " + definitionId));
+            }
+
+            Identifier idle = Identifier.parse("minecraft:block/furnace");
+            Identifier active = Identifier.parse("minecraft:block/furnace_on");
+            Identifier building = Identifier.parse("minecraft:block/crafting_table");
+            MultiblockModel model = definition.model();
+            if (!idle.equals(model.resolve(MultiblockTextures.State.IDLE).orElse(null))
+                    || !active.equals(model.resolve(MultiblockTextures.State.ACTIVE).orElse(null))
+                    || !building.equals(model.resolve(MultiblockTextures.State.BUILDING).orElse(null))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock model states resolved incorrectly: " + model));
+            }
+
+            MultiblockModel idleOnly = new MultiblockModel(Optional.of(idle), Optional.empty(), Optional.empty());
+            if (!idle.equals(idleOnly.resolve(MultiblockTextures.State.ACTIVE).orElse(null))
+                    || !idle.equals(idleOnly.resolve(MultiblockTextures.State.BUILDING).orElse(null))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock model must fall back from active/building to idle: " + idleOnly));
+            }
+
+            MultiblockModel activeOnly = new MultiblockModel(Optional.of(idle), Optional.of(active), Optional.empty());
+            if (!active.equals(activeOnly.resolve(MultiblockTextures.State.BUILDING).orElse(null))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock model must fall back from building to active: " + activeOnly));
+            }
+
+            var encoded = MultiblockModel.CODEC.codec()
+                    .encodeStart(JsonOps.INSTANCE, model)
+                    .getOrThrow();
+            MultiblockModel decoded = MultiblockModel.CODEC.codec()
+                    .parse(JsonOps.INSTANCE, encoded)
+                    .getOrThrow();
+            if (!model.equals(decoded)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock model failed to round-trip through its codec: "
+                                + model + " != " + decoded));
+            }
+        }
+
+        private static void assertMultiblockShape(GameTestHelper helper) {
+            MultiblockShape shape = MultiblockShape.CODEC
+                    .parse(JsonOps.INSTANCE, JsonParser.parseString("[[0,0,0,4,16,8]]"))
+                    .getOrThrow();
+            if (shape.isEmpty()) {
+                throw helper.assertionException(Component.literal("Multiblock shape must not be empty"));
+            }
+            var bounds = shape.voxelShape(Rotation.NONE).bounds();
+            if (!near(bounds.minX, 0.0) || !near(bounds.maxX, 0.25)
+                    || !near(bounds.minY, 0.0) || !near(bounds.maxY, 1.0)
+                    || !near(bounds.minZ, 0.0) || !near(bounds.maxZ, 0.5)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock shape bounds are wrong: " + bounds));
+            }
+            var rotated = shape.voxelShape(Rotation.CLOCKWISE_90).bounds();
+            if (!near(rotated.minX, 0.5) || !near(rotated.maxX, 1.0)
+                    || !near(rotated.minZ, 0.0) || !near(rotated.maxZ, 0.25)) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock shape rotation is wrong: " + rotated));
+            }
+            var encoded = MultiblockShape.CODEC.encodeStart(JsonOps.INSTANCE, shape).getOrThrow();
+            MultiblockShape decoded = MultiblockShape.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
+            if (!shape.boxes().equals(decoded.boxes())) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock shape failed to round-trip through its codec: "
+                                + shape.boxes() + " != " + decoded.boxes()));
+            }
+            if (MultiblockShape.EMPTY.voxelShape(Rotation.NONE).isEmpty()) {
+                throw helper.assertionException(Component.literal(
+                        "An empty multiblock shape must keep the full block shape"));
+            }
+        }
+
+        private static boolean near(double value, double expected) {
+            return Math.abs(value - expected) < 1.0E-6;
         }
 
         private static void assertMultiblockRecipeLoads(GameTestHelper helper) {

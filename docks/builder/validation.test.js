@@ -1801,6 +1801,47 @@ test("textures exporta idle e active e faz round-trip", () => {
   assert.deepEqual(V.validateState(imported.state).errors, []);
 });
 
+test("textures exporta as seis faces semanticas e faz round-trip", () => {
+  const state = withState((value) => {
+    value.textures = V.createTextures();
+    value.textures.idle.front = "minecraft:block/stone";
+    value.textures.idle.top = "minecraft:block/oak_log_top";
+    value.textures.idle.bottom = "minecraft:block/oak_log_top";
+    value.textures.idle.left = "minecraft:block/oak_planks";
+    value.textures.idle.right = "minecraft:block/oak_planks";
+    value.textures.idle.back = "minecraft:block/oak_log";
+    value.textures.idle.particle = "minecraft:block/stone";
+  });
+  const json = V.buildDefinition(state);
+  assert.deepEqual(json.textures, {
+    front: "minecraft:block/stone",
+    back: "minecraft:block/oak_log",
+    left: "minecraft:block/oak_planks",
+    right: "minecraft:block/oak_planks",
+    top: "minecraft:block/oak_log_top",
+    bottom: "minecraft:block/oak_log_top",
+    particle: "minecraft:block/stone"
+  });
+  const imported = V.importDefinition(json);
+  assert.deepEqual(V.buildDefinition(imported.state).textures, json.textures);
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+});
+
+test("textures exporta all e faz round-trip", () => {
+  const state = withState((value) => {
+    value.textures = V.createTextures();
+    value.textures.idle.all = "minecraft:block/stone";
+  });
+  const json = V.buildDefinition(state);
+  assert.deepEqual(json.textures, {
+    all: "minecraft:block/stone"
+  });
+  const imported = V.importDefinition(json);
+  assert.equal(imported.state.textures.idle.all, "minecraft:block/stone");
+  assert.deepEqual(V.buildDefinition(imported.state).textures, json.textures);
+  assert.deepEqual(V.validateState(imported.state).errors, []);
+});
+
 test("textures invalidas bloqueiam a exportacao", () => {
   const state = withState((value) => {
     value.textures = V.createTextures();
@@ -2327,6 +2368,70 @@ test("receita essentia rejeita falta de capability, aspecto e tanque", () => {
   const invalidCodes = codes(V.validateState(invalid));
   assert.ok(invalidCodes.includes("recipe.input.essentia_invalid"));
   assert.ok(invalidCodes.includes("recipe.output.essentia_tank_unknown"));
+});
+
+test("model e shape padrão são omitidos na exportação", () => {
+  const json = V.buildDefinition(V.createDefaultState());
+  assert.equal(json.model, undefined);
+  assert.equal(json.shape, undefined);
+});
+
+test("model e shape válidos exportam e fazem round-trip", () => {
+  const state = withState((value) => {
+    value.model = {
+      idle: "mymod:block/fornalha",
+      active: "mymod:block/fornalha_on",
+      building: ""
+    };
+    value.shape = [[4, 0, 4, 12, 16, 12], [2, 0, 12, 14, 6, 16]];
+  });
+  const exported = V.buildDefinition(state);
+  assert.deepEqual(exported.model, {
+    idle: "mymod:block/fornalha",
+    active: "mymod:block/fornalha_on"
+  });
+  assert.deepEqual(exported.shape, [[4, 0, 4, 12, 16, 12], [2, 0, 12, 14, 6, 16]]);
+  assert.deepEqual(codes(V.validateState(state)), []);
+
+  const imported = V.importDefinition(exported);
+  assert.deepEqual(V.buildDefinition(imported.state), exported);
+});
+
+test("shape fora do limite ou com min maior que max é erro", () => {
+  const outOfRange = withState((value) => {
+    value.shape = [[-1, 0, 0, 16, 16, 16]];
+  });
+  assert.ok(codes(V.validateState(outOfRange)).includes("shape.invalid"));
+
+  const inverted = withState((value) => {
+    value.shape = [[8, 0, 0, 4, 16, 16]];
+  });
+  assert.ok(codes(V.validateState(inverted)).includes("shape.invalid"));
+});
+
+test("model com identifier inválido é erro", () => {
+  const state = withState((value) => {
+    value.model = { idle: "fornalha", active: "", building: "" };
+  });
+  assert.ok(codes(V.validateState(state)).includes("model.invalid"));
+});
+
+test("importação normaliza shape e descarta caixas inválidas", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:fornalha",
+    type: "storage",
+    model: { idle: "mymod:block/fornalha" },
+    shape: [[4, 0, 4, 12, 16, 12], [1, 2, 3], ["x", 0, 0, 16, 16, 16]],
+    pattern: { anchor: "C", layers: [["C"]], matchers: {} }
+  });
+  assert.deepEqual(imported.state.model, {
+    idle: "mymod:block/fornalha",
+    active: "",
+    building: ""
+  });
+  assert.deepEqual(imported.state.shape, [[4, 0, 4, 12, 16, 12]]);
+  assert.ok(imported.notes.length >= 2);
 });
 
 if (process.exitCode) {

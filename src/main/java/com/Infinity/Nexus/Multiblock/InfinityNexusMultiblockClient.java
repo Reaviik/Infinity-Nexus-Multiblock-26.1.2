@@ -2,8 +2,10 @@ package com.Infinity.Nexus.Multiblock;
 
 import com.Infinity.Nexus.Multiblock.client.model.ControllerBlockStateModel;
 import com.Infinity.Nexus.Multiblock.client.model.ControllerSpecialRenderer;
+import com.Infinity.Nexus.Multiblock.client.model.MultiblockModelResolver;
 import com.Infinity.Nexus.Multiblock.client.preview.MultiblockDiorama;
 import com.Infinity.Nexus.Multiblock.client.preview.MultiblockPreview;
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
@@ -13,6 +15,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.client.event.TextureAtlasStitchedEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
@@ -24,10 +27,17 @@ public class InfinityNexusMultiblockClient {
         modBus.addListener(MultiblockDiorama::register);
         modBus.addListener(ControllerBlockStateModel.Unbaked::register);
         modBus.addListener(ControllerSpecialRenderer.Unbaked::register);
+        modBus.addListener(InfinityNexusMultiblockClient::onTextureAtlasStitched);
     }
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+    }
+
+    static void onTextureAtlasStitched(TextureAtlasStitchedEvent event) {
+        if (event.getAtlas().location().equals(TextureAtlas.LOCATION_BLOCKS)) {
+            MultiblockModelResolver.clearCache();
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

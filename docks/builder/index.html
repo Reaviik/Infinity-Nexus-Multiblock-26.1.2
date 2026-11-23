@@ -385,109 +385,127 @@
           <div>
             <p class="eyebrow">Etapa 06 · opcional</p>
             <h1 id="controllerTitle">Controller único e receita</h1>
-            <p class="view-subtitle">Todas as definições usam o mesmo bloco e item controller. Aqui você configura texturas opcionais por definição e a receita shaped que cria esse item.</p>
+            <p class="view-subtitle">Escolha o controller padrão ou custom. No custom, o preview usa os modelos do campo model e as texturas vêm do próprio modelo.</p>
           </div>
           <span class="badge badge-neutral" id="controllerBadge">Pendente</span>
         </div>
 
-        <div class="panel" id="controllerPanel">
-          <div class="panel-head">
+        <div class="panel" id="controllerModePanel">
+          <div class="panel-head panel-head-wrap">
             <div>
-              <h2>controller compartilhado</h2>
-              <p class="panel-subtitle" id="controllerSummary">Todas as definições usam o mesmo controller; as texturas por definição são opcionais.</p>
+              <h2>tipo de controller</h2>
+              <p class="panel-subtitle" id="controllerModeSummary">Escolha antes de configurar o visual.</p>
             </div>
           </div>
-          <div class="missing-empty">
-            <p>O bloco, o item e o block entity são registrados uma única vez pelo mod:</p>
-            <p><code>infinity_nexus_multiblock:multiblock_controller</code></p>
-            <p>Cada definição é associada ao controller pelo componente <code>infinity_nexus_multiblock:multiblock_definition</code>.</p>
+          <div class="controller-mode-options" id="controllerModeOptions">
+            <label class="controller-mode-option">
+              <input type="radio" name="controllerMode" value="default" checked>
+              <span><strong>Padrão</strong><small>Usa o modelo e as texturas do controller embutido. Sem model ou shape.</small></span>
+            </label>
+            <label class="controller-mode-option">
+              <input type="radio" name="controllerMode" value="custom">
+              <span><strong>Custom</strong><small>Usa os modelos do campo model e um shape próprio. A lista de texturas usa as chaves de textura do JSON do modelo; importar é só para visualização.</small></span>
+            </label>
           </div>
         </div>
 
-        <div class="panel" id="texturesPanel">
+        <div class="panel" id="modelPanel">
           <div class="panel-head panel-head-wrap">
             <div>
-              <h2>textures</h2>
-              <p class="panel-subtitle" id="texturesSummary">Sem texturas por definição; usa o modelo padrão do controller.</p>
+              <h2>model</h2>
+              <p class="panel-subtitle" id="modelSummary">Sem modelo por definição; usa o modelo padrão do controller.</p>
             </div>
             <div class="button-row">
-              <button type="button" class="btn btn-tiny btn-danger" id="resetTexturesBtn">limpar texturas</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="resetModelBtn">limpar modelo</button>
             </div>
           </div>
-          <p class="field-hint">Ids completos como <code>minecraft:block/stone</code>. Faces omitidas caem no modelo padrão. <code>particle</code> cai em <code>front</code> quando vazio. Building herda idle/active; sem texturas por definicao, usa o modelo padrao com <code>front_on_building</code>.</p>
-          <div id="texturesForm" autocomplete="off">
-            <h3 class="controller-section-title">Idle <span class="controller-optional">controller parado</span></h3>
+          <p class="field-hint">Ids completos como <code>infinity_nexus_multiblock:block/steam_generator</code>. Estado ausente herda o anterior: <code>active</code> cai em <code>idle</code>; <code>building</code> cai em <code>active</code>/<code>idle</code>. O botão <strong>importar</strong> carrega um JSON local no preview e sugere o id pelo nome do arquivo.</p>
+          <div id="modelForm" autocomplete="off">
             <div class="controller-texture-grid">
               <div class="field">
-                <label for="textureIdleFront">front</label>
-                <input id="textureIdleFront" type="text" data-texture-set="idle" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="minecraft:block/stone">
+                <label for="modelIdle">idle</label>
+                <div class="model-input-row">
+                  <input id="modelIdle" type="text" data-model-field="idle" spellcheck="false" autocomplete="off" placeholder="minecraft:block/furnace">
+                  <button type="button" class="btn btn-tiny" data-model-import="idle">importar</button>
+                </div>
               </div>
               <div class="field">
-                <label for="textureIdleSide">side</label>
-                <input id="textureIdleSide" type="text" data-texture-set="idle" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_planks">
+                <label for="modelActive">active</label>
+                <div class="model-input-row">
+                  <input id="modelActive" type="text" data-model-field="active" spellcheck="false" autocomplete="off" placeholder="herda idle">
+                  <button type="button" class="btn btn-tiny" data-model-import="active">importar</button>
+                </div>
               </div>
               <div class="field">
-                <label for="textureIdleTop">top</label>
-                <input id="textureIdleTop" type="text" data-texture-set="idle" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log_top">
-              </div>
-              <div class="field">
-                <label for="textureIdleBottom">bottom</label>
-                <input id="textureIdleBottom" type="text" data-texture-set="idle" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log_top">
-              </div>
-              <div class="field">
-                <label for="textureIdleParticle">particle</label>
-                <input id="textureIdleParticle" type="text" data-texture-set="idle" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="padrão: front">
-              </div>
-            </div>
-            <h3 class="controller-section-title">Active <span class="controller-optional">opcional, controller processando</span></h3>
-            <div class="controller-texture-grid">
-              <div class="field">
-                <label for="textureActiveFront">front</label>
-                <input id="textureActiveFront" type="text" data-texture-set="active" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="minecraft:block/smooth_stone">
-              </div>
-              <div class="field">
-                <label for="textureActiveSide">side</label>
-                <input id="textureActiveSide" type="text" data-texture-set="active" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="minecraft:block/oak_log">
-              </div>
-              <div class="field">
-                <label for="textureActiveTop">top</label>
-                <input id="textureActiveTop" type="text" data-texture-set="active" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="herda idle">
-              </div>
-              <div class="field">
-                <label for="textureActiveBottom">bottom</label>
-                <input id="textureActiveBottom" type="text" data-texture-set="active" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="herda idle">
-              </div>
-              <div class="field">
-                <label for="textureActiveParticle">particle</label>
-                <input id="textureActiveParticle" type="text" data-texture-set="active" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="herda idle">
-              </div>
-            </div>
-            <h3 class="controller-section-title">Building <span class="controller-optional">opcional, controller montando a estrutura</span></h3>
-            <div class="controller-texture-grid">
-              <div class="field">
-                <label for="textureBuildingFront">front</label>
-                <input id="textureBuildingFront" type="text" data-texture-set="building" data-texture-field="front" spellcheck="false" autocomplete="off" placeholder="herda active">
-              </div>
-              <div class="field">
-                <label for="textureBuildingSide">side</label>
-                <input id="textureBuildingSide" type="text" data-texture-set="building" data-texture-field="side" spellcheck="false" autocomplete="off" placeholder="herda active">
-              </div>
-              <div class="field">
-                <label for="textureBuildingTop">top</label>
-                <input id="textureBuildingTop" type="text" data-texture-set="building" data-texture-field="top" spellcheck="false" autocomplete="off" placeholder="herda active">
-              </div>
-              <div class="field">
-                <label for="textureBuildingBottom">bottom</label>
-                <input id="textureBuildingBottom" type="text" data-texture-set="building" data-texture-field="bottom" spellcheck="false" autocomplete="off" placeholder="herda active">
-              </div>
-              <div class="field">
-                <label for="textureBuildingParticle">particle</label>
-                <input id="textureBuildingParticle" type="text" data-texture-set="building" data-texture-field="particle" spellcheck="false" autocomplete="off" placeholder="herda active">
+                <label for="modelBuilding">building</label>
+                <div class="model-input-row">
+                  <input id="modelBuilding" type="text" data-model-field="building" spellcheck="false" autocomplete="off" placeholder="herda active">
+                  <button type="button" class="btn btn-tiny" data-model-import="building">importar</button>
+                </div>
               </div>
             </div>
           </div>
-          <code class="matcher-json slot-json controller-json" id="texturesJson"></code>
-          <p class="matcher-feedback controller-feedback" id="texturesFeedback" hidden></p>
+          <input type="file" id="modelImportInput" accept=".json,application/json" hidden>
+          <details class="card-advanced">
+            <summary>Código JSON <span class="card-advanced-hint">model</span></summary>
+            <div class="card-advanced-body">
+              <code class="matcher-json slot-json controller-json" id="modelJson"></code>
+            </div>
+          </details>
+          <p class="matcher-feedback controller-feedback" id="modelFeedback" hidden></p>
+        </div>
+
+        <div class="panel" id="modelPreviewPanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>preview do modelo</h2>
+              <p class="panel-subtitle" id="modelPreviewSummary">O preview usa o controller padrão ou o campo model.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="modelPreviewResetViewBtn">resetar câmera</button>
+            </div>
+          </div>
+          <p class="field-hint">O preview carrega o modelo e resolve as texturas do projeto automaticamente. Alterne entre <code>idle</code>, <code>active</code> e <code>building</code>; estados vazios herdam o anterior. Arraste para girar e use a roda para zoom. Em <code>file://</code> o carregamento automático não funciona.</p>
+          <div class="model-preview-toolbar">
+            <div class="model-preview-states" id="modelPreviewStateButtons" role="group" aria-label="Estado do modelo">
+              <button type="button" class="btn btn-tiny is-active" data-preview-state="idle">Idle</button>
+              <button type="button" class="btn btn-tiny" data-preview-state="active">Active</button>
+              <button type="button" class="btn btn-tiny" data-preview-state="building">Building</button>
+            </div>
+            <label class="model-preview-toggle"><input type="checkbox" id="modelPreviewFloor" checked> <span>chão cinza</span></label>
+            <label class="model-preview-toggle"><input type="checkbox" id="modelPreviewReference" checked> <span>blocos de referência</span></label>
+          </div>
+          <p class="field-hint">No controller padrão, a lista mostra as seis faces do modelo padrão. No custom, a lista mostra as chaves de textura do JSON do modelo (ex.: <code>#all</code>, <code>#side</code>). No padrão, <strong>importar</strong> grava overrides em <code>textures</code>; no custom, <strong>importar</strong> é só para visualização, não altera o JSON e fica salvo por estado do preview.</p>
+          <input type="file" id="modelPreviewTextureInput" accept="image/png,image/*" hidden>
+          <div class="model-preview-stage" id="modelPreviewStage">
+            <canvas id="modelPreviewCanvas" aria-label="Preview 3D do modelo"></canvas>
+            <div class="model-preview-empty" id="modelPreviewEmpty">Nenhum modelo carregado.</div>
+          </div>
+          <div class="model-preview-texture-list" id="modelPreviewTextureList"></div>
+          <p class="matcher-feedback controller-feedback" id="modelPreviewFeedback" hidden></p>
+        </div>
+
+        <div class="panel" id="shapePanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>shape</h2>
+              <p class="panel-subtitle" id="shapeSummary">Sem shape por definição; colisão e seleção usam o cubo completo.</p>
+            </div>
+            <div class="button-row">
+              <button type="button" class="btn btn-tiny" id="shapeFromModelBtn">usar model</button>
+              <button type="button" class="btn btn-tiny" id="addShapeBoxBtn">+ caixa</button>
+              <button type="button" class="btn btn-tiny btn-danger" id="resetShapeBtn">limpar shape</button>
+            </div>
+          </div>
+          <p class="field-hint">Caixas em pixels de 0 a 16, no espaço do modelo virado para norte. Sem shape, a colisão e a seleção usam o cubo completo. <strong>usar model</strong> usa o <code>model.idle</code>, preserva coordenadas fracionárias e ignora elementos com rotação fora de 90°; elementos fora de 0–16 são ajustados e avisados.</p>
+          <div id="shapeList"></div>
+          <details class="card-advanced">
+            <summary>Código JSON <span class="card-advanced-hint" id="shapeCodeHint">shape</span></summary>
+            <div class="card-advanced-body">
+              <code class="matcher-json slot-json controller-json" id="shapeJson"></code>
+            </div>
+          </details>
+          <p class="matcher-feedback controller-feedback" id="shapeFeedback" hidden></p>
         </div>
 
         <div class="panel" id="controllerRecipePanel">
@@ -522,7 +540,7 @@
         </div>
 
         <div class="callout callout-info">
-          O bloco, o item e o block entity são compartilhados; o campo <code>textures</code> permite sobrescrever as texturas por definição (idle/active/building). O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
+          O bloco, o item e o block entity são compartilhados. O controller padrão usa o modelo embutido; o custom usa <code>model</code> e <code>shape</code> por definição. O campo top-level <code>recipe</code> é opcional e gera <code>data/&lt;namespace&gt;/recipe/controller/&lt;path&gt;.json</code> com resultado <code>infinity_nexus_multiblock:multiblock_controller</code>.
         </div>
       </section>
 
@@ -877,8 +895,8 @@
 
       <div class="notes-card">
         <h3>Escopo do builder</h3>
-        <p>Identidade, pattern, matchers, slots, capabilities, receita do controller, GUI, sons, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
-        <p>O controller é único e registrado pelo mod. O builder não gera blockstates, modelos ou texturas de controller por definição.</p>
+        <p>Identidade, pattern, matchers, slots, capabilities, controller (textures/model/shape), GUI, sons, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
+        <p>O controller é único e registrado pelo mod. O builder não gera os arquivos de blockstate, modelo ou textura referenciados por <code>model</code>/<code>textures</code>.</p>
       </div>
     </aside>
   </div>
@@ -901,6 +919,7 @@
 
   <script src="validation.js"></script>
   <script src="preview3d.js"></script>
+  <script src="modelpreview3d.js"></script>
   <script src="data/minecraft_sounds.js"></script>
   <script src="app.js"></script>
 </body>

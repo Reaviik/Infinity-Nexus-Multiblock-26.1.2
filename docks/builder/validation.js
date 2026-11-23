@@ -30,7 +30,10 @@
   var RESOURCE_KINDS = ["essentia"];
   var CONTROLLER_FACES = ["front", "back", "left", "right", "top", "bottom"];
   var CONTROLLER_KEYS = ["block", "textures", "formed_textures", "particle", "light_level"];
-  var TEXTURE_SET_KEYS = ["front", "side", "top", "bottom", "particle"];
+  var TEXTURE_SET_KEYS = ["all", "front", "back", "left", "right", "top", "bottom", "side", "particle"];
+  var MODEL_KEYS = ["idle", "active", "building"];
+  var SHAPE_BOX_SIZE = 6;
+  var SHAPE_MAX = 16;
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
   var CONTROLLER_RECIPE_MAX_SIZE = 3;
   var MAX_LIGHT_LEVEL = 15;
@@ -61,6 +64,8 @@
     "capability_ports",
     "controller",
     "textures",
+    "model",
+    "shape",
     "recipe",
     "gui",
     "sounds",
@@ -83,6 +88,8 @@
     capabilityPorts: "capability_ports válidas",
     controller: "controller único e item compartilhado",
     textures: "texturas idle/active válidas",
+    model: "modelos idle/active/building válidos",
+    shape: "caixas de colisão/seleção válidas",
     controllerRecipe: "receita shaped do controller válida",
     gui: "gui e elementos válidos",
     sounds: "sons processing/finish válidos",
@@ -123,6 +130,17 @@
   function toIntOr(value, fallback) {
     var parsed = toInt(value);
     return parsed === null ? fallback : parsed;
+  }
+
+  function toNumber(value) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      var parsed = Number(value.trim());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
   }
 
   function isValidNamespace(value) {
@@ -2398,10 +2416,14 @@
 
   function createTextureSet() {
     return {
+      all: "",
       front: "",
-      side: "",
+      back: "",
+      left: "",
+      right: "",
       top: "",
       bottom: "",
+      side: "",
       particle: ""
     };
   }
@@ -2540,6 +2562,180 @@
     return textureSetProblem(textures.idle, "textures") ||
       textureSetProblem(textures.active, "textures.active") ||
       textureSetProblem(textures.building, "textures.building");
+  }
+
+  function createModel() {
+    return {
+      idle: "",
+      active: "",
+      building: ""
+    };
+  }
+
+  function parseModel(value, notes, path) {
+    var model = createModel();
+    if (value === undefined || value === null) {
+      return model;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: path + " precisa ser um objeto e foi ignorado."
+      });
+      return model;
+    }
+    MODEL_KEYS.forEach(function (key) {
+      var raw = value[key];
+      if (raw === undefined || raw === null) {
+        return;
+      }
+      if (typeof raw !== "string") {
+        notes.push({
+          severity: "warning",
+          message: path + "." + key + " inválido foi ignorado."
+        });
+        return;
+      }
+      model[key] = raw.trim();
+    });
+    return model;
+  }
+
+  function hasModel(model) {
+    if (!isPlainObject(model)) {
+      return false;
+    }
+    return MODEL_KEYS.some(function (key) {
+      return Boolean(trimString(model[key]));
+    });
+  }
+
+  function buildModel(model) {
+    var result = {};
+    if (!isPlainObject(model)) {
+      return result;
+    }
+    MODEL_KEYS.forEach(function (key) {
+      var identifier = trimString(model[key]);
+      if (identifier) {
+        result[key] = identifier;
+      }
+    });
+    return result;
+  }
+
+  function modelProblem(model) {
+    if (model === undefined || model === null) {
+      return "";
+    }
+    if (!isPlainObject(model)) {
+      return "model precisa ser um objeto.";
+    }
+    for (var index = 0; index < MODEL_KEYS.length; index += 1) {
+      var key = MODEL_KEYS[index];
+      var identifier = trimString(model[key]);
+      if (identifier && !isValidIdentifier(identifier)) {
+        return "model." + key + " precisa ser um identifier válido.";
+      }
+    }
+    return "";
+  }
+
+  function createShape() {
+    return [];
+  }
+
+  function parseShape(value, notes, path) {
+    var shape = createShape();
+    if (value === undefined || value === null) {
+      return shape;
+    }
+    if (!Array.isArray(value)) {
+      notes.push({
+        severity: "warning",
+        message: path + " precisa ser uma lista de caixas e foi ignorado."
+      });
+      return shape;
+    }
+    value.forEach(function (entry, index) {
+      if (!Array.isArray(entry) || entry.length !== SHAPE_BOX_SIZE) {
+        notes.push({
+          severity: "warning",
+          message: path + "[" + index + "] precisa ter 6 números e foi ignorado."
+        });
+        return;
+      }
+      var box = [];
+      for (var fieldIndex = 0; fieldIndex < SHAPE_BOX_SIZE; fieldIndex += 1) {
+        var number = toNumber(entry[fieldIndex]);
+        if (number === null) {
+          notes.push({
+            severity: "warning",
+            message: path + "[" + index + "] tem um valor inválido e foi ignorado."
+          });
+          return;
+        }
+        box.push(number);
+      }
+      shape.push(box);
+    });
+    return shape;
+  }
+
+  function buildShape(shape) {
+    var result = [];
+    if (!Array.isArray(shape)) {
+      return result;
+    }
+    shape.forEach(function (box) {
+      if (!Array.isArray(box) || box.length !== SHAPE_BOX_SIZE) {
+        return;
+      }
+      var values = [];
+      for (var fieldIndex = 0; fieldIndex < SHAPE_BOX_SIZE; fieldIndex += 1) {
+        var number = toNumber(box[fieldIndex]);
+        if (number === null) {
+          return;
+        }
+        values.push(number);
+      }
+      result.push(values);
+    });
+    return result;
+  }
+
+  function shapeBoxProblem(box, label) {
+    if (!Array.isArray(box) || box.length !== SHAPE_BOX_SIZE) {
+      return label + " precisa ter 6 números.";
+    }
+    var values = [];
+    for (var fieldIndex = 0; fieldIndex < SHAPE_BOX_SIZE; fieldIndex += 1) {
+      var number = toNumber(box[fieldIndex]);
+      if (number === null || number < 0 || number > SHAPE_MAX) {
+        return label + " precisa usar números entre 0 e 16.";
+      }
+      values.push(number);
+    }
+    if (values[0] > values[3] || values[1] > values[4] || values[2] > values[5]) {
+      return label + " precisa ter min menor ou igual ao max.";
+    }
+    return "";
+  }
+
+  function shapeProblem(shape) {
+    if (shape === undefined || shape === null) {
+      return "";
+    }
+    if (!Array.isArray(shape)) {
+      return "shape precisa ser uma lista de caixas.";
+    }
+    for (var index = 0; index < shape.length; index += 1) {
+      var problem = shapeBoxProblem(shape[index], "shape[" + index + "]");
+      if (problem) {
+        return problem;
+      }
+    }
+    return "";
   }
 
   function createController() {
@@ -3747,6 +3943,8 @@
       capabilities: null,
       capabilityPorts: null,
       textures: createTextures(),
+      model: createModel(),
+      shape: createShape(),
       controllerRecipe: null,
       gui: null,
       sounds: createSounds(),
@@ -3783,6 +3981,8 @@
       capabilities: null,
       capabilityPorts: null,
       textures: createTextures(),
+      model: createModel(),
+      shape: createShape(),
       controllerRecipe: null,
       gui: null,
       sounds: {
@@ -4071,6 +4271,8 @@
     state.capabilities = parseCapabilities(raw.capabilities, notes);
     state.capabilityPorts = parseCapabilityPorts(raw.capability_ports, notes);
     state.textures = parseTextures(raw.textures, notes, "textures");
+    state.model = parseModel(raw.model, notes, "model");
+    state.shape = parseShape(raw.shape, notes, "shape");
     state.controllerRecipe = parseControllerRecipe(raw.recipe, notes);
     state.gui = parseGui(raw.gui, notes);
     state.sounds = parseSounds(raw.sounds, notes);
@@ -4220,6 +4422,18 @@
       var textures = buildTextures(state.textures);
       if (Object.keys(textures).length > 0) {
         definition.textures = textures;
+      }
+    }
+    if (isPlainObject(state.model)) {
+      var model = buildModel(state.model);
+      if (Object.keys(model).length > 0) {
+        definition.model = model;
+      }
+    }
+    if (Array.isArray(state.shape)) {
+      var shape = buildShape(state.shape);
+      if (shape.length > 0) {
+        definition.shape = shape;
       }
     }
     if (isPlainObject(state.controllerRecipe)) {
@@ -4402,6 +4616,24 @@
       if (texturesIssue) {
         texturesOk = false;
         add("textures.invalid", "error", "controller", "textures", texturesIssue);
+      }
+    }
+
+    var modelOk = true;
+    if (state.model !== null && state.model !== undefined) {
+      var modelIssue = modelProblem(state.model);
+      if (modelIssue) {
+        modelOk = false;
+        add("model.invalid", "error", "controller", "model", modelIssue);
+      }
+    }
+
+    var shapeOk = true;
+    if (state.shape !== null && state.shape !== undefined) {
+      var shapeIssue = shapeProblem(state.shape);
+      if (shapeIssue) {
+        shapeOk = false;
+        add("shape.invalid", "error", "controller", "shape", shapeIssue);
       }
     }
 
@@ -5370,6 +5602,18 @@
       step: "controller"
     });
     checks.push({
+      id: "model",
+      label: CHECK_LABELS.model,
+      ok: modelOk,
+      step: "controller"
+    });
+    checks.push({
+      id: "shape",
+      label: CHECK_LABELS.shape,
+      ok: shapeOk,
+      step: "controller"
+    });
+    checks.push({
       id: "controllerRecipe",
       label: CHECK_LABELS.controllerRecipe,
       ok: controllerRecipeOk,
@@ -5540,6 +5784,15 @@
     buildTextures: buildTextures,
     hasTextures: hasTextures,
     texturesProblem: texturesProblem,
+    createModel: createModel,
+    parseModel: parseModel,
+    buildModel: buildModel,
+    hasModel: hasModel,
+    modelProblem: modelProblem,
+    createShape: createShape,
+    parseShape: parseShape,
+    buildShape: buildShape,
+    shapeProblem: shapeProblem,
     createController: createController,
     createFormedTextures: createFormedTextures,
     createControllerRecipe: createControllerRecipe,

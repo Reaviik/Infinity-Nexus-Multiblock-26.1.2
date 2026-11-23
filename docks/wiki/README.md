@@ -57,7 +57,7 @@ Estrutura: pattern é validado com rotação
 Máquina: inventário, energia, fluidos, GUI e receita funcionam
 ```
 
-Não há mais `controller` nem `recipe_type` na definição. O controller compartilhado exibe o nome da definição via `MultiblockDefinition#displayName()`; a chave de tradução é `multiblock.<namespace>.<path>` e o fallback é o path formatado, como `fabrica_de_voxel_cube` -> `Fabrica De Voxel Cube`. O campo opcional `textures` permite especializar as texturas do controller por definição; veja a seção 9.2.
+Não há mais `controller` nem `recipe_type` na definição. O controller compartilhado exibe o nome da definição via `MultiblockDefinition#displayName()`; a chave de tradução é `multiblock.<namespace>.<path>` e o fallback é o path formatado, como `fabrica_de_voxel_cube` -> `Fabrica De Voxel Cube`. Os campos opcionais `textures` e `model` permitem especializar as texturas e o modelo 3D do controller por definição; veja a seção 9.2.
 
 No JEI, a categoria de **receita** é filtrada pelo componente de definição do controller. A categoria de **estrutura** ainda usa o controller genérico como catalisador e pode listar todas as estruturas; trate isso como limitação conhecida até o filtro por definição ser implementado.
 
@@ -144,7 +144,9 @@ Datapacks e KubeJS podem adicionar ou sobrescrever definições e receitas. O co
 | `item_slots` | não | lista | `[]` | Define os slots do inventário. Veja a seção 6. |
 | `capabilities` | não | objeto | vazio | Energia e fluidos. Veja a seção 7. |
 | `capability_ports` | não | objeto | ausente | Restringe quais blocos membros expõem item, energia e fluido. Veja a seção 7.3. |
-| `textures` | não | objeto | ausente | Sobrescreve as texturas do controller por definição. Aceita `front`, `side`, `top`, `bottom`, `particle` e `active`. Veja a seção 9.2. |
+| `textures` | não | objeto | ausente | Sobrescreve as texturas do controller por definição. Aceita `front`, `back`, `left`, `right`, `top`, `bottom`, `side`, `particle` e `active`. Veja a seção 9.2. |
+| `model` | não | objeto | ausente | Modelo 3D customizado do controller por estado. Aceita `idle`, `active` e `building`. Veja a seção 9.2. |
+| `shape` | não | lista | ausente | Caixas de colisão e seleção do controller, em pixels (`0`–`16`). Veja a seção 9.2.1. |
 | `gui` | não | objeto | ausente | Layout padrão ou customizado. Veja a seção 8. |
 | `sounds` | não | objeto | ausente | Sons de processamento e conclusão de receitas. Veja a seção 10.11. |
 | `pattern` | sim para máquina | objeto | — | Obrigatório para uma definição registrada. Templates podem omitir. |
@@ -924,9 +926,9 @@ Para obter uma variante:
 
 `/inmb list` lista as definições e cria links clicáveis para o comando `give`.
 
-### 9.2 Texturas por definição
+### 9.2 Texturas e modelo 3D por definição
 
-O campo top-level `textures` é opcional e sobrescreve as texturas do modelo compartilhado para uma definição. O bloco e o item continuam os mesmos; o cliente re-bakeia o modelo do controller quando a definição ou o estado `processing` muda.
+Os campos top-level `textures` e `model` são opcionais. `textures` sobrescreve as texturas do modelo compartilhado e `model` troca o modelo 3D do controller por estado visual. O bloco e o item continuam os mesmos; o cliente re-bakeia o modelo do controller quando a definição ou o estado `processing` muda.
 
 ```json
 {
@@ -940,20 +942,66 @@ O campo top-level `textures` é opcional e sobrescreve as texturas do modelo com
       "front": "minhamod:block/fornalha_front_on",
       "side": "minhamod:block/fornalha_side_on"
     }
+  },
+  "model": {
+    "idle": "minhamod:block/fornalha",
+    "active": "minhamod:block/fornalha_on",
+    "building": "minhamod:block/fornalha_building"
   }
 }
 ```
 
-Regras:
+Regras de `textures`:
 
-- Faces aceitas: `front`, `side`, `top`, `bottom` e `particle`.
+- Faces aceitas: `all`, `front`, `back`, `left`, `right`, `top`, `bottom`, `side` e `particle`; `left`, `right` e `back` usam `side` como fallback.
+- `all` atende modelos cujas faces usam `#all`; as faces específicas têm prioridade sobre `all`.
 - Os valores são identifiers completos, como `minecraft:block/stone`, e a textura precisa existir em `assets/<namespace>/textures/block/...` para entrar no atlas de blocos.
 - Faces omitidas usam o modelo/textura padrão do controller.
 - `active` é opcional e é aplicado enquanto o controller está processando. Faces omitidas em `active` herdam a textura idle correspondente.
-- `particle` vazio usa `front`; sem `front`, usa a partícula padrão do modelo.
+- `particle` vazio usa `front`; sem `front`, usa `all`; sem ambos, usa a partícula padrão do modelo.
+- No builder, o controller custom lista as chaves de textura do próprio JSON do modelo (ex.: `#all`, `#side`, `#front`), não as seis faces padrão. Importar um PNG é apenas visual: não grava em `textures` nem altera o JSON. A imagem é aplicada a todas as faces que usam aquela chave; se a chave não tiver identifier resolvido, o builder gera um `minecraft:...` apenas no preview. As imagens ficam salvas por estado (`idle`, `active`, `building`) e voltam ao alternar o preview.
 - Como os demais objetos, `textures` é mesclado recursivamente por `extends`, `family` e `overrides`; o objeto `active` é mesclado face a face.
 - Se uma textura não estiver no atlas de blocos do cliente, o controller volta ao modelo padrão e registra um aviso no log; o JSON continua carregando no servidor.
 - A troca idle/active não exige quebrar o bloco; ela acompanha o estado `processing` do controller.
+
+Regras de `model`:
+
+- Valores são identifiers de modelos completos, como `minecraft:block/furnace`, e o JSON precisa existir em `assets/<namespace>/models/...`.
+- `idle` é a base. `active` é usado durante o processamento e `building` durante a montagem.
+- Fallback: `building` usa `active` e depois `idle`; `active` usa `idle`. Sem `idle`, a definição não troca o modelo.
+- O modelo e o item usam o estado `idle`; no bloco, a troca acompanha `processing`/montagem sem quebrar o bloco. O preview do JEI e o ghost preview tambem usam o modelo `idle` da definicao.
+- `textures` continua sendo aplicado por cima do modelo escolhido, quando as faces existirem.
+- Se o modelo não puder ser carregado, o controller mantém o modelo padrão do blockstate e registra um aviso no log; o JSON continua carregando no servidor.
+- Limitações: modelos JSON padrão (`elements`/`parent`) são o caso garantido; modelos com loaders customizados (OBJ etc.) são best-effort, composites com dependências internas podem não resolver e o modelo precisa caber no espaço de um bloco.
+- Como os demais objetos, `model` é mesclado recursivamente por `extends`, `family` e `overrides`.
+
+### 9.2.1 Shape do controller
+
+O campo top-level `shape` é opcional e substitui o cubo completo usado na colisão e no contorno de seleção do controller. Cada caixa usa pixels (`0`–`16`) no espaço do modelo olhando para o norte e é rotacionada junto com o `facing` do bloco.
+
+```json
+{
+  "shape": [
+    [4, 0, 4, 12, 16, 12],
+    [2, 0, 12, 14, 6, 16]
+  ]
+}
+```
+
+Cada entrada é `[min_x, min_y, min_z, max_x, max_y, max_z]`.
+
+O botão **usar model** do builder gera uma caixa AABB por elemento do `model.idle`, preservando coordenadas fracionárias. Rotações de 90° são exatas; elementos com outras rotações e caixas sem volume são ignorados. Elementos fora de `0`–`16` são ajustados ao limite e o builder avisa. Como o `shape` é único, ele não acompanha `active`/`building`: use o `model.idle` como referência de colisão.
+
+Regras de `shape`:
+
+- Omitir `shape` (ou usar uma lista vazia) mantém o cubo completo do controller.
+- As caixas precisam ficar dentro de `0`–`16` e `min` não pode ser maior que `max`.
+- A rotação acompanha o `facing`: norte `0°`, leste `90°`, sul `180°`, oeste `270°`.
+- O shape vale para colisão e para o contorno de seleção; o modelo visual não é alterado.
+- O item no inventário continua sem shape próprio (não é necessário).
+- Como os demais campos, `shape` é mesclado/substituído por `extends`, `family` e `overrides`.
+- Se o controller ainda não tiver a definição sincronizada no cliente, o shape cai no cubo completo até a sincronização.
+
 
 ### 9.3 Como o vínculo é aplicado
 
@@ -1339,7 +1387,7 @@ Ele contém apenas:
 - `type: "storage"`;
 - `pattern` com `layers`, `anchor` e `matchers` de bloco + state.
 
-Ele **não** contém `item_slots`, `capabilities`, `textures`, `gui`, receita ou prioridade. Use como ponto de partida para o pattern.
+Ele **não** contém `item_slots`, `capabilities`, `textures`, `model`, `gui`, receita ou prioridade. Use como ponto de partida para o pattern.
 
 ### 13.3 Normalização
 
@@ -1350,7 +1398,7 @@ A exportação normaliza posições e states para a orientação canônica `SOUT
 1. Salve o JSON em `data/<namespace>/multiblock/<arquivo>.json`.
 2. Troque o `id` para `<namespace>:<arquivo>`.
 3. Troque `type` para `recipe` se a máquina processar receitas.
-4. Adicione `item_slots`, `capabilities`, `textures` e `gui` conforme necessário.
+4. Adicione `item_slots`, `capabilities`, `textures`, `model` e `gui` conforme necessário.
 5. Crie as receitas com `type: infinity_nexus_multiblock:multiblock` e `definition` igual ao `id`.
 6. Rode `/reload`; o controller compartilhado já existe, então não é preciso reiniciar.
 
@@ -1532,7 +1580,7 @@ Antes de testar, confirme:
 ### 18.1 Controller único
 
 - Existe um único bloco/item controller: `infinity_nexus_multiblock:multiblock_controller`.
-- O vínculo com a máquina vem do componente `infinity_nexus_multiblock:multiblock_definition`; não há bloco ou item por definição, mas o modelo do controller pode ser especializado com `textures`.
+- O vínculo com a máquina vem do componente `infinity_nexus_multiblock:multiblock_definition`; não há bloco ou item por definição, mas o modelo do controller pode ser especializado com `textures` e `model`.
 - A aba criativa mostra uma variante do controller para cada definição carregada.
 - `/reload` atualiza definições e receitas; não é necessário reiniciar para adicionar, remover ou sobrescrever uma definição.
 - O antigo bloco `nexus_core` e os controllers dinâmicos foram removidos. Mundos antigos podem gerar avisos de registry; faça backup antes de atualizar.
@@ -1549,7 +1597,7 @@ Antes de testar, confirme:
 
 ### 18.3 Assets, JEI e reload
 
-- O controller compartilhado tem blockstate, modelo base, loot e traduções próprios; texturas por definição vêm de `textures` e são aplicadas em runtime.
+- O controller compartilhado tem blockstate, modelo base, loot e traduções próprios; texturas e modelos por definição vêm de `textures` e `model` e são aplicados em runtime.
 - O nome exibido usa `multiblock.<namespace>.<path>` e cai no path formatado quando não há tradução.
 - A categoria JEI de receitas é filtrada pela definição do controller.
 - A categoria JEI de estruturas ainda usa um catalisador genérico e pode listar todas as estruturas; o filtro por definição é uma melhoria pendente.

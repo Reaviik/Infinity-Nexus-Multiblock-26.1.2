@@ -8,9 +8,11 @@ import java.util.Map;
 import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
+import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
 import com.Infinity.Nexus.Multiblock.block.MultiblockAssemblyHelper;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.client.model.ControllerBlockStateModel;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -23,6 +25,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.block.BlockStateModelSet;
 import net.minecraft.client.renderer.block.ModelBlockRenderer;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModel;
+import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
@@ -31,6 +34,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -337,7 +341,7 @@ public final class MultiblockPreviewRenderer {
             }
 
             List<GhostQuad> quads = modelState != null && alpha > 0
-                    ? tessellate(level, pos, modelState, modelSet)
+                    ? tessellate(level, pos, modelState, modelSet, cell.anchor() ? definition : null)
                     : List.of();
             cells.add(new PreviewCell(pos, quads, fill, line, alpha, fallbackFill));
         }
@@ -345,9 +349,28 @@ public final class MultiblockPreviewRenderer {
     }
 
     private static List<GhostQuad> tessellate(ClientLevel level, BlockPos pos, BlockState state,
-            BlockStateModelSet modelSet) {
+            BlockStateModelSet modelSet, @Nullable MultiblockDefinition definition) {
         List<GhostQuad> quads = new ArrayList<>();
         BlockStateModel model = modelSet.get(state);
+        if (definition != null && model instanceof ControllerBlockStateModel controller) {
+            BlockStateModelPart part = controller.part(definition, MultiblockTextures.State.IDLE);
+            model = new BlockStateModel() {
+                @Override
+                public void collectParts(RandomSource random, List<BlockStateModelPart> parts) {
+                    parts.add(part);
+                }
+
+                @Override
+                public net.minecraft.client.resources.model.sprite.Material.Baked particleMaterial() {
+                    return part.particleMaterial();
+                }
+
+                @Override
+                public int materialFlags() {
+                    return part.materialFlags();
+                }
+            };
+        }
         ModelBlockRenderer renderer = blockRenderer(Minecraft.getInstance());
         renderer.tesselateBlock(
                 (offsetX, offsetY, offsetZ, quad, instance) ->

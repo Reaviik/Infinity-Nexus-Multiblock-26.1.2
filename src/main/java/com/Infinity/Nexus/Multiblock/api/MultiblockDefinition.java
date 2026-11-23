@@ -34,6 +34,8 @@ public final class MultiblockDefinition {
     private final Optional<MultiblockGui> gui;
     private final MultiblockSounds sounds;
     private final MultiblockTextures textures;
+    private final MultiblockModel model;
+    private final MultiblockShape shape;
     private final CapabilityPorts capabilityPorts;
     private final Map<String, JsonElement> resourceConfigs;
     private final Map<String, List<ResourceTankInfo>> resourceTanks;
@@ -52,6 +54,8 @@ public final class MultiblockDefinition {
             Optional<MultiblockGui> gui,
             MultiblockSounds sounds,
             MultiblockTextures textures,
+            MultiblockModel model,
+            MultiblockShape shape,
             CapabilityPorts capabilityPorts,
             Map<String, JsonElement> resourceConfigs,
             Map<String, List<ResourceTankInfo>> resourceTanks) {
@@ -68,6 +72,8 @@ public final class MultiblockDefinition {
         this.gui = gui;
         this.sounds = sounds;
         this.textures = textures;
+        this.model = model;
+        this.shape = shape;
         this.capabilityPorts = capabilityPorts;
         this.resourceConfigs = Map.copyOf(resourceConfigs);
         this.resourceTanks = Map.copyOf(resourceTanks);
@@ -154,6 +160,14 @@ public final class MultiblockDefinition {
         return this.textures;
     }
 
+    public MultiblockModel model() {
+        return this.model;
+    }
+
+    public MultiblockShape shape() {
+        return this.shape;
+    }
+
     public CapabilityPorts capabilityPorts() {
         return this.capabilityPorts;
     }
@@ -205,6 +219,8 @@ public final class MultiblockDefinition {
         private MultiblockGui gui;
         private MultiblockSounds sounds = MultiblockSounds.EMPTY;
         private MultiblockTextures textures = MultiblockTextures.EMPTY;
+        private MultiblockModel model = MultiblockModel.EMPTY;
+        private MultiblockShape shape = MultiblockShape.EMPTY;
         private CapabilityPorts capabilityPorts = CapabilityPorts.ALL;
         private Map<String, JsonElement> resourceConfigs = Map.of();
         private Map<String, List<ResourceTankInfo>> resourceTanks = Map.of();
@@ -282,6 +298,16 @@ public final class MultiblockDefinition {
             return this;
         }
 
+        public Builder model(MultiblockModel model) {
+            this.model = Objects.requireNonNull(model, "model");
+            return this;
+        }
+
+        public Builder shape(MultiblockShape shape) {
+            this.shape = Objects.requireNonNull(shape, "shape");
+            return this;
+        }
+
         public Builder capabilityPorts(CapabilityPorts capabilityPorts) {
             this.capabilityPorts = Objects.requireNonNull(capabilityPorts, "capabilityPorts");
             return this;
@@ -354,6 +380,8 @@ public final class MultiblockDefinition {
                     Optional.ofNullable(this.gui),
                     this.sounds,
                     this.textures,
+                    this.model,
+                    this.shape,
                     this.capabilityPorts,
                     this.resourceConfigs,
                     this.resourceTanks);
