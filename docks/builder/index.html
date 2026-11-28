@@ -53,9 +53,42 @@
           <div>
             <p class="eyebrow">Etapa 01 · obrigatório</p>
             <h1 id="identityTitle">Identidade da definição</h1>
-            <p class="view-subtitle">O loader usa estes campos para localizar o arquivo, escolher o comportamento e validar a definição. Comece pelo esqueleto obrigatório.</p>
+            <p class="view-subtitle">O loader usa estes campos para localizar o arquivo, escolher o comportamento e validar a definição. Comece pelo tipo e pela identificação.</p>
           </div>
           <span class="badge badge-neutral" id="identityBadge">Pendente</span>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Tipo de máquina</h2>
+              <p class="panel-subtitle">Define se o controller processa receitas ou apenas expõe inventário e capabilities.</p>
+            </div>
+          </div>
+
+          <div class="type-options" role="radiogroup" aria-label="Tipo da máquina">
+            <label class="type-card">
+              <input type="radio" name="multiblockType" value="storage" data-bind="type">
+              <span class="type-card-body">
+                <span class="type-icon" aria-hidden="true">▦</span>
+                <span>
+                  <strong>Storage</strong>
+                  <small>Inventário, energia, fluidos, chemicals, mana, essentia e GUI. Não processa receitas.</small>
+                </span>
+              </span>
+            </label>
+            <label class="type-card">
+              <input type="radio" name="multiblockType" value="recipe" data-bind="type">
+              <span class="type-card-body">
+                <span class="type-icon" aria-hidden="true">⟳</span>
+                <span>
+                  <strong>Recipe</strong>
+                  <small>Processa receitas do tipo fixo <code>infinity_nexus_multiblock:multiblock</code> e exibe progresso.</small>
+                </span>
+              </span>
+            </label>
+          </div>
+
         </div>
 
         <div class="panel">
@@ -68,12 +101,6 @@
           </div>
 
           <div class="form-grid">
-            <div class="field">
-              <label for="schemaVersion">schema_version <span class="required">*</span></label>
-              <input id="schemaVersion" type="text" value="2" readonly aria-readonly="true">
-              <p class="field-hint">Somente <code>2</code> é aceito.</p>
-            </div>
-
             <div class="field">
               <label for="namespace">namespace <span class="required">*</span></label>
               <input id="namespace" data-bind="namespace" type="text" spellcheck="false" autocomplete="off" placeholder="mymod">
@@ -102,39 +129,6 @@
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Tipo de máquina</h2>
-              <p class="panel-subtitle">Define se o controller processa receitas ou apenas expõe inventorário e capabilities.</p>
-            </div>
-          </div>
-
-          <div class="type-options" role="radiogroup" aria-label="Tipo da máquina">
-            <label class="type-card">
-              <input type="radio" name="multiblockType" value="storage" data-bind="type">
-              <span class="type-card-body">
-                <span class="type-icon" aria-hidden="true">▦</span>
-                <span>
-                  <strong>Storage</strong>
-                  <small>Inventário, energia, fluidos, chemicals, mana, essentia e GUI. Não processa receitas.</small>
-                </span>
-              </span>
-            </label>
-            <label class="type-card">
-              <input type="radio" name="multiblockType" value="recipe" data-bind="type">
-              <span class="type-card-body">
-                <span class="type-icon" aria-hidden="true">⟳</span>
-                <span>
-                  <strong>Recipe</strong>
-                  <small>Processa receitas do tipo fixo <code>infinity_nexus_multiblock:multiblock</code> e exibe progresso.</small>
-                </span>
-              </span>
-            </label>
-          </div>
-
         </div>
 
         <div class="panel">
@@ -234,7 +228,7 @@
           <div>
             <p class="eyebrow">Etapa 03 · obrigatório</p>
             <h1 id="matchersTitle">Matchers dos símbolos</h1>
-            <p class="view-subtitle">Cada símbolo não-âncora precisa apontar para um bloco, uma tag ou um bloco/tag com blockstate específico.</p>
+            <p class="view-subtitle">Cada símbolo não-âncora precisa apontar para um bloco, uma tag ou um bloco/tag com blockstate específico. A key de upgrade é a exceção: ela não tem matcher.</p>
           </div>
           <span class="badge badge-neutral" id="matchersBadge">Pendente</span>
         </div>
@@ -255,10 +249,250 @@
         </div>
       </section>
 
-      <section class="view" data-view="slots" aria-labelledby="slotsTitle" hidden>
+      <section class="view" data-view="upgrades" aria-labelledby="upgradesTitle" hidden>
         <div class="view-head">
           <div>
             <p class="eyebrow">Etapa 04 · opcional</p>
+            <h1 id="upgradesTitle">Boosters e upgrades</h1>
+            <p class="view-subtitle">Blocos colocados nas células de upgrade do pattern, fora da estrutura obrigatória, dão bônus conforme o tipo: recipe usa output/speed/energy/efficiency/thread; storage usa damage. A key de upgrade é uma célula do pattern sem matcher.</p>
+          </div>
+          <span class="badge badge-neutral" id="upgradesBadge">Opcional</span>
+        </div>
+
+        <div class="panel" id="upgradeModePanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>tipo de boosters</h2>
+              <p class="panel-subtitle" id="upgradeModeSummary">Escolha se a máquina terá boosters.</p>
+            </div>
+          </div>
+          <div class="controller-mode-options" id="upgradeModeOptions">
+            <label class="controller-mode-option">
+              <input type="radio" name="upgradeMode" value="none" checked>
+              <span><strong>Sem boosters</strong><small>O JSON não inclui <code>upgrades</code> e as células da key não existem.</small></span>
+            </label>
+            <label class="controller-mode-option">
+              <input type="radio" name="upgradeMode" value="custom">
+              <span><strong>Custom</strong><small>Define a key de upgrade e a lista de boosters com matcher, modifier, mode, valor e limite.</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div id="upgradeEditorArea" hidden>
+          <div class="panel">
+            <div class="panel-head panel-head-wrap">
+              <div>
+                <h2>key de upgrade</h2>
+                <p class="panel-subtitle">Um único caractere, diferente da âncora e sem matcher. Pinte esse símbolo no pattern.</p>
+              </div>
+              <button type="button" class="btn btn-tiny" id="upgradePaintKeyBtn">pintar no pattern</button>
+            </div>
+            <div class="form-grid form-grid-three">
+              <div class="field">
+                <label for="upgradeKey">key</label>
+                <input id="upgradeKey" data-upgrade-field="key" type="text" maxlength="1" spellcheck="false" autocomplete="off" placeholder="U">
+                <p class="field-hint">A key aparece no pattern e não entra em matchers.</p>
+                <p class="field-error" data-error-for="upgradeKey"></p>
+              </div>
+              <div class="field">
+                <span class="field-label">células no pattern</span>
+                <output class="code-preview" id="upgradeCellsPreview">0</output>
+                <p class="field-hint">A key precisa aparecer em pelo menos uma célula.</p>
+              </div>
+              <div class="field">
+                <span class="field-label">boosters</span>
+                <output class="code-preview" id="upgradeCountPreview">0</output>
+                <p class="field-hint">Cada booster conta até <code>max_blocks</code> blocos.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head panel-head-wrap">
+              <div>
+                <h2>boosters</h2>
+                <p class="panel-subtitle" id="upgradeBoostersSummary">Nenhum booster.</p>
+              </div>
+              <button type="button" class="btn btn-tiny" id="addUpgradeBoosterBtn">+ booster</button>
+            </div>
+            <div class="missing-empty" id="upgradeBoostersEmpty">Adicione um booster para começar.</div>
+            <div class="matcher-list" id="upgradeBoosterList"></div>
+          </div>
+
+          <div class="panel" id="upgradeSimulationPanel">
+            <div class="panel-head panel-head-wrap">
+              <div>
+                <h2>simulação com receita</h2>
+                <p class="panel-subtitle">Importe uma recipe para ver o efeito dos boosters ativos. A simulação não altera o JSON exportado.</p>
+              </div>
+              <div class="upgrade-sim-actions">
+                <button type="button" class="btn btn-tiny" id="upgradeRecipeImportBtn">importar recipe</button>
+                <button type="button" class="btn btn-tiny" id="upgradeRecipeSimulateBtn">simular</button>
+                <button type="button" class="btn btn-tiny" id="upgradeRecipeClearBtn">limpar</button>
+              </div>
+            </div>
+            <input type="file" id="upgradeRecipeFile" accept="application/json,.json" hidden>
+            <div class="form-grid">
+              <div class="field">
+                <label for="upgradeRecipeJson">recipe (JSON)</label>
+                <textarea id="upgradeRecipeJson" rows="8" spellcheck="false" placeholder='{"type":"infinity_nexus_multiblock:multiblock","time":100,"inputs":[],"outputs":[]}'></textarea>
+                <p class="field-hint">Cole o JSON ou use <strong>importar recipe</strong>. A recipe do builder não é alterada.</p>
+                <p class="field-error" data-error-for="upgradeRecipeJson"></p>
+              </div>
+              <div class="field">
+                <span class="field-label">receita importada</span>
+                <output class="code-preview" id="upgradeRecipeSummary">Nenhuma recipe importada.</output>
+                <p class="field-hint">Os valores base vêm de <code>time</code>, inputs e outputs.</p>
+              </div>
+            </div>
+            <div id="upgradeSimulationCounts" class="upgrade-sim-counts"></div>
+            <div id="upgradeSimulationResults" class="upgrade-sim-results"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>JSON gerado</h2>
+                <p class="panel-subtitle">Prévia do campo <code>upgrades</code> exportado.</p>
+              </div>
+            </div>
+            <code class="matcher-json slot-json" id="upgradeJson"></code>
+          </div>
+
+          <div class="callout callout-info">
+            <strong>Como funciona:</strong> cada célula da key conta para os boosters cujo matcher casar, até <code>max_blocks</code>. Em <code>recipe</code>, use <code>output</code>, <code>speed</code>, <code>energy</code>, <code>efficiency</code> e <code>thread</code>; em <code>storage</code>, use <code>damage</code>. <code>output</code>, <code>thread</code> e <code>damage</code> aumentam; <code>speed</code>, <code>energy</code> e <code>efficiency</code> reduzem. <code>additive</code> soma <code>n × valor</code>, <code>multiplicative</code> multiplica por <code>(1 ± valor)^n</code> e <code>flat</code> usa unidades absolutas. Em reduções multiplicativas o valor precisa ser menor que 1.
+          </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="motions" aria-labelledby="motionsTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 05 · opcional</p>
+            <h1 id="motionsTitle">Animações das partes</h1>
+            <p class="view-subtitle">Cada motion move um conjunto de keys do pattern. O preview 3D usa o multibloco inteiro como centro; arraste para orbitar e use o scroll para o zoom.</p>
+          </div>
+          <span class="badge badge-neutral" id="motionsBadge">Opcional</span>
+        </div>
+
+        <div id="motionGlobalFeedback" class="callout callout-info" hidden></div>
+
+        <div class="panel" id="motionModePanel">
+          <div class="panel-head panel-head-wrap">
+            <div>
+              <h2>tipo de animação</h2>
+              <p class="panel-subtitle" id="motionModeSummary">Escolha se a máquina terá motions.</p>
+            </div>
+          </div>
+          <div class="controller-mode-options" id="motionModeOptions">
+            <label class="controller-mode-option">
+              <input type="radio" name="motionMode" value="none" checked>
+              <span><strong>Sem animação</strong><small>A máquina fica estática e o JSON não inclui <code>motions</code>.</small></span>
+            </label>
+            <label class="controller-mode-option">
+              <input type="radio" name="motionMode" value="custom">
+              <span><strong>Custom</strong><small>Define motions por keys do pattern, com pivot, keyframes, dano e NBT.</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div id="motionEditorArea" hidden>
+        <div class="motion-editor-bar">
+          <div class="motion-editor-heading">
+            <span class="motion-editor-kicker">editor</span>
+            <strong>Animações</strong>
+            <span class="motion-editor-hint">lista, preview e propriedades</span>
+          </div>
+          <button type="button" class="btn btn-tiny" id="motionEditorCloseBtn">fechar</button>
+        </div>
+
+        <div class="motion-layout">
+          <div class="motion-stage">
+            <div class="motion-stage-head">
+              <div>
+                <h2>Preview 3D</h2>
+                <p class="panel-subtitle" id="motionStageMeta">Nenhuma motion. Use editar para montar a primeira.</p>
+              </div>
+              <div class="button-row">
+                <button type="button" class="btn btn-tiny" id="motionPlayBtn" aria-pressed="false">play</button>
+                <label class="motion-camera">câmera
+                  <select id="motionCamera">
+                    <option value="isometric" selected>isométrico</option>
+                    <option value="front">frente</option>
+                    <option value="back">trás</option>
+                    <option value="side">lado</option>
+                    <option value="top">topo</option>
+                    <option value="bottom">baixo</option>
+                    <option value="free">livre</option>
+                  </select>
+                </label>
+                <button type="button" class="btn btn-tiny" id="motionResetTimeBtn">início</button>
+                <button type="button" class="btn btn-tiny" id="motionResetViewBtn">resetar câmera</button>
+                <button type="button" class="btn btn-tiny btn-primary" id="motionFullscreenBtn" aria-pressed="false" title="Abrir o editor de animações">editar</button>
+                <button type="button" class="btn btn-tiny motion-panel-toggle" id="motionPanelBtn" aria-pressed="false" hidden>painel</button>
+              </div>
+            </div>
+            <div class="motion-canvas-wrap" id="motionCanvasWrap">
+              <canvas id="motionPreviewCanvas" aria-label="Preview 3D das animações"></canvas>
+            </div>
+            <div class="motion-controls">
+              <label class="motion-control-time">tempo
+                <input type="range" id="motionTimeRange" min="0" max="0" step="1" value="0">
+                <span id="motionTimeLabel">0 / 0 ticks</span>
+              </label>
+              <label>velocidade
+                <select id="motionSpeed">
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="2">2x</option>
+                  <option value="4">4x</option>
+                </select>
+              </label>
+              <label class="motion-control-opacity">opacidade
+                <input type="range" id="motionOpacity" min="0.15" max="1" step="0.05" value="0.65">
+                <span id="motionOpacityLabel">65%</span>
+              </label>
+            </div>
+            <div class="motion-timeline-wrap">
+              <div class="motion-timeline" id="motionTimeline"></div>
+            </div>
+            <div class="motion-summary" id="motionSummary" hidden></div>
+          </div>
+
+          <div class="motion-workspace">
+            <div class="panel motion-list-panel">
+              <div class="panel-head panel-head-wrap">
+                <div>
+                  <h2>Motions</h2>
+                  <p class="panel-subtitle">Lista por keys do pattern. Clique para editar.</p>
+                </div>
+                <button type="button" class="btn btn-tiny" id="addMotionBtn">+ motion</button>
+              </div>
+              <div class="motion-list" id="motionList"></div>
+            </div>
+            <div class="panel motion-editor-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Editor</h2>
+                  <p class="panel-subtitle">Pivot, keyframes, dano e NBT da parte selecionada.</p>
+                </div>
+              </div>
+              <div id="motionDetail"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info motion-help-callout">
+          <strong>Como funciona:</strong> em <code>recipe</code>, as motions rodam durante uma receita válida; em <code>storage</code>, ficam sempre ativas enquanto o multibloco está montado. <code>fill_speed</code> acelera a animação conforme o inventário/tanques enchem (até 2x). A âncora nunca se move; cada key pertence a no máximo uma motion; sem pivot explícito o centro da caixa da parte é usado. As unidades são ticks (20 por segundo), offset em blocos e rotação em graus.
+        </div>
+        </div>
+      </section>
+
+      <section class="view" data-view="slots" aria-labelledby="slotsTitle" hidden>
+        <div class="view-head">
+          <div>
+            <p class="eyebrow">Etapa 06 · opcional</p>
             <h1 id="slotsTitle">Slots de itens</h1>
             <p class="view-subtitle">Define o inventário por <code>item_slots</code>. Com <code>x/y</code>, o layout padrão respeita a posição; sem posição, usa a grade automática.</p>
           </div>
@@ -289,7 +523,7 @@
       <section class="view" data-view="capabilities" aria-labelledby="capabilitiesTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 05 · opcional</p>
+            <p class="eyebrow">Etapa 07 · opcional</p>
             <h1 id="capabilitiesTitle">Energia, fluidos, chemicals, mana e essentia</h1>
             <p class="view-subtitle">Define <code>capabilities.energy</code>, <code>capabilities.fluids</code>, <code>capabilities.chemical</code>, <code>capabilities.mana</code>, <code>capabilities.essentia</code> e os filtros de bloco em <code>capability_ports</code>. Itens usam o inventário da máquina; energia, tanques e essentia são opcionais.</p>
           </div>
@@ -333,40 +567,46 @@
               <label for="capabilityPortItem">item</label>
               <input id="capabilityPortItem" type="text" data-capability-port="item"
                 spellcheck="false" autocomplete="off" placeholder="I, C ou #minecraft:glass">
+              <div class="port-picks" data-port-picks="item" role="group" aria-label="Símbolos do pattern para item"></div>
               <p class="field-hint">Sempre disponível via inventário. Use <code>[]</code> para não expor item.</p>
             </div>
             <div class="field">
               <label for="capabilityPortEnergy">energy</label>
               <input id="capabilityPortEnergy" type="text" data-capability-port="energy"
                 spellcheck="false" autocomplete="off" placeholder="C">
+              <div class="port-picks" data-port-picks="energy" role="group" aria-label="Símbolos do pattern para energy"></div>
             </div>
             <div class="field">
               <label for="capabilityPortFluid">fluid</label>
               <input id="capabilityPortFluid" type="text" data-capability-port="fluid"
                 spellcheck="false" autocomplete="off" placeholder="F ou #minecraft:glass">
+              <div class="port-picks" data-port-picks="fluid" role="group" aria-label="Símbolos do pattern para fluid"></div>
             </div>
             <div class="field">
               <label for="capabilityPortChemical">chemical</label>
               <input id="capabilityPortChemical" type="text" data-capability-port="chemical"
                 spellcheck="false" autocomplete="off" placeholder="F ou #mekanism:chemicals"
                 title="Requer Mekanism para funcionar.">
+              <div class="port-picks" data-port-picks="chemical" role="group" aria-label="Símbolos do pattern para chemical"></div>
             </div>
             <div class="field">
               <label for="capabilityPortMana">mana</label>
               <input id="capabilityPortMana" type="text" data-capability-port="mana"
                 spellcheck="false" autocomplete="off" placeholder="C"
                 title="Requer um addon que registre a capability mana.">
+              <div class="port-picks" data-port-picks="mana" role="group" aria-label="Símbolos do pattern para mana"></div>
             </div>
             <div class="field">
               <label for="capabilityPortEssentia">essentia</label>
               <input id="capabilityPortEssentia" type="text" data-capability-port="essentia"
                 spellcheck="false" autocomplete="off" placeholder="N"
                 title="Requer o addon Thaumaturge para funcionar.">
+              <div class="port-picks" data-port-picks="essentia" role="group" aria-label="Símbolos do pattern para essentia"></div>
             </div>
           </div>
           <p class="field-hint" id="capabilityPortAvailability" hidden></p>
           <p class="field-hint" id="capabilityPortSymbols">Símbolos disponíveis no pattern: C, I.</p>
-          <p class="field-hint">Vazio libera a capability em qualquer bloco formado. Use <code>[]</code> para não expor nenhum bloco. Separe vários seletores por vírgula ou espaço.</p>
+          <p class="field-hint">Vazio libera a capability em qualquer bloco formado. Use <code>[]</code> para não expor nenhum bloco. Clique nos símbolos do pattern para alternar vários ou digite IDs/tags separados por vírgula ou espaço.</p>
         </div>
 
         <div class="callout callout-info">
@@ -383,7 +623,7 @@
       <section class="view" data-view="controller" aria-labelledby="controllerTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 06 · opcional</p>
+            <p class="eyebrow">Etapa 08 · opcional</p>
             <h1 id="controllerTitle">Controller único e receita</h1>
             <p class="view-subtitle">Escolha o controller padrão ou custom. No custom, o preview usa os modelos do campo model e as texturas vêm do próprio modelo.</p>
           </div>
@@ -461,9 +701,6 @@
               <h2>preview do modelo</h2>
               <p class="panel-subtitle" id="modelPreviewSummary">O preview usa o controller padrão ou o campo model.</p>
             </div>
-            <div class="button-row">
-              <button type="button" class="btn btn-tiny" id="modelPreviewResetViewBtn">resetar câmera</button>
-            </div>
           </div>
           <p class="field-hint">O preview carrega o modelo e resolve as texturas do projeto automaticamente. Alterne entre <code>idle</code>, <code>active</code> e <code>building</code>; estados vazios herdam o anterior. Arraste para girar e use a roda para zoom. Em <code>file://</code> o carregamento automático não funciona.</p>
           <div class="model-preview-toolbar">
@@ -472,11 +709,13 @@
               <button type="button" class="btn btn-tiny" data-preview-state="active">Active</button>
               <button type="button" class="btn btn-tiny" data-preview-state="building">Building</button>
             </div>
+            <button type="button" class="btn btn-tiny" id="modelPreviewResetViewBtn">resetar câmera</button>
             <label class="model-preview-toggle"><input type="checkbox" id="modelPreviewFloor" checked> <span>chão cinza</span></label>
             <label class="model-preview-toggle"><input type="checkbox" id="modelPreviewReference" checked> <span>blocos de referência</span></label>
           </div>
-          <p class="field-hint">No controller padrão, a lista mostra as seis faces do modelo padrão. No custom, a lista mostra as chaves de textura do JSON do modelo (ex.: <code>#all</code>, <code>#side</code>). No padrão, <strong>importar</strong> grava overrides em <code>textures</code>; no custom, <strong>importar</strong> é só para visualização, não altera o JSON e fica salvo por estado do preview.</p>
+          <p class="field-hint">No controller padrão, a lista mostra as seis faces do modelo padrão. No custom, a lista mostra as chaves de textura do JSON do modelo (ex.: <code>#all</code>, <code>#side</code>). No padrão, <strong>importar .png</strong> grava overrides em <code>textures</code>; no custom, é só para visualização, não altera o JSON e fica salvo por estado do preview. Depois do PNG, use <strong>.mcmeta</strong> para animar a textura no preview; o arquivo não é exportado.</p>
           <input type="file" id="modelPreviewTextureInput" accept="image/png,image/*" hidden>
+          <input type="file" id="modelPreviewMcmetaInput" accept=".mcmeta,application/json,text/plain" hidden>
           <div class="model-preview-stage" id="modelPreviewStage">
             <canvas id="modelPreviewCanvas" aria-label="Preview 3D do modelo"></canvas>
             <div class="model-preview-empty" id="modelPreviewEmpty">Nenhum modelo carregado.</div>
@@ -547,7 +786,7 @@
       <section class="view" data-view="gui" aria-labelledby="guiTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 07 · opcional</p>
+            <p class="eyebrow">Etapa 09 · opcional</p>
             <h1 id="guiTitle">GUI e elementos</h1>
             <p class="view-subtitle">Personaliza o layout da GUI. Sem uma GUI customizada, o loader usa 176x166 e o inventário do jogador.</p>
           </div>
@@ -567,35 +806,46 @@
           </div>
           <div class="missing-empty" id="guiEmpty"></div>
           <div id="guiForm" hidden>
-            <div class="controller-form">
-              <div class="field field-wide">
-                <label for="guiTexture">texture</label>
-                <input id="guiTexture" type="text" data-gui-field="texture" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:textures/gui/minha_maquina.png">
-              </div>
-              <div class="field">
-                <label for="guiWidth">width</label>
-                <input id="guiWidth" type="number" min="1" max="4096" step="1" data-gui-field="width" placeholder="176">
-              </div>
-              <div class="field">
-                <label for="guiHeight">height</label>
-                <input id="guiHeight" type="number" min="1" max="4096" step="1" data-gui-field="height" placeholder="166">
-              </div>
-              <div class="field">
-                <label for="guiTextureWidth">texture_width</label>
-                <input id="guiTextureWidth" type="number" min="1" max="4096" step="1" data-gui-field="textureWidth" placeholder="256">
-              </div>
-              <div class="field">
-                <label for="guiTextureHeight">texture_height</label>
-                <input id="guiTextureHeight" type="number" min="1" max="4096" step="1" data-gui-field="textureHeight" placeholder="256">
-              </div>
-            </div>
-
             <h3 class="controller-section-title">Layout visual <span class="controller-optional">arraste para posicionar</span></h3>
             <div class="gui-canvas-wrap" id="guiCanvasWrap" hidden>
               <div class="gui-canvas" id="guiCanvas" aria-label="Prévia interativa da GUI"></div>
             </div>
             <p class="field-hint">Arraste energia, fluidos, progresso, entidade e demais elementos para ajustar <code>x/y</code>. Os campos numéricos continuam valendo para largura, altura e demais propriedades.</p>
             <p class="field-hint">Novos elementos começam com o layout do <code>spawner</code>: título em <code>8,4</code>, texto em <code>8,75</code>, inventário em <code>8,84</code>, barras em <code>158/148/138,10</code> com <code>8x64</code> e entidade em <code>96,18</code> com <code>36x36</code>. Slots começam em <code>8,16</code> e avançam <code>18</code> px, com 9 por linha.</p>
+
+            <details class="card-advanced gui-properties" id="guiProperties">
+              <summary>Propriedades <span class="card-advanced-hint">tamanho, textura e importação</span></summary>
+              <div class="card-advanced-body">
+                <div class="controller-form gui-properties-form">
+                  <div class="field field-wide gui-texture-field">
+                    <label for="guiTexture">texture</label>
+                    <div class="gui-texture-row">
+                      <input id="guiTexture" type="text" data-gui-field="texture" spellcheck="false" autocomplete="off" placeholder="infinity_nexus_multiblock:textures/gui/minha_maquina.png">
+                      <input id="guiTextureUpload" type="file" accept="image/png" hidden>
+                      <button type="button" class="btn btn-tiny" id="guiTextureUploadBtn">importar PNG</button>
+                      <button type="button" class="btn btn-tiny btn-danger" id="guiTextureResetBtn" hidden>usar padrão</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="guiWidth">width</label>
+                    <input id="guiWidth" type="number" min="1" max="4096" step="1" data-gui-field="width" placeholder="176">
+                  </div>
+                  <div class="field">
+                    <label for="guiHeight">height</label>
+                    <input id="guiHeight" type="number" min="1" max="4096" step="1" data-gui-field="height" placeholder="166">
+                  </div>
+                  <div class="field">
+                    <label for="guiTextureWidth">texture_width</label>
+                    <input id="guiTextureWidth" type="number" min="1" max="4096" step="1" data-gui-field="textureWidth" placeholder="256">
+                  </div>
+                  <div class="field">
+                    <label for="guiTextureHeight">texture_height</label>
+                    <input id="guiTextureHeight" type="number" min="1" max="4096" step="1" data-gui-field="textureHeight" placeholder="256">
+                  </div>
+                </div>
+                <p class="grid-help" id="guiTextureHint"></p>
+              </div>
+            </details>
 
             <h3 class="controller-section-title">Elementos <span class="controller-optional">opcional</span></h3>
             <div class="gui-add-row">
@@ -612,6 +862,7 @@
                 <option value="progress_bar">progress_bar</option>
                 <option value="arrow">arrow</option>
                 <option value="entity">entity</option>
+                <option value="booster_button">booster_button</option>
               </select>
               <button type="button" class="btn btn-tiny" id="addGuiElementBtn">+ elemento</button>
             </div>
@@ -624,14 +875,14 @@
         </div>
 
         <div class="callout callout-info">
-          Uma GUI customizada exige exatamente um <code>player_inventory</code>. <code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x/y</code>; sem slots de item, a GUI pode ter só barras. Barras precisam apontar para a energia, o tanque ou a mana existente; <code>resource_list</code> exige <code>capabilities.essentia</code>, <code>capability: "essentia"</code> e <code>width/height</code> múltiplos de <code>18</code>; <code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só valem em máquinas <code>type=recipe</code>. <code>entity</code> mostra as entidades de <code>inputs</code>/<code>outputs</code> da receita, usa <code>x/y/width/height</code> e exige <code>width/height</code> múltiplos de <code>18</code> (mínimo <code>18</code>), com paginação quando não couberem. Elementos <code>slot</code> usam a referência de <code>item_slots</code>; slots com <code>x/y</code> não podem ser misturados com eles.
+          Uma GUI customizada exige exatamente um <code>player_inventory</code>. <code>item_slots</code> só é obrigatório quando houver elementos <code>slot</code> ou posições <code>x/y</code>; sem slots de item, a GUI pode ter só barras. Barras precisam apontar para a energia, o tanque ou a mana existente; <code>resource_list</code> exige <code>capabilities.essentia</code>, <code>capability: "essentia"</code> e <code>width/height</code> múltiplos de <code>18</code>;              <code>progress_bar</code>, <code>arrow</code> e <code>entity</code> só valem em máquinas <code>type=recipe</code>. <code>entity</code> mostra as entidades de <code>inputs</code>/<code>outputs</code> da receita, usa <code>x/y/width/height</code> e exige <code>width/height</code> múltiplos de <code>18</code> (mínimo <code>18</code>), com paginação quando não couberem. <code>booster_button</code> só aparece quando há boosters e, ao ser clicado, destaca no mundo as células de upgrade; o padrão é <code>8x8</code> no canto superior direito com o texto <code>B</code>. Elementos <code>slot</code> usam a referência de <code>item_slots</code>; slots com <code>x/y</code> não podem ser misturados com eles.
         </div>
       </section>
 
       <section class="view" data-view="sounds" aria-labelledby="soundsTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 08 · opcional</p>
+            <p class="eyebrow">Etapa 10 · opcional</p>
             <h1 id="soundsTitle">Sons</h1>
             <p class="view-subtitle">Escolha um som vanilla na lista ou digite um <code>namespace:path</code> do seu próprio resource pack. <code>processing</code> toca enquanto a receita avança; <code>finish</code> toca ao completar.</p>
           </div>
@@ -648,35 +899,54 @@
           <div class="controller-form">
             <div class="field field-wide">
               <label for="soundProcessing">processing</label>
-              <input id="soundProcessing" type="text" list="minecraftSoundList" data-sound-field="processing"
-                spellcheck="false" autocomplete="off" placeholder="minecraft:block.furnace.fire_crackle">
-              <p class="field-hint">Toca a cada 20 ticks enquanto houver progresso. Vazio desativa o som.</p>
+              <div class="sound-input-row">
+                <input id="soundProcessing" type="text" list="minecraftSoundList" data-sound-field="processing"
+                  spellcheck="false" autocomplete="off" placeholder="minecraft:block.furnace.fire_crackle">
+                <button type="button" class="btn btn-tiny" data-sound-upload="processing">importar .ogg</button>
+              </div>
+              <div class="sound-upload-row" data-sound-upload-row="processing" hidden>
+                <button type="button" class="btn btn-tiny" data-sound-play="processing" aria-pressed="false" disabled>play</button>
+                <button type="button" class="btn btn-tiny" data-sound-copy="processing" disabled>copiar sounds.json</button>
+                <button type="button" class="btn btn-tiny btn-danger" data-sound-clear="processing">remover arquivo</button>
+                <span class="sound-file-label" data-sound-file-label="processing"></span>
+              </div>
+              <p class="field-hint">Toca a cada 20 ticks enquanto houver progresso. Vazio desativa o som. O upload local só toca no navegador; o JSON exportado guarda apenas o ID.</p>
               <p class="field-error" data-error-for="soundProcessing"></p>
             </div>
             <div class="field field-wide">
               <label for="soundFinish">finish</label>
-              <input id="soundFinish" type="text" list="minecraftSoundList" data-sound-field="finish"
-                spellcheck="false" autocomplete="off" placeholder="minecraft:block.anvil.use">
-              <p class="field-hint">Toca uma vez quando a receita completa. Vazio desativa o som.</p>
+              <div class="sound-input-row">
+                <input id="soundFinish" type="text" list="minecraftSoundList" data-sound-field="finish"
+                  spellcheck="false" autocomplete="off" placeholder="minecraft:block.anvil.use">
+                <button type="button" class="btn btn-tiny" data-sound-upload="finish">importar .ogg</button>
+              </div>
+              <div class="sound-upload-row" data-sound-upload-row="finish" hidden>
+                <button type="button" class="btn btn-tiny" data-sound-play="finish" aria-pressed="false" disabled>play</button>
+                <button type="button" class="btn btn-tiny" data-sound-copy="finish" disabled>copiar sounds.json</button>
+                <button type="button" class="btn btn-tiny btn-danger" data-sound-clear="finish">remover arquivo</button>
+                <span class="sound-file-label" data-sound-file-label="finish"></span>
+              </div>
+              <p class="field-hint">Toca uma vez quando a receita completa. Vazio desativa o som. O upload local só toca no navegador; o JSON exportado guarda apenas o ID.</p>
               <p class="field-error" data-error-for="soundFinish"></p>
             </div>
           </div>
           <datalist id="minecraftSoundList"></datalist>
+          <input type="file" id="soundUploadInput" accept=".ogg,audio/ogg" hidden>
           <p class="grid-help" id="minecraftSoundStatus">Carregando lista de sons vanilla...</p>
         </div>
 
         <div class="callout callout-info">
           A lista vem de <code>data/minecraft_sounds.json</code>, gerada a partir do <code>sounds.json</code> do Minecraft 26.1.2 (1902 eventos).
-          Você pode digitar qualquer identifier; para usar um som próprio, adicione a entrada em
-          <code>assets/&lt;namespace&gt;/sounds.json</code> e o arquivo <code>.ogg</code> correspondente.
-          Sons só são reproduzidos em máquinas <code>type=recipe</code>.
+          Você pode importar um <code>.ogg</code> local para preencher o ID e ouvir no navegador; o arquivo não é exportado nem persistido (reimporte após recarregar).
+          Para usar no jogo, adicione o <code>.ogg</code> em <code>assets/&lt;namespace&gt;/sounds/&lt;path&gt;.ogg</code> e a entrada em
+          <code>assets/&lt;namespace&gt;/sounds.json</code>. Sons só são reproduzidos em máquinas <code>type=recipe</code>.
         </div>
       </section>
 
       <section class="view" data-view="recipes" aria-labelledby="recipesTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 09 · opcional</p>
+            <p class="eyebrow">Etapa 11 · opcional</p>
             <h1 id="recipesTitle">Receitas data-driven</h1>
             <p class="view-subtitle">Crie os arquivos de receita em <code>data/&lt;namespace&gt;/recipe/</code>. O tipo é fixo e o builder preenche <code>definition</code> automaticamente.</p>
           </div>
@@ -713,7 +983,7 @@
       <section class="view" data-view="inheritance" aria-labelledby="inheritanceTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 10 · opcional</p>
+            <p class="eyebrow">Etapa 12 · opcional</p>
             <h1 id="inheritanceTitle">Herança e templates</h1>
             <p class="view-subtitle">Compartilhe pattern, slots, capabilities e GUI com um pai usando <code>extends</code> ou <code>family</code>. O filho declara apenas o que muda.</p>
           </div>
@@ -770,7 +1040,7 @@
       <section class="view" data-view="review" aria-labelledby="reviewTitle" hidden>
         <div class="view-head">
           <div>
-            <p class="eyebrow">Etapa 11 · revisão</p>
+            <p class="eyebrow">Etapa 13 · revisão</p>
             <h1 id="reviewTitle">JSON e checklist</h1>
             <p class="view-subtitle">Revise o resultado, copie o JSON e salve no caminho indicado. O jogo continua sendo a autoridade final.</p>
           </div>
@@ -836,14 +1106,14 @@
               <h2>Paleta</h2>
               <p class="panel-subtitle">Símbolos do pattern.</p>
             </div>
-            <button type="button" class="btn btn-tiny" id="focusNewSymbolBtn">+ símbolo</button>
+            <button type="button" class="btn btn-tiny" id="focusNewSymbolBtn" title="Voltar para adicionar um novo símbolo">+ símbolo</button>
           </div>
           <div class="palette" id="palette"></div>
           <form class="inline-form" id="addSymbolForm">
             <input id="newSymbolInput" type="text" maxlength="1" placeholder="S" spellcheck="false" aria-label="Novo símbolo">
-            <button type="submit" class="btn btn-tiny">Adicionar</button>
+            <button type="submit" class="btn btn-tiny" id="addSymbolSubmitBtn" title="Adicionar símbolo à paleta">Adicionar</button>
           </form>
-          <p class="field-hint">A âncora <code>C</code> é única. Símbolos usados sem matcher ficam marcados em vermelho.</p>
+          <p class="field-hint" id="paletteFormHint">A âncora <code>C</code> é única. Selecione um símbolo para renomeá-lo. Símbolos usados sem matcher ficam marcados em vermelho.</p>
         </div>
 
         <div class="preview-dock">
@@ -855,20 +1125,22 @@
               </div>
             </div>
             <div class="gui-preview-frame" id="slotGuiPreview" aria-label="Prévia esquemática da GUI">
-              <div class="gui-preview-content" id="slotGuiPreviewContent"></div>
+              <div class="gui-preview-zoom" id="slotGuiPreviewZoom">
+                <div class="gui-preview-content" id="slotGuiPreviewContent"></div>
+              </div>
             </div>
             <div class="gui-preview-legend" id="slotPreviewLegend"></div>
             <p class="grid-help" id="slotPreviewHidden"></p>
           </div>
 
-          <div class="panel preview-card">
+          <div class="panel preview-card" id="patternPreviewCard">
             <div class="panel-head">
               <div>
                 <h2>Prévia 3D</h2>
-                <p class="panel-subtitle">Camada ativa destacada.</p>
+                <p class="panel-subtitle">Pattern e animações em tempo real.</p>
               </div>
             </div>
-            <canvas id="preview3d" aria-label="Prévia isométrica do pattern"></canvas>
+            <canvas id="patternPreview3d" aria-label="Prévia 3D animada do pattern"></canvas>
             <p class="grid-help">X → leste · Z → sul · Y ↑ topo</p>
           </div>
         </div>
@@ -895,7 +1167,7 @@
 
       <div class="notes-card">
         <h3>Escopo do builder</h3>
-        <p>Identidade, pattern, matchers, slots, capabilities, controller (textures/model/shape), GUI, sons, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
+        <p>Identidade, pattern, matchers, boosters, animações, slots, capabilities, controller (textures/model/shape), GUI, sons, receitas e herança são editados e validados aqui; a revisão exporta o JSON final.</p>
         <p>O controller é único e registrado pelo mod. O builder não gera os arquivos de blockstate, modelo ou textura referenciados por <code>model</code>/<code>textures</code>.</p>
       </div>
     </aside>
@@ -918,7 +1190,9 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="validation.js"></script>
-  <script src="preview3d.js"></script>
+  <script src="vendor/three.min.js"></script>
+  <script src="motionpreview3d.js"></script>
+  <script src="motionpreview3d-webgl.js"></script>
   <script src="modelpreview3d.js"></script>
   <script src="data/minecraft_sounds.js"></script>
   <script src="app.js"></script>

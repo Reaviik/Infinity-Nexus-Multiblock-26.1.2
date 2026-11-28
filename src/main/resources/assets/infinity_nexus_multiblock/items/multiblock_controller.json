@@ -1,0 +1,9 @@
+{
+  "model": {
+    "type": "minecraft:special",
+    "base": "infinity_nexus_multiblock:item/multiblock_controller_base",
+    "model": {
+      "type": "infinity_nexus_multiblock:controller"
+    }
+  }
+}

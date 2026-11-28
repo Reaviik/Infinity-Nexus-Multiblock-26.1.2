@@ -472,4 +472,49 @@ test("renderer desenha modelo, piso e referencias sem lancar erro", () => {
   }
 });
 
+test("mcmeta sem animation e ignorado", () => {
+  assert.equal(P.parseTextureAnimation({}, 16, 32), null);
+  assert.equal(P.parseTextureAnimation(null, 16, 32), null);
+  assert.equal(P.parseTextureAnimation({ animation: null }, 16, 32), null);
+});
+
+test("mcmeta sequencial calcula frames pela altura do png", () => {
+  const animation = P.parseTextureAnimation({ animation: { frametime: 3 } }, 16, 48);
+  assert.equal(animation.width, 16);
+  assert.equal(animation.height, 16);
+  assert.equal(animation.frameCount, 3);
+  assert.equal(animation.frametime, 3);
+  assert.deepEqual(animation.frames, [
+    { index: 0, time: 3 },
+    { index: 1, time: 3 },
+    { index: 2, time: 3 }
+  ]);
+});
+
+test("mcmeta aceita frames com index, time e interpolate", () => {
+  const animation = P.parseTextureAnimation({
+    animation: {
+      frametime: 2,
+      interpolate: true,
+      frames: [0, { index: 2, time: 5 }, 1]
+    }
+  }, 16, 64);
+  assert.equal(animation.interpolate, true);
+  assert.equal(animation.frameCount, 4);
+  assert.deepEqual(animation.frames, [
+    { index: 0, time: 2 },
+    { index: 2, time: 5 },
+    { index: 1, time: 2 }
+  ]);
+});
+
+test("mcmeta descarta frames fora da altura e mantem os validos", () => {
+  const animation = P.parseTextureAnimation({
+    animation: { frames: [0, 9, -1] }
+  }, 16, 32);
+  assert.deepEqual(animation.frames, [
+    { index: 0, time: 1 }
+  ]);
+});
+
 console.log(passed + " testes passaram.");

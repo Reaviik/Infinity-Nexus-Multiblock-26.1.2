@@ -30,6 +30,8 @@ public record GuiElement(
     public static final int DEFAULT_TEXT_COLOR = 0xFF404040;
     public static final int DEFAULT_ENERGY_COLOR = 0xFFFF0000;
     public static final int DEFAULT_PROGRESS_COLOR = 0xFF00AA00;
+    public static final int DEFAULT_BOOSTER_COLOR = 0xFFFFC107;
+    public static final int BOOSTER_BUTTON_SIZE = 8;
     public static final int ENTITY_CELL_SIZE = 18;
     public static final int RESOURCE_LIST_CELL_SIZE = 18;
 
@@ -37,9 +39,9 @@ public record GuiElement(
             GuiElementType.CODEC.fieldOf("type").forGetter(GuiElement::type),
             Codec.INT.optionalFieldOf("x", 0).forGetter(GuiElement::x),
             Codec.INT.optionalFieldOf("y", 0).forGetter(GuiElement::y),
-            Codec.intRange(0, 4096).optionalFieldOf("width", 16).forGetter(GuiElement::width),
-            Codec.intRange(0, 4096).optionalFieldOf("height", 16).forGetter(GuiElement::height),
-            Codec.STRING.optionalFieldOf("text", "").forGetter(GuiElement::text),
+            Codec.intRange(0, 4096).optionalFieldOf("width").forGetter(element -> Optional.of(element.width())),
+            Codec.intRange(0, 4096).optionalFieldOf("height").forGetter(element -> Optional.of(element.height())),
+            Codec.STRING.optionalFieldOf("text").forGetter(element -> Optional.of(element.text())),
             Codec.STRING.optionalFieldOf("slot", "").forGetter(GuiElement::slot),
             Codec.STRING.optionalFieldOf("capability", "").forGetter(GuiElement::capability),
             COLOR_CODEC.optionalFieldOf("color").forGetter(element -> element.color() == defaultColor(element.type())
@@ -54,9 +56,9 @@ public record GuiElement(
                             type,
                             x,
                             y,
-                            width,
-                            height,
-                            text,
+                            width.orElseGet(() -> defaultWidth(type)),
+                            height.orElseGet(() -> defaultHeight(type)),
+                            text.orElseGet(() -> defaultText(type)),
                             slot,
                             capability,
                             color.orElseGet(() -> defaultColor(type)),
@@ -69,8 +71,21 @@ public record GuiElement(
         return switch (type) {
             case ENERGY_BAR -> DEFAULT_ENERGY_COLOR;
             case PROGRESS_BAR -> DEFAULT_PROGRESS_COLOR;
+            case BOOSTER_BUTTON -> DEFAULT_BOOSTER_COLOR;
             default -> DEFAULT_TEXT_COLOR;
         };
+    }
+
+    private static int defaultWidth(GuiElementType type) {
+        return type == GuiElementType.BOOSTER_BUTTON ? BOOSTER_BUTTON_SIZE : 16;
+    }
+
+    private static int defaultHeight(GuiElementType type) {
+        return type == GuiElementType.BOOSTER_BUTTON ? BOOSTER_BUTTON_SIZE : 16;
+    }
+
+    private static String defaultText(GuiElementType type) {
+        return type == GuiElementType.BOOSTER_BUTTON ? "B" : "";
     }
 
     public GuiElement {
@@ -162,5 +177,10 @@ public record GuiElement(
     public static GuiElement resourceList(int x, int y, int width, int height, String kind) {
         return new GuiElement(GuiElementType.RESOURCE_LIST, x, y, width, height, "", "", kind,
                 DEFAULT_TEXT_COLOR, false, GuiDirection.UP, -1, -1);
+    }
+
+    public static GuiElement boosterButton(int x, int y, int width, int height, String text) {
+        return new GuiElement(GuiElementType.BOOSTER_BUTTON, x, y, width, height, text, "", "",
+                DEFAULT_BOOSTER_COLOR, false, GuiDirection.UP, -1, -1);
     }
 }

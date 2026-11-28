@@ -54,7 +54,7 @@ A especificação completa fica em [`docks/dsign.md`](docks/dsign.md). O guia pa
 ## Requisitos
 
 - Minecraft 26.1.2
-- NeoForge 26.1.2.121
+- NeoForge 26.1.2.124
 - Java 25
 
 ## Desenvolvimento

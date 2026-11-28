@@ -92,7 +92,7 @@
           <tbody>
             <tr><td><code>capabilities.&lt;kind&gt;</code></td><td>Captura o JSON bruto e chama <code>describeTanks</code> / <code>createStorage</code> do tipo registrado.</td></tr>
             <tr><td><code>capability_ports.&lt;kind&gt;</code></td><td>Lê uma lista de seletores de porta.</td></tr>
-            <tr><td>GUI</td><td>Renderiza <code>resource_bar</code> com <code>capability</code> e <code>slot</code>.</td></tr>
+            <tr><td>GUI</td><td>Renderiza <code>resource_bar</code> com <code>capability</code> e <code>slot</code>; <code>resource_list</code> desenha uma grade de recursos.</td></tr>
             <tr><td>Receitas</td><td>Despacha o campo <code>type</code> para o codec do addon.</td></tr>
             <tr><td>Persistência</td><td>Salva e restaura <code>StoredResource</code> por <code>kind</code>, <code>tank</code>, <code>id</code> e <code>amount</code>.</td></tr>
             <tr><td>JEI</td><td>Usa o <code>JeiResourceBridge</code> registrado pelo addon.</td></tr>
@@ -314,7 +314,20 @@ public MapCodec&lt;? extends MultiblockRecipeOutput&gt; outputCodec() {
         <p>O <code>tank</code> de saída é opcional; quando informado, precisa existir e aceitar o recurso.</p>
 
         <h2 id="gui">GUI</h2>
-        <p>Para cada tanque que deve aparecer na GUI, crie um <code>resource_bar</code>. A ordem e a posição são livres; o vínculo é feito por <code>capability</code> e <code>slot</code>.</p>
+        <p>Para cada tanque que deve aparecer na GUI, crie um <code>resource_bar</code>. A ordem e a posição são livres; o vínculo é feito por <code>capability</code> (o <code>kind</code>) e <code>slot</code> (o id do tanque).</p>
+        <p>Para mostrar vários recursos em grade (como essentia), use <code>resource_list</code>. <code>capability</code> é o <code>kind</code> e <code>width</code>/<code>height</code> precisam ser múltiplos de <code>18</code>, no mínimo <code>18</code>:</p>
+        <pre><code class="language-json">"gui": {
+  "elements": [
+    {
+      "type": "resource_list",
+      "x": 8,
+      "y": 16,
+      "width": 36,
+      "height": 54,
+      "capability": "essentia"
+    }
+  ]
+}</code></pre>
         <p>O addon também define o nome e a cor exibidos pela barra através de <code>displayName(String)</code> e <code>color(String)</code>. Se o recurso não existir, retorne um nome vazio e uma cor segura em vez de lançar exceção.</p>
 
         <h2 id="jei">JEI</h2>
@@ -353,7 +366,7 @@ public MapCodec&lt;? extends MultiblockRecipeOutput&gt; outputCodec() {
           <li>O codec de rede de receitas usa o formato genérico <code>id</code> + <code>amount</code>; campos extras do seu codec podem não sobreviver à sincronização.</li>
         </ul>
 
-        <p>Para o exemplo completo de um addon real, consulte o addon de Mekanism incluído no projeto e a wiki principal em <a href="index.html">Wiki do desenvolvedor</a>.</p>
+        <p>Para o exemplo completo de um addon real, consulte o addon de Mekanism incluído no projeto e a wiki principal em <a href="index.html">Wiki do desenvolvedor</a> (seções <a href="index.html#78-recursos-de-addon">7.8 Recursos de addon</a>, <a href="index.html#85-tipos-de-elemento">8.5 Tipos de elemento</a>, <a href="index.html#13-boosters-upgrades">13 Boosters</a> e <a href="index.html#14-motions-partes-móveis">14 Motions</a>).</p>
       </article>
     </main>
   </div>

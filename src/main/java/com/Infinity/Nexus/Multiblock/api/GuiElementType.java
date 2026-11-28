@@ -15,7 +15,8 @@ public enum GuiElementType implements StringRepresentable {
     RESOURCE_LIST("resource_list"),
     PROGRESS_BAR("progress_bar"),
     ARROW("arrow"),
-    ENTITY("entity");
+    ENTITY("entity"),
+    BOOSTER_BUTTON("booster_button");
 
     public static final Codec<GuiElementType> CODEC = Codec.STRING.comapFlatMap(
             GuiElementType::fromSerializedName,

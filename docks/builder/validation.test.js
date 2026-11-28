@@ -212,6 +212,37 @@ test("gui entity exporta a area e exige type=recipe", () => {
   assert.ok(codes(V.validateState(notMultiple)).includes("gui.element.size.invalid"));
 });
 
+test("booster_button exporta 8x8 e exige boosters", () => {
+  const button = V.createGuiElement("booster_button");
+  assert.deepEqual(
+    { x: button.x, y: button.y, width: button.width, height: button.height, text: button.text, color: button.color },
+    { x: 160, y: 4, width: 8, height: 8, text: "B", color: "0xFFFFC107" }
+  );
+
+  const state = withGuiState((value) => {
+    value.upgrades = V.createUpgrades();
+    value.upgrades.boosters.push(V.createUpgradeBooster());
+    value.gui.elements.push(V.createGuiElement("booster_button"));
+  });
+  const built = V.buildGui(state.gui).elements.find((element) => element.type === "booster_button");
+  assert.deepEqual(built, {
+    type: "booster_button",
+    x: 160,
+    y: 4,
+    width: 8,
+    height: 8,
+    text: "B",
+    color: "0xFFFFC107"
+  });
+  assert.ok(!codes(V.validateState(state)).includes("gui.booster.required"));
+
+  const withoutBoosters = withGuiState((value) => {
+    value.gui.elements.push(V.createGuiElement("booster_button"));
+  });
+  assert.ok(codes(V.validateState(withoutBoosters)).includes("gui.booster.required"));
+  assert.ok(V.guiProblem(withoutBoosters.gui, withoutBoosters).indexOf("booster") !== -1);
+});
+
 test("player_inventory exporta shadow e color proprios", () => {
   const state = withGuiState((value) => {
     const inventory = value.gui.elements.find((element) => element.type === "player_inventory");
@@ -333,7 +364,7 @@ test("gui novos elementos começam com o layout do spawner", () => {
   const text = V.createGuiElement("text");
   assert.deepEqual(
     { x: text.x, y: text.y, color: text.color, shadow: text.shadow },
-    { x: 8, y: 75, color: "404040", shadow: false }
+    { x: 8, y: 71, color: "404040", shadow: false }
   );
 
   const inventory = V.createGuiElement("player_inventory");
@@ -1755,6 +1786,14 @@ test("sounds custom validos e aviso em storage", () => {
   assert.ok(codes(V.validateState(storage)).includes("sounds.type"));
 });
 
+test("soundPathFromName sanitiza o nome do .ogg", () => {
+  assert.equal(V.soundPathFromName("My Sound.ogg"), "my_sound");
+  assert.equal(V.soundPathFromName("block.machine.ogg"), "block.machine");
+  assert.equal(V.soundPathFromName("  My Sound .OGG"), "my_sound");
+  assert.equal(V.soundPathFromName(".ogg"), "sound");
+  assert.equal(V.soundPathFromName(""), "sound");
+});
+
 test("sounds invalido e ignorado com aviso na importacao", () => {
   const imported = V.importDefinition({
     schema_version: 2,
@@ -2432,6 +2471,556 @@ test("importação normaliza shape e descarta caixas inválidas", () => {
   });
   assert.deepEqual(imported.state.shape, [[4, 0, 4, 12, 16, 12]]);
   assert.ok(imported.notes.length >= 2);
+});
+
+function withMotion(mutator) {
+  return withState((value) => {
+    value.type = "recipe";
+    const motion = V.createMotion();
+    motion.id = "spin";
+    motion.keys = ["I"];
+    motion.animation.duration = 40;
+    motion.animation.keyframes = [
+      V.createMotionKeyframe(0),
+      Object.assign(V.createMotionKeyframe(40), { rotation: { x: 0, y: 360, z: 0 } })
+    ];
+    value.motions = [motion];
+    if (mutator) {
+      mutator(motion, value);
+    }
+  });
+}
+
+test("motions é opcional e some da exportação quando vazio", () => {
+  assert.equal(V.buildDefinition(V.createDefaultState()).motions, undefined);
+  assert.equal(V.validateState(V.createDefaultState()).errors.length, 0);
+});
+
+test("motion válida exporta snake_case e faz round-trip", () => {
+  const state = withMotion((motion) => {
+    motion.preserveNbt = true;
+    motion.damageEntities = true;
+    motion.damage = 6;
+    motion.damageInterval = 5;
+    motion.damageSource = "minecraft:magic";
+    motion.animation.loop = false;
+    motion.animation.easing = "ease_in_out";
+    motion.animation.pivot = { x: 0.5, y: 1, z: 1.5 };
+    motion.animation.keyframes[1].offset = { x: 1, y: 0, z: 0 };
+    motion.animation.keyframes[1].rotation = { x: 0, y: 90, z: 0 };
+    motion.animation.keyframes[1].easing = "step";
+  });
+  assert.equal(V.validateState(state).errors.length, 0);
+  const json = V.buildDefinition(state).motions[0];
+  assert.equal(json.id, "spin");
+  assert.deepEqual(json.keys, ["I"]);
+  assert.equal(json.preserve_nbt, true);
+  assert.equal(json.damage_entities, true);
+  assert.equal(json.damage, 6);
+  assert.equal(json.damage_interval, 5);
+  assert.equal(json.damage_source, "minecraft:magic");
+  assert.equal(json.animation.loop, false);
+  assert.equal(json.animation.easing, "ease_in_out");
+  assert.deepEqual(json.animation.pivot, [0.5, 1, 1.5]);
+  assert.deepEqual(json.animation.keyframes[1].offset, [1, 0, 0]);
+  assert.deepEqual(json.animation.keyframes[1].rotation, [0, 90, 0]);
+  assert.equal(json.animation.keyframes[1].easing, "step");
+
+  const round = V.importDefinition(V.buildDefinition(state));
+  const imported = round.state.motions[0];
+  assert.equal(imported.id, "spin");
+  assert.deepEqual(imported.keys, ["I"]);
+  assert.equal(imported.preserveNbt, true);
+  assert.equal(imported.damageEntities, true);
+  assert.equal(imported.damage, 6);
+  assert.equal(imported.damageInterval, 5);
+  assert.equal(imported.damageSource, "minecraft:magic");
+  assert.deepEqual(imported.animation.pivot, { x: 0.5, y: 1, z: 1.5 });
+  assert.deepEqual(imported.animation.keyframes[1].offset, { x: 1, y: 0, z: 0 });
+  assert.equal(imported.animation.keyframes[1].easing, "step");
+});
+
+test("motion omite damage_source quando usa o padrão", () => {
+  const state = withMotion();
+  assert.equal(V.validateState(state).errors.length, 0);
+  assert.equal(V.buildDefinition(state).motions[0].damage_source, undefined);
+});
+
+test("motion rejeita damage_source inválido", () => {
+  const state = withMotion((motion) => {
+    motion.damageSource = "sem namespace";
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("motion.damage_source.invalid"));
+});
+
+test("motions em storage são válidas e fill_speed faz round-trip", () => {
+  const state = withMotion((motion, value) => {
+    value.type = "storage";
+    motion.animation.fillSpeed = true;
+  });
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+  assert.ok(!codes(result).includes("motions.type"));
+  assert.ok(!codes(result).includes("motion.fill_speed.type"));
+  const json = V.buildDefinition(state).motions[0];
+  assert.equal(json.animation.fill_speed, true);
+  const imported = V.importDefinition(V.buildDefinition(state));
+  assert.equal(imported.state.motions[0].animation.fillSpeed, true);
+});
+
+test("fill_speed avisa quando o tipo não é storage", () => {
+  const state = withMotion((motion) => {
+    motion.animation.fillSpeed = true;
+  });
+  assert.ok(codes(V.validateState(state)).includes("motion.fill_speed.type"));
+});
+
+test("motion exige id e keys válidas", () => {
+  const noId = withMotion((motion) => {
+    motion.id = "";
+  });
+  assert.ok(codes(V.validateState(noId)).includes("motion.id.required"));
+
+  const noKeys = withMotion((motion) => {
+    motion.keys = [];
+  });
+  assert.ok(codes(V.validateState(noKeys)).includes("motion.keys.required"));
+
+  const anchor = withMotion((motion) => {
+    motion.keys = ["C"];
+  });
+  assert.ok(codes(V.validateState(anchor)).includes("motion.key.anchor"));
+
+  const unknown = withMotion((motion) => {
+    motion.keys = ["Z"];
+  });
+  assert.ok(codes(V.validateState(unknown)).includes("motion.key.unknown"));
+
+  const repeated = withMotion((motion) => {
+    motion.keys = ["I", "I"];
+  });
+  assert.ok(codes(V.validateState(repeated)).includes("motion.key.repeated"));
+});
+
+test("motion rejeita id duplicado e key compartilhada", () => {
+  const duplicate = withMotion((motion, value) => {
+    const copy = V.createMotion();
+    copy.id = "spin";
+    copy.keys = ["J"];
+    copy.animation = V.createMotion().animation;
+    value.motions.push(copy);
+  });
+  assert.ok(codes(V.validateState(duplicate)).includes("motion.id.duplicate"));
+
+  const shared = withMotion((motion, value) => {
+    const copy = V.createMotion();
+    copy.id = "other";
+    copy.keys = ["I"];
+    copy.animation = V.createMotion().animation;
+    value.motions.push(copy);
+  });
+  assert.ok(codes(V.validateState(shared)).includes("motion.key.shared"));
+});
+
+test("motion valida dano, easing e keyframes", () => {
+  const damage = withMotion((motion) => {
+    motion.damage = -1;
+    motion.damageInterval = 0;
+  });
+  const damageCodes = codes(V.validateState(damage));
+  assert.ok(damageCodes.includes("motion.damage.invalid"));
+  assert.ok(damageCodes.includes("motion.damage_interval.invalid"));
+
+  const easing = withMotion((motion) => {
+    motion.animation.easing = "spin";
+    motion.animation.keyframes[0].easing = "spin";
+  });
+  const easingCodes = codes(V.validateState(easing));
+  assert.ok(easingCodes.includes("motion.easing.invalid"));
+  assert.ok(easingCodes.includes("motion.keyframe.easing.invalid"));
+
+  const order = withMotion((motion) => {
+    motion.animation.keyframes[0].time = 20;
+    motion.animation.keyframes[1].time = 10;
+  });
+  assert.ok(codes(V.validateState(order)).includes("motion.keyframe.time.order"));
+
+  const range = withMotion((motion) => {
+    motion.animation.keyframes[1].time = 50;
+  });
+  assert.ok(codes(V.validateState(range)).includes("motion.keyframe.time.range"));
+});
+
+test("scaleMotionDuration recalcula todos os keyframes", () => {
+  const motion = V.createMotion();
+  motion.animation.duration = 200;
+  motion.animation.keyframes = [
+    V.createMotionKeyframe(0),
+    V.createMotionKeyframe(50),
+    V.createMotionKeyframe(100),
+    V.createMotionKeyframe(200)
+  ];
+  V.scaleMotionDuration(motion, 20);
+  assert.equal(motion.animation.duration, 20);
+  assert.deepEqual(motion.animation.keyframes.map((frame) => frame.time), [0, 5, 10, 20]);
+
+  V.scaleMotionDuration(motion, 40);
+  assert.equal(motion.animation.duration, 40);
+  assert.deepEqual(motion.animation.keyframes.map((frame) => frame.time), [0, 10, 20, 40]);
+
+  const noFrames = V.createMotion();
+  noFrames.animation.duration = 120;
+  V.scaleMotionDuration(noFrames, 30);
+  assert.equal(noFrames.animation.duration, 30);
+});
+
+test("parseMotions normaliza vetores e preserva extras", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:spinner",
+    type: "recipe",
+    pattern: { anchor: "C", layers: [["III", "ICI", "III"]], matchers: { I: "minecraft:iron_block" } },
+    motions: [{
+      id: "spin",
+      keys: ["I"],
+      custom: { a: 1 },
+      animation: {
+        duration: 40,
+        custom_animation: true,
+        pivot: [1, 2, 3],
+        keyframes: [{
+          time: 0,
+          offset: [0, 0, 0],
+          rotation: [0, 0, 0],
+          custom_frame: "ok",
+          easing: "invalid"
+        }]
+      }
+    }]
+  });
+  const motion = imported.state.motions[0];
+  assert.deepEqual(motion.animation.pivot, { x: 1, y: 2, z: 3 });
+  assert.equal(motion.animation.keyframes[0].easing, "");
+  assert.deepEqual(motion.extras.custom, { a: 1 });
+  assert.equal(motion.animation.extras.custom_animation, true);
+  assert.equal(motion.animation.keyframes[0].extras.custom_frame, "ok");
+  assert.ok(imported.notes.some((note) => note.message.includes("easing")));
+  assert.equal(V.buildMotions(imported.state.motions)[0].custom.a, 1);
+});
+
+test("extras de keyframe nao aninham em round-trips sucessivos", () => {
+  const imported = V.importDefinition({
+    schema_version: 2,
+    id: "mymod:spinner",
+    type: "recipe",
+    pattern: { anchor: "C", layers: [["III", "ICI", "III"]], matchers: { I: "minecraft:iron_block" } },
+    motions: [{
+      id: "spin",
+      keys: ["I"],
+      animation: {
+        duration: 20,
+        keyframes: [{
+          time: 0,
+          offset: [0, 0, 0],
+          rotation: [0, 0, 0],
+          extras: { custom_frame: "ok" }
+        }]
+      }
+    }]
+  });
+  const first = V.buildDefinition(imported.state);
+  assert.equal(first.motions[0].animation.keyframes[0].extras, undefined);
+  assert.equal(first.motions[0].animation.keyframes[0].custom_frame, "ok");
+  const second = V.importDefinition(first);
+  const secondOutput = V.buildDefinition(second.state);
+  assert.deepEqual(secondOutput, first);
+  assert.equal(secondOutput.motions[0].animation.keyframes[0].custom_frame, "ok");
+});
+
+function withUpgradesState(mutator) {
+  const state = withState((value) => {
+    value.type = "recipe";
+    value.layers = [["III", "ICI", "IUI"]];
+    value.upgrades = V.createUpgrades();
+    value.upgrades.key = "U";
+    mutator(value);
+  });
+  return state;
+}
+
+test("upgrades é opcional e some da exportação quando ausente", () => {
+  const state = withState((value) => {
+    value.type = "recipe";
+  });
+  const exported = V.buildDefinition(state);
+  assert.equal(exported.upgrades, undefined);
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+});
+
+test("upgrade válido exporta snake_case e faz round-trip", () => {
+  const state = withUpgradesState((value) => {
+    const booster = V.createUpgradeBooster();
+    booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    booster.modifier = "output";
+    booster.mode = "multiplicative";
+    booster.value = "0.15";
+    booster.maxBlocks = "8";
+    booster.extras.custom_booster = { note: "keep" };
+    value.upgrades.boosters.push(booster);
+    value.upgrades.extras.custom_upgrades = true;
+  });
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+  const exported = V.buildDefinition(state);
+  assert.equal(exported.upgrades.key, "U");
+  assert.equal(exported.upgrades.custom_upgrades, true);
+  assert.deepEqual(exported.upgrades.boosters[0], {
+    matcher: "minecraft:gold_block",
+    modifier: "output",
+    mode: "multiplicative",
+    output: 0.15,
+    max_blocks: 8,
+    custom_booster: { note: "keep" }
+  });
+  const imported = V.importDefinition(exported);
+  assert.equal(imported.state.upgrades.key, "U");
+  assert.deepEqual(imported.state.upgrades.extras.custom_upgrades, true);
+  assert.deepEqual(V.buildDefinition(imported.state), exported);
+});
+
+test("upgrade key valida caractere único, âncora, matcher e presença no pattern", () => {
+  const anchor = withUpgradesState((value) => {
+    value.upgrades.key = "C";
+  });
+  assert.ok(codes(V.validateState(anchor)).includes("upgrade.key.anchor"));
+
+  const longKey = withUpgradesState((value) => {
+    value.upgrades.key = "UU";
+  });
+  assert.ok(codes(V.validateState(longKey)).includes("upgrade.key.invalid"));
+
+  const missing = withState((value) => {
+    value.type = "recipe";
+    value.upgrades = V.createUpgrades();
+    value.upgrades.key = "U";
+    value.upgrades.boosters.push(V.createUpgradeBooster());
+  });
+  assert.ok(codes(V.validateState(missing)).includes("upgrade.key.missing"));
+
+  const withMatcher = withUpgradesState((value) => {
+    value.upgrades.boosters.push(V.createUpgradeBooster());
+    value.matchers.U = V.createMatcher("block");
+    value.matchers.U.block = "minecraft:gold_block";
+  });
+  assert.ok(codes(V.validateState(withMatcher)).includes("upgrade.key.matcher"));
+});
+
+test("upgrade exige ao menos um booster", () => {
+  const state = withUpgradesState(() => {});
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("upgrades.boosters.required"));
+});
+
+test("booster desativado fica fora do cálculo e da exportação", () => {
+  const state = withUpgradesState((value) => {
+    const active = V.createUpgradeBooster();
+    active.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    value.upgrades.boosters.push(active);
+    const disabled = V.createUpgradeBooster();
+    disabled.matcher = { kind: "block", block: "", tag: "", state: [], raw: null };
+    disabled.enabled = false;
+    value.upgrades.boosters.push(disabled);
+  });
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+  const exported = V.buildDefinition(state);
+  assert.equal(exported.upgrades.boosters.length, 1);
+  assert.equal(exported.upgrades.boosters[0].matcher, "minecraft:gold_block");
+  assert.equal(exported.upgrades.boosters[0].enabled, undefined);
+
+  const allDisabled = withUpgradesState((value) => {
+    const booster = V.createUpgradeBooster();
+    booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    booster.enabled = false;
+    value.upgrades.boosters.push(booster);
+  });
+  assert.ok(codes(V.validateState(allDisabled)).includes("upgrades.boosters.required"));
+  assert.equal(V.buildDefinition(allDisabled).upgrades.boosters.length, 0);
+});
+
+test("booster valida matcher, modifier, mode, valor e max_blocks", () => {
+  const cases = [
+    { mutator: (b) => { b.matcher = { kind: "block", block: "", tag: "", state: [], raw: null }; }, code: "upgrade.booster.invalid" },
+    { mutator: (b) => { b.modifier = "nope"; }, code: "upgrade.booster.invalid" },
+    { mutator: (b) => { b.mode = "weird"; }, code: "upgrade.booster.invalid" },
+    { mutator: (b) => { b.value = "0"; }, code: "upgrade.booster.invalid" },
+    { mutator: (b) => { b.maxBlocks = "0"; }, code: "upgrade.booster.invalid" }
+  ];
+  cases.forEach((entry) => {
+    const state = withUpgradesState((value) => {
+      const booster = V.createUpgradeBooster();
+      booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+      entry.mutator(booster);
+      value.upgrades.boosters.push(booster);
+    });
+    const result = V.validateState(state);
+    assert.ok(codes(result).includes(entry.code), "esperava " + entry.code);
+    assert.ok(result.issues.some((issue) => issue.field === "upgradeBooster:0"));
+  });
+});
+
+test("multiplicative de redução precisa ser menor que 1", () => {
+  const state = withUpgradesState((value) => {
+    const booster = V.createUpgradeBooster();
+    booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    booster.modifier = "speed";
+    booster.mode = "multiplicative";
+    booster.value = "1.5";
+    value.upgrades.boosters.push(booster);
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("upgrade.booster.invalid"));
+  assert.match(result.issues.find((issue) => issue.code === "upgrade.booster.invalid").message, /menor que 1/);
+});
+
+test("parseUpgrades converte factor legado e preserva extras", () => {
+  const parsed = V.parseUpgrades({
+    key: "U",
+    boosters: [{
+      matcher: "#c:storage_blocks/gold",
+      modifier: "speed",
+      mode: "multiplicative",
+      factor: 0.8,
+      max_blocks: 4,
+      custom: true
+    }],
+    note: "keep"
+  }, []);
+  assert.equal(parsed.boosters[0].value, "0.8");
+  assert.equal(parsed.boosters[0].matcher.kind, "tag");
+  assert.equal(parsed.boosters[0].extras.custom, true);
+  assert.equal(parsed.extras.note, "keep");
+  assert.deepEqual(V.buildUpgrades(parsed).boosters[0], {
+    matcher: "#c:storage_blocks/gold",
+    modifier: "speed",
+    mode: "multiplicative",
+    tick_cost: 0.8,
+    max_blocks: 4,
+    custom: true
+  });
+});
+
+test("upgrades em storage avisam modifiers de recipe", () => {
+  const state = withUpgradesState((value) => {
+    value.type = "storage";
+    const booster = V.createUpgradeBooster();
+    booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    value.upgrades.boosters.push(booster);
+  });
+  const result = V.validateState(state);
+  assert.ok(codes(result).includes("upgrades.type"));
+  assert.equal(result.errors.length, 0);
+});
+
+test("storage usa damage por padrão e aceita booster de damage", () => {
+  assert.equal(V.createUpgradeBooster("storage").modifier, "damage");
+  assert.equal(V.createUpgradeBooster("recipe").modifier, "output");
+  assert.deepEqual(V.upgradeModifiersForType("storage").map((entry) => entry.id), ["damage"]);
+  assert.ok(V.upgradeModifiersForType("recipe").map((entry) => entry.id).includes("damage"));
+
+  const state = withUpgradesState((value) => {
+    value.type = "storage";
+    const booster = V.createUpgradeBooster("storage");
+    booster.matcher = { kind: "block", block: "minecraft:gold_block", tag: "", state: [], raw: null };
+    value.upgrades.boosters.push(booster);
+  });
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+  assert.ok(!codes(result).includes("upgrades.type"));
+});
+
+test("booster de damage exporta o campo damage e faz round-trip", () => {
+  const state = withUpgradesState((value) => {
+    const booster = V.createUpgradeBooster();
+    booster.matcher = { kind: "block", block: "minecraft:netherite_block", tag: "", state: [], raw: null };
+    booster.modifier = "damage";
+    booster.mode = "multiplicative";
+    booster.value = "0.5";
+    booster.maxBlocks = "3";
+    value.upgrades.boosters.push(booster);
+  });
+  const result = V.validateState(state);
+  assert.equal(result.errors.length, 0);
+  const exported = V.buildDefinition(state);
+  assert.deepEqual(exported.upgrades.boosters[0], {
+    matcher: "minecraft:netherite_block",
+    modifier: "damage",
+    mode: "multiplicative",
+    damage: 0.5,
+    max_blocks: 3
+  });
+  const imported = V.importDefinition(exported);
+  assert.deepEqual(V.buildDefinition(imported.state), exported);
+});
+
+test("upgrade math: output additive soma n x valor", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 2, factor: 0.5, mode: "additive" }], true);
+  assert.equal(bonus.multiplier, 2);
+  assert.equal(bonus.flat, 0);
+});
+
+test("upgrade math: speed multiplicative reduz o tempo", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 0.2, mode: "multiplicative" }], false);
+  assert.equal(bonus.multiplier, 0.8);
+  assert.equal(V.reduceUpgradeValue(100, bonus), 80);
+});
+
+test("upgrade math: thread additive vira crafts por vez", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 2, factor: 1, mode: "additive" }], true);
+  assert.equal(V.upgradeThreads(bonus), 3);
+});
+
+test("upgrade math: efficiency flat reduz o input", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 3, mode: "flat" }], false);
+  assert.equal(V.reduceUpgradeValue(10, bonus), 7);
+});
+
+test("upgrade math: output com fracao mantem chance de +1", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 0.5, mode: "additive" }], true);
+  const scaled = V.scaleUpgradeOutput(1, bonus);
+  assert.equal(scaled.whole, 1);
+  assert.equal(scaled.fraction, 0.5);
+});
+
+test("upgrade math: energy multiplicative reduz o consumo", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 0.3, mode: "multiplicative" }], false);
+  assert.equal(V.reduceUpgradeValue(1000, bonus), 700);
+});
+
+test("upgrade math: damage additive aumenta o dano", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 0.5, mode: "additive" }], true);
+  assert.equal(V.scaleUpgradeDamage(4, bonus), 6);
+});
+
+test("upgrade math: reducao nunca passa de zero", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 1, factor: 2, mode: "additive" }], false);
+  assert.equal(bonus.multiplier, 0);
+  assert.equal(V.reduceUpgradeValue(10, bonus), 1);
+});
+
+test("upgrade math: threads respeitam o limite de 64", () => {
+  const bonus = V.combineUpgradeBonus([{ count: 100, factor: 1, mode: "additive" }], true);
+  assert.equal(V.upgradeThreads(bonus), V.MAX_UPGRADE_THREADS);
+});
+
+test("upgrade math: additive e multiplicative se combinam", () => {
+  const bonus = V.combineUpgradeBonus([
+    { count: 1, factor: 0.5, mode: "additive" },
+    { count: 2, factor: 0.5, mode: "multiplicative" }
+  ], true);
+  assert.equal(bonus.multiplier, 3.375);
 });
 
 if (process.exitCode) {

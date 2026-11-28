@@ -1,7 +1,7 @@
 [build]
   base = "/"
   publish = "docks"
-  command = "node docks/builder/sync-model-assets.js"
+  command = "node docks/builder/sync-model-assets.js && node docks/wiki/build-wiki.js"
 
 [[redirects]]
   from = "/"

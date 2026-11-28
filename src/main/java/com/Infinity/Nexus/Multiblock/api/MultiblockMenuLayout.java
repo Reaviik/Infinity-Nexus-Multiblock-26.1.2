@@ -88,6 +88,7 @@ public record MultiblockMenuLayout(
             }
         }
         boolean hasProgress = definition != null && definition.type().isRecipe();
+        boolean hasBoosters = definition != null && !definition.upgrades().isEmpty();
         int barCount = (hasEnergy ? 1 : 0) + tanks.size() + resourceTanks.size();
         boolean reservedRail = barCount > 0 || hasProgress;
         int columns = reservedRail ? 8 : 9;
@@ -118,6 +119,11 @@ public record MultiblockMenuLayout(
         }
         if (hasProgress) {
             elements.add(GuiElement.progressBar(barX(barIndex), barY(barIndex, barHeight), 8, barHeight, GuiDirection.UP, GuiElement.DEFAULT_PROGRESS_COLOR));
+        }
+        if (hasBoosters) {
+            elements.add(GuiElement.boosterButton(
+                    DEFAULT_WIDTH - GuiElement.BOOSTER_BUTTON_SIZE - 8, 4,
+                    GuiElement.BOOSTER_BUTTON_SIZE, GuiElement.BOOSTER_BUTTON_SIZE, "B"));
         }
 
         List<SlotPlacement> placements = new ArrayList<>();
@@ -317,6 +323,13 @@ public record MultiblockMenuLayout(
                         throw new IllegalArgumentException("gui has an entity element but the multiblock is not a recipe multiblock");
                     }
                     requireEntityElement(element, gui.width(), gui.height());
+                    elements.add(element);
+                }
+                case BOOSTER_BUTTON -> {
+                    if (definition.upgrades().isEmpty()) {
+                        throw new IllegalArgumentException("gui has a booster_button but the multiblock has no upgrades");
+                    }
+                    requireSizedElement(element, gui.width(), gui.height());
                     elements.add(element);
                 }
                 case TITLE, TEXT -> elements.add(element);

@@ -25,6 +25,7 @@ public class MultiblockMenu extends AbstractContainerMenu {
     private final MultiblockMenuLayout layout;
     private int clientProgress;
     private int clientMaxProgress;
+    private final int[] clientBoosters = { 1000, 0, 1000, 0, 1000, 0, 1000, 0, 1, 1000, 0 };
     private final ContainerData progressData = new ContainerData() {
         @Override
         public int get(int index) {
@@ -33,12 +34,27 @@ public class MultiblockMenu extends AbstractContainerMenu {
             return switch (index) {
                 case 0 -> serverSide ? controller.progress() : MultiblockMenu.this.clientProgress;
                 case 1 -> serverSide ? controller.maxProgress() : MultiblockMenu.this.clientMaxProgress;
-                default -> 0;
+                default -> {
+                    int slot = index - 2;
+                    if (slot < 0 || slot >= MultiblockMenu.this.clientBoosters.length) {
+                        yield 0;
+                    }
+                    if (serverSide) {
+                        int[] data = controller.boosterDisplayData();
+                        yield slot < data.length ? data[slot] : 0;
+                    }
+                    yield MultiblockMenu.this.clientBoosters[slot];
+                }
             };
         }
 
         @Override
         public void set(int index, int value) {
+            int slot = index - 2;
+            if (slot >= 0 && slot < MultiblockMenu.this.clientBoosters.length) {
+                MultiblockMenu.this.clientBoosters[slot] = value;
+                return;
+            }
             switch (index) {
                 case 0 -> MultiblockMenu.this.clientProgress = value;
                 case 1 -> MultiblockMenu.this.clientMaxProgress = value;
@@ -49,7 +65,7 @@ public class MultiblockMenu extends AbstractContainerMenu {
 
         @Override
         public int getCount() {
-            return 2;
+            return 2 + MultiblockMenu.this.clientBoosters.length;
         }
     };
 
@@ -119,6 +135,10 @@ public class MultiblockMenu extends AbstractContainerMenu {
 
     public int maxProgress() {
         return this.progressData.get(1);
+    }
+
+    public int boosterValue(int index) {
+        return this.progressData.get(2 + index);
     }
 
     @Override

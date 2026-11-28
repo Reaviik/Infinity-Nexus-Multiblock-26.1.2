@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "id": "infinity_nexus_multiblock:model_test",
+  "type": "storage_exemple",
+  "model": {
+    "idle": "minecraft:block/furnace",
+    "active": "minecraft:block/furnace_on",
+    "building": "minecraft:block/crafting_table"
+  },
+  "pattern": {
+    "layers": [
+      [
+        "ACA"
+      ]
+    ],
+    "anchor": "C",
+    "matchers": {
+      "A": "minecraft:stone",
+      "C": "minecraft:redstone_block"
+    }
+  }
+}

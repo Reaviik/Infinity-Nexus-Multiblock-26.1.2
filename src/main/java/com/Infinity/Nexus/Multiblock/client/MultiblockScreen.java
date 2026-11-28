@@ -1,31 +1,22 @@
 package com.Infinity.Nexus.Multiblock.client;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import com.Infinity.Nexus.Core.renderer.FluidTankRenderer;
-import com.Infinity.Nexus.Multiblock.api.GuiDirection;
-import com.Infinity.Nexus.Multiblock.api.GuiElement;
-import com.Infinity.Nexus.Multiblock.api.GuiElementType;
-import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
-import com.Infinity.Nexus.Multiblock.api.SlotLock;
-import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
+import com.Infinity.Nexus.Multiblock.api.*;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceStorage;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
 import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
 import com.Infinity.Nexus.Multiblock.api.addon.client.MultiblockClientAddons;
 import com.Infinity.Nexus.Multiblock.api.addon.client.ResourceListRenderer;
+import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
 import com.Infinity.Nexus.Multiblock.block.MultiblockEnergyStorage;
 import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockMenu;
 import com.Infinity.Nexus.Multiblock.menu.MultiblockSlot;
+import com.Infinity.Nexus.Multiblock.network.RequestBoosterHighlightPayload;
 import com.Infinity.Nexus.Multiblock.network.SetFluidSlotTankPayload;
 import com.Infinity.Nexus.Multiblock.network.SetSlotLockPayload;
+import com.Infinity.Nexus.Multiblock.network.TankInteractPayload;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -37,11 +28,16 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.transfer.access.ItemAccess;
 import org.jspecify.annotations.Nullable;
+
+import java.util.*;
 
 public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
     private static final int PANEL_COLOR = 0xFFC6C6C6;
@@ -109,6 +105,11 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (event.button() == 0) {
+            if (this.boosterButtonAt(event.x(), event.y()) != null) {
+                ClientPacketDistributor.sendToServer(new RequestBoosterHighlightPayload(
+                        this.menu.blockEntity().getBlockPos()));
+                return true;
+            }
             MultiblockSlot pinSlot = this.pinSlotAt(event.x(), event.y());
             if (pinSlot != null) {
                 boolean locked = this.menu.slotLock(pinSlot.getSlotIndex()) == null;
@@ -128,8 +129,44 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                         this.menu.blockEntity().getBlockPos(), fluidPinSlot.getSlotIndex(), nextTank));
                 return true;
             }
+            GuiElement fluidBar = this.fluidBarAt(event.x(), event.y());
+            if (fluidBar != null && this.canInteractWithFluidBar()) {
+                ClientPacketDistributor.sendToServer(new TankInteractPayload(
+                        this.menu.blockEntity().getBlockPos(), fluidBar.capability()));
+                return true;
+            }
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    private @Nullable GuiElement fluidBarAt(double mouseX, double mouseY) {
+        for (GuiElement element : this.menu.layout().elements()) {
+            if (element.type() != GuiElementType.FLUID_BAR || element.capability().isBlank()) {
+                continue;
+            }
+            int x = this.leftPos + element.x();
+            int y = this.topPos + element.y();
+            if (this.isMouseOver((int) mouseX, (int) mouseY, x, y, element.width(), element.height())) {
+                return element;
+            }
+        }
+        return null;
+    }
+
+    private boolean canInteractWithFluidBar() {
+        if (this.minecraft == null || this.minecraft.player == null) {
+            return false;
+        }
+        ItemStack carried = this.menu.getCarried();
+        if (carried.isEmpty()) {
+            return false;
+        }
+        if (carried.is(Items.SPONGE)) {
+            return true;
+        }
+        return ItemAccess.forPlayerCursor(this.minecraft.player, this.menu)
+                .oneByOne()
+                .getCapability(Capabilities.Fluid.ITEM) != null;
     }
 
     @Override
@@ -237,6 +274,28 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         return null;
     }
 
+    private @Nullable GuiElement boosterButtonAt(double mouseX, double mouseY) {
+        if (!this.hasBoosters()) {
+            return null;
+        }
+        for (GuiElement element : this.menu.layout().elements()) {
+            if (element.type() != GuiElementType.BOOSTER_BUTTON) {
+                continue;
+            }
+            int x = this.leftPos + element.x();
+            int y = this.topPos + element.y();
+            if (isMouseOver((int) mouseX, (int) mouseY, x, y, element.width(), element.height())) {
+                return element;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasBoosters() {
+        MultiblockDefinition definition = this.menu.blockEntity().definition();
+        return definition != null && !definition.upgrades().isEmpty();
+    }
+
     private boolean isMouseOverPin(Slot slot, double mouseX, double mouseY) {
         int x = this.leftPos + slot.x + PIN_OFFSET_X;
         int y = this.topPos + slot.y + PIN_OFFSET_Y;
@@ -284,6 +343,7 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
         }
 
         drawBars(graphics, x, y, layout);
+        drawBoosterButtons(graphics, x, y, layout, mouseX, mouseY);
         drawResourceLists(graphics, x, y, layout);
         drawEntityElements(graphics, x, y, layout);
     }
@@ -432,16 +492,27 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                             mouseX, mouseY);
                     return;
                 }
+            } else if (element.type() == GuiElementType.BOOSTER_BUTTON) {
+                if (!this.hasBoosters()) {
+                    continue;
+                }
+                List<Component> lines = new ArrayList<>();
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.booster.title"));
+                lines.addAll(boosterLabels());
+                lines.add(Component.translatable("gui.infinity_nexus_multiblock.booster.highlight"));
+                graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY,
+                        mouseX, mouseY);
             } else if (element.type() == GuiElementType.PROGRESS_BAR || element.type() == GuiElementType.ARROW) {
                 int max = this.menu.maxProgress();
                 int progress = this.menu.progress();
                 int percent = max > 0 ? (int) Math.min(100L, (long) progress * 100L / max) : 0;
                 Component tooltip = Component.translatable("gui.infinity_nexus_multiblock.progress")
                         .append(": " + percent + "%");
-                List<Component> lines = ModList.get().isLoaded("jei")
-                        ? List.of(tooltip, Component.translatable(
-                                "gui.infinity_nexus_multiblock.jei.show_recipes"))
-                        : List.of(tooltip);
+                List<Component> lines = new ArrayList<>();
+                lines.add(tooltip);
+                if (ModList.get().isLoaded("jei")) {
+                    lines.add(Component.translatable("gui.infinity_nexus_multiblock.jei.show_recipes"));
+                }
                 graphics.setTooltipForNextFrame(this.font, lines, Optional.empty(), ItemStack.EMPTY,
                         mouseX, mouseY);
             } else if (element.type() == GuiElementType.ENTITY) {
@@ -481,6 +552,28 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
             } else if (element.type() == GuiElementType.ARROW) {
                 drawArrow(graphics, layout, element, originX + element.x(), originY + element.y());
             }
+        }
+    }
+
+    private void drawBoosterButtons(GuiGraphicsExtractor graphics, int originX, int originY,
+            MultiblockMenuLayout layout, int mouseX, int mouseY) {
+        if (!this.hasBoosters()) {
+            return;
+        }
+        for (GuiElement element : layout.elements()) {
+            if (element.type() != GuiElementType.BOOSTER_BUTTON) {
+                continue;
+            }
+            int x = originX + element.x();
+            int y = originY + element.y();
+            MultiblockGuiRender.drawFrame(graphics, x, y, element.width(), element.height());
+            if (isMouseOver(mouseX, mouseY, x, y, element.width(), element.height())) {
+                graphics.fill(x + 1, y + 1, x + element.width() - 1, y + element.height() - 1, 0x33FFFFFF);
+            }
+            String text = element.text().isBlank() ? "B" : element.text();
+            int textX = x + Math.max(0, (element.width() - this.font.width(text)) / 2);
+            int textY = y + Math.max(0, (element.height() - 8) / 2);
+            graphics.text(this.font, Component.literal(text), textX, textY, element.color(), element.shadow());
         }
     }
 
@@ -811,6 +904,65 @@ public class MultiblockScreen extends AbstractContainerScreen<MultiblockMenu> {
                 }
             }
         }
+    }
+
+    private List<Component> boosterLabels() {
+        List<Component> labels = new ArrayList<>();
+        int output = this.menu.boosterValue(0);
+        int outputFlat = this.menu.boosterValue(1);
+        if (output != 1000 || outputFlat != 0) {
+            labels.add(Component.translatable("gui.infinity_nexus_multiblock.booster.output",
+                    formatIncrease(output / 1000.0D, outputFlat / 1000.0D)));
+        }
+        int damage = this.menu.boosterValue(9);
+        int damageFlat = this.menu.boosterValue(10);
+        if (damage != 1000 || damageFlat != 0) {
+            labels.add(Component.translatable("gui.infinity_nexus_multiblock.booster.damage",
+                    formatIncrease(damage / 1000.0D, damageFlat / 1000.0D)));
+        }
+        addReductionLabel(labels, "gui.infinity_nexus_multiblock.booster.speed",
+                this.menu.boosterValue(2), this.menu.boosterValue(3));
+        addReductionLabel(labels, "gui.infinity_nexus_multiblock.booster.energy",
+                this.menu.boosterValue(4), this.menu.boosterValue(5));
+        addReductionLabel(labels, "gui.infinity_nexus_multiblock.booster.efficiency",
+                this.menu.boosterValue(6), this.menu.boosterValue(7));
+        int threads = this.menu.boosterValue(8);
+        if (threads > 1) {
+            labels.add(Component.translatable("gui.infinity_nexus_multiblock.booster.threads", threads));
+        }
+        return labels;
+    }
+
+    private static void addReductionLabel(List<Component> labels, String key, int multiplier, int flat) {
+        if (multiplier >= 1000 && flat == 0) {
+            return;
+        }
+        labels.add(Component.translatable(key, formatReduction(multiplier / 1000.0D, flat / 1000.0D)));
+    }
+
+    private static String formatIncrease(double multiplier, double flat) {
+        StringBuilder text = new StringBuilder("x").append(formatNumber(multiplier));
+        if (Math.abs(flat) > 1.0E-6) {
+            text.append(flat > 0 ? " +" : " ").append(formatNumber(flat));
+        }
+        return text.toString();
+    }
+
+    private static String formatReduction(double multiplier, double flat) {
+        int percent = (int) Math.round((1.0D - multiplier) * 100.0D);
+        StringBuilder text = new StringBuilder("-").append(Math.max(0, percent)).append('%');
+        if (Math.abs(flat) > 1.0E-6) {
+            text.append(" -").append(formatNumber(Math.abs(flat)));
+        }
+        return text.toString();
+    }
+
+    private static String formatNumber(double value) {
+        double rounded = Math.round(value * 100.0D) / 100.0D;
+        if (rounded == Math.rint(rounded)) {
+            return Integer.toString((int) rounded);
+        }
+        return Double.toString(rounded);
     }
 
     private static void blitElementTexture(GuiGraphicsExtractor graphics, MultiblockMenuLayout layout,

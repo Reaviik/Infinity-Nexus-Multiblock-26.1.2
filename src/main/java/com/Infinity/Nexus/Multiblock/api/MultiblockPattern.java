@@ -1,30 +1,39 @@
 package com.Infinity.Nexus.Multiblock.api;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.*;
+
 public final class MultiblockPattern {
     public record PatternCell(int x, int y, int z, char symbol, BlockMatcher matcher, boolean anchor) {}
+    public record UpgradeCell(int x, int y, int z, char symbol) {}
 
     private final List<PatternCell> cells;
+    private final List<UpgradeCell> upgradeCells;
     private final BlockPos anchorOffset;
     private final char anchor;
+    private final char upgradeKey;
     private final int sizeX;
     private final int sizeY;
     private final int sizeZ;
 
-    private MultiblockPattern(List<PatternCell> cells, BlockPos anchorOffset, char anchor, int sizeX, int sizeY, int sizeZ) {
+    private MultiblockPattern(
+            List<PatternCell> cells,
+            List<UpgradeCell> upgradeCells,
+            BlockPos anchorOffset,
+            char anchor,
+            char upgradeKey,
+            int sizeX,
+            int sizeY,
+            int sizeZ) {
         this.cells = cells;
+        this.upgradeCells = upgradeCells;
         this.anchorOffset = anchorOffset;
         this.anchor = anchor;
+        this.upgradeKey = upgradeKey;
         this.sizeX = sizeX;
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
@@ -36,6 +45,18 @@ public final class MultiblockPattern {
 
     public List<PatternCell> cells() {
         return this.cells;
+    }
+
+    public boolean hasUpgradeKey() {
+        return this.upgradeKey != '\0';
+    }
+
+    public char upgradeKey() {
+        return this.upgradeKey;
+    }
+
+    public List<UpgradeCell> upgradeCells() {
+        return this.upgradeCells;
     }
 
     public BlockPos anchorOffset() {
@@ -79,9 +100,40 @@ public final class MultiblockPattern {
         return List.copyOf(members);
     }
 
-    public boolean matches(LevelReader level, BlockPos origin, Rotation rotation) {
+    public List<BlockPos> upgradeMembers(BlockPos controllerPos, Rotation rotation) {
+        if (this.upgradeCells.isEmpty()) {
+            return List.of();
+        }
+        BlockPos origin = this.origin(controllerPos, rotation);
+        List<BlockPos> positions = new ArrayList<>(this.upgradeCells.size());
+        for (UpgradeCell cell : this.upgradeCells) {
+            BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(rotation);
+            positions.add(origin.offset(offset.getX(), offset.getY(), offset.getZ()));
+        }
+        return List.copyOf(positions);
+    }
+
+    public boolean hasStructuralSymbol(char symbol) {
         for (PatternCell cell : this.cells) {
-            if (cell.anchor()) {
+            if (!cell.anchor() && cell.symbol() == symbol) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean matches(LevelReader level, BlockPos origin, Rotation rotation) {
+        return matches(level, origin, rotation, Set.of());
+    }
+
+    /**
+     * Igual a {@link #matches(LevelReader, BlockPos, Rotation)}, mas pula as
+     * celulas cujo simbolo esta em {@code ignoredSymbols}. Usado enquanto as
+     * partes moveis estao fora do lugar (blocos viraram ar).
+     */
+    public boolean matches(LevelReader level, BlockPos origin, Rotation rotation, Set<Character> ignoredSymbols) {
+        for (PatternCell cell : this.cells) {
+            if (cell.anchor() || ignoredSymbols.contains(cell.symbol())) {
                 continue;
             }
             BlockPos offset = new BlockPos(cell.x(), cell.y(), cell.z()).rotate(rotation);
@@ -98,6 +150,7 @@ public final class MultiblockPattern {
         private final List<List<String>> layers = new ArrayList<>();
         private final Map<Character, BlockMatcher> matchers = new LinkedHashMap<>();
         private char anchor = 'C';
+        private char upgradeKey = '\0';
 
         public Builder layer(String... rows) {
             this.layers.add(List.of(rows));
@@ -115,6 +168,11 @@ public final class MultiblockPattern {
 
         public Builder anchor(char anchor) {
             this.anchor = anchor;
+            return this;
+        }
+
+        public Builder upgradeKey(char upgradeKey) {
+            this.upgradeKey = upgradeKey;
             return this;
         }
 
@@ -138,6 +196,7 @@ public final class MultiblockPattern {
             int anchorCount = 0;
             BlockPos anchorOffset = null;
             List<PatternCell> cells = new ArrayList<>();
+            List<UpgradeCell> upgradeCells = new ArrayList<>();
 
             for (int y = 0; y < this.layers.size(); y++) {
                 List<String> layer = this.layers.get(y);
@@ -152,6 +211,16 @@ public final class MultiblockPattern {
                     for (int x = 0; x < width; x++) {
                         char symbol = row.charAt(x);
                         if (symbol == ' ') {
+                            continue;
+                        }
+                        if (this.upgradeKey != '\0' && symbol == this.upgradeKey) {
+                            if (symbol == this.anchor) {
+                                throw new IllegalStateException("Upgrade key cannot be the anchor");
+                            }
+                            if (this.matchers.containsKey(symbol)) {
+                                throw new IllegalStateException("Upgrade key cannot have a matcher");
+                            }
+                            upgradeCells.add(new UpgradeCell(x, y, z, symbol));
                             continue;
                         }
                         boolean isAnchor = symbol == this.anchor;
@@ -170,11 +239,16 @@ public final class MultiblockPattern {
             if (anchorCount != 1) {
                 throw new IllegalStateException("A multiblock pattern needs exactly one anchor, found " + anchorCount);
             }
+            if (this.upgradeKey != '\0' && upgradeCells.isEmpty()) {
+                throw new IllegalStateException("Upgrade key '" + this.upgradeKey + "' does not appear in the pattern");
+            }
 
             return new MultiblockPattern(
                     Collections.unmodifiableList(cells),
+                    Collections.unmodifiableList(upgradeCells),
                     anchorOffset,
                     this.anchor,
+                    this.upgradeKey,
                     width,
                     this.layers.size(),
                     height);

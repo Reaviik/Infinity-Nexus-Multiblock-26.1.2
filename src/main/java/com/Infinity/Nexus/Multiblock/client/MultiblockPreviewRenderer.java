@@ -55,6 +55,8 @@ public final class MultiblockPreviewRenderer {
     private static final int MISSING_LINE = ARGB.color(0xCC, 0xFF, 0x9F, 0x4A);
     private static final int BLOCKED_FILL = ARGB.color(0x4D, 0xE5, 0x39, 0x35);
     private static final int BLOCKED_LINE = ARGB.color(0xDD, 0xFF, 0x5A, 0x50);
+    private static final int BOOSTER_FILL = ARGB.color(0x40, 0xFF, 0xC1, 0x07);
+    private static final int BOOSTER_LINE = ARGB.color(0xDD, 0xFF, 0xD5, 0x4A);
     private static final int ANCHOR_FILL = ARGB.color(0x40, 0x29, 0xB6, 0xF6);
     private static final int ANCHOR_LINE = ARGB.color(0xCC, 0x67, 0xD4, 0xFF);
     private static final int PLACE_ALPHA = 0x66;
@@ -163,6 +165,35 @@ public final class MultiblockPreviewRenderer {
         List<PreviewCell> cells = new ArrayList<>(positions.size());
         for (BlockPos pos : positions) {
             cells.add(new PreviewCell(pos, List.of(), BLOCKED_FILL, BLOCKED_LINE, 0, true));
+        }
+
+        Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
+        PoseStack poseStack = event.getPoseStack();
+        event.getSubmitNodeCollector().order(1).submitCustomGeometry(
+                poseStack,
+                RenderTypes.debugQuads(),
+                (pose, buffer) -> renderFill(pose, buffer, cells, camera));
+        event.getSubmitNodeCollector().order(1).submitCustomGeometry(
+                poseStack,
+                RenderTypes.linesTranslucent(),
+                (pose, buffer) -> renderOutline(pose, buffer, cells, camera));
+    }
+
+    public static void onSubmitBoosterHighlights(SubmitCustomGeometryEvent event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        ClientLevel level = minecraft.level;
+        if (player == null || level == null) {
+            return;
+        }
+        List<BlockPos> positions = MultiblockBoosterHighlights.active(level);
+        if (positions.isEmpty()) {
+            return;
+        }
+
+        List<PreviewCell> cells = new ArrayList<>(positions.size());
+        for (BlockPos pos : positions) {
+            cells.add(new PreviewCell(pos, List.of(), BOOSTER_FILL, BOOSTER_LINE, 0, true));
         }
 
         Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;

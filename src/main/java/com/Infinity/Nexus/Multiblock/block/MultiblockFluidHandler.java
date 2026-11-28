@@ -1,5 +1,6 @@
 package com.Infinity.Nexus.Multiblock.block;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -75,42 +76,58 @@ public final class MultiblockFluidHandler extends FluidStacksResourceHandler {
 
     public ResourceHandler<FluidResource> manualAccess(int index) {
         Objects.checkIndex(index, size());
+        return manualAccess(List.of(index));
+    }
+
+    public ResourceHandler<FluidResource> manualAccess(List<Integer> indexes) {
+        List<Integer> tanks = List.copyOf(indexes);
+        for (int tank : tanks) {
+            Objects.checkIndex(tank, size());
+        }
         return new ResourceHandler<>() {
             @Override
             public int size() {
-                return 1;
+                return tanks.size();
             }
 
             @Override
-            public FluidResource getResource(int ignored) {
-                return MultiblockFluidHandler.this.getResource(index);
+            public FluidResource getResource(int slot) {
+                return MultiblockFluidHandler.this.getResource(tanks.get(slot));
             }
 
             @Override
-            public long getAmountAsLong(int ignored) {
-                return MultiblockFluidHandler.this.getAmountAsLong(index);
+            public long getAmountAsLong(int slot) {
+                return MultiblockFluidHandler.this.getAmountAsLong(tanks.get(slot));
             }
 
             @Override
-            public long getCapacityAsLong(int ignored, FluidResource resource) {
-                return MultiblockFluidHandler.this.getCapacityAsLong(index, resource);
+            public long getCapacityAsLong(int slot, FluidResource resource) {
+                return MultiblockFluidHandler.this.getCapacityAsLong(tanks.get(slot), resource);
             }
 
             @Override
-            public boolean isValid(int ignored, FluidResource resource) {
-                return MultiblockFluidHandler.this.isValid(index, resource);
+            public boolean isValid(int slot, FluidResource resource) {
+                return MultiblockFluidHandler.this.isValid(tanks.get(slot), resource);
             }
 
             @Override
-            public int insert(int ignored, FluidResource resource, int amount, TransactionContext transaction) {
-                return insertUnlimited(index, resource, amount, transaction);
+            public int insert(int slot, FluidResource resource, int amount, TransactionContext transaction) {
+                return insertUnlimited(tanks.get(slot), resource, amount, transaction);
             }
 
             @Override
-            public int extract(int ignored, FluidResource resource, int amount, TransactionContext transaction) {
-                return extractUnlimited(index, resource, amount, transaction);
+            public int extract(int slot, FluidResource resource, int amount, TransactionContext transaction) {
+                return extractUnlimited(tanks.get(slot), resource, amount, transaction);
             }
         };
+    }
+
+    public ResourceHandler<FluidResource> manualAccessAll() {
+        List<Integer> indexes = new ArrayList<>(size());
+        for (int index = 0; index < size(); index++) {
+            indexes.add(index);
+        }
+        return manualAccess(indexes);
     }
 
     @Override

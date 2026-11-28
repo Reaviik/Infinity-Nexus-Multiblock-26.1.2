@@ -1,17 +1,9 @@
 package com.Infinity.Nexus.Multiblock.recipe;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-
+import com.Infinity.Nexus.Multiblock.api.MultiblockUpgradeMath;
+import com.Infinity.Nexus.Multiblock.api.UpgradeBonus;
 import com.Infinity.Nexus.Multiblock.api.addon.StoredResource;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Energy;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Entity;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Fluid;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Item;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.Resource;
+import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient.*;
 import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -24,17 +16,13 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
-import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.PlacementInfo;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeBookCategories;
-import net.minecraft.world.item.crafting.RecipeBookCategory;
-import net.minecraft.world.item.crafting.RecipeSerializer;
-import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.*;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 import org.jspecify.annotations.Nullable;
+
+import java.util.*;
 
 public record MultiblockRecipe(
         RecipeType<MultiblockRecipe> recipeType,
@@ -144,22 +132,32 @@ public record MultiblockRecipe(
 
     @Override
     public boolean matches(MultiblockRecipeInput input, Level level) {
+        return this.matches(input, level, UpgradeBonus.IDENTITY);
+    }
+
+    public boolean matches(MultiblockRecipeInput input, Level level, UpgradeBonus efficiency) {
         if (level.isClientSide() || this.inputs.isEmpty()) {
             return false;
         }
-        if (this.findItemInputs(input.items()) == null) {
+        if (this.findItemInputs(input.items(), efficiency) == null) {
             return false;
         }
-        int[] fluidTanks = this.matchFluidTanks(input.fluids());
+        int[] fluidTanks = this.matchFluidTanks(input.fluids(), efficiency);
         for (int tank : fluidTanks) {
             if (tank < 0) {
                 return false;
             }
         }
-        return this.findResourceInputs(input.resources()) != null;
+        return this.findResourceInputs(input.resources(), efficiency) != null;
     }
 
     public @Nullable List<ResourceAllocation> findResourceInputs(List<StoredResource> available) {
+        return this.findResourceInputs(available, UpgradeBonus.IDENTITY);
+    }
+
+    public @Nullable List<ResourceAllocation> findResourceInputs(
+            List<StoredResource> available,
+            UpgradeBonus efficiency) {
         List<Resource> required = this.resourceInputs();
         if (required.isEmpty()) {
             return List.of();
@@ -175,7 +173,7 @@ public record MultiblockRecipe(
         }
         List<ResourceAllocation> allocations = new ArrayList<>();
         for (Resource input : required) {
-            long needed = input.amount();
+            long needed = MultiblockUpgradeMath.scaledInput(input.amount(), efficiency);
             for (int index = 0; index < stacks.size() && needed > 0L; index++) {
                 StoredResource stack = stacks.get(index);
                 if (!stack.kind().equals(input.typeId()) || !stack.id().equals(input.id())) {
@@ -210,13 +208,17 @@ public record MultiblockRecipe(
     }
 
     public @Nullable List<ItemAllocation> findItemInputs(List<ItemStack> items) {
+        return this.findItemInputs(items, UpgradeBonus.IDENTITY);
+    }
+
+    public @Nullable List<ItemAllocation> findItemInputs(List<ItemStack> items, UpgradeBonus efficiency) {
         List<Item> itemInputs = this.itemInputs();
         int[] remaining = new int[items.size()];
         for (int index = 0; index < items.size(); index++) {
             remaining[index] = items.get(index).getCount();
         }
         List<ItemAllocation> allocations = new ArrayList<>();
-        if (this.findItemInputs(items, itemInputs, 0, remaining, allocations)) {
+        if (this.findItemInputs(items, itemInputs, 0, remaining, allocations, efficiency)) {
             return List.copyOf(allocations);
         }
         return null;
@@ -227,18 +229,21 @@ public record MultiblockRecipe(
             List<Item> itemInputs,
             int inputIndex,
             int[] remaining,
-            List<ItemAllocation> allocations) {
+            List<ItemAllocation> allocations,
+            UpgradeBonus efficiency) {
         if (inputIndex >= itemInputs.size()) {
             return true;
         }
+        int needed = MultiblockUpgradeMath.scaledInput(itemInputs.get(inputIndex).count(), efficiency);
         return this.findItemInputCount(
                 items,
                 itemInputs,
                 inputIndex,
-                itemInputs.get(inputIndex).count(),
+                needed,
                 0,
                 remaining,
-                allocations);
+                allocations,
+                efficiency);
     }
 
     private boolean findItemInputCount(
@@ -248,9 +253,10 @@ public record MultiblockRecipe(
             int needed,
             int startSlot,
             int[] remaining,
-            List<ItemAllocation> allocations) {
+            List<ItemAllocation> allocations,
+            UpgradeBonus efficiency) {
         if (needed <= 0) {
-            return this.findItemInputs(items, itemInputs, inputIndex + 1, remaining, allocations);
+            return this.findItemInputs(items, itemInputs, inputIndex + 1, remaining, allocations, efficiency);
         }
         Item input = itemInputs.get(inputIndex);
         for (int slot = startSlot; slot < items.size(); slot++) {
@@ -270,7 +276,8 @@ public record MultiblockRecipe(
                         needed - amount,
                         slot + 1,
                         remaining,
-                        allocations)) {
+                        allocations,
+                        efficiency)) {
                     return true;
                 }
                 allocations.remove(allocations.size() - 1);
@@ -292,6 +299,10 @@ public record MultiblockRecipe(
     }
 
     public int[] matchFluidTanks(List<FluidStack> fluids) {
+        return this.matchFluidTanks(fluids, UpgradeBonus.IDENTITY);
+    }
+
+    public int[] matchFluidTanks(List<FluidStack> fluids, UpgradeBonus efficiency) {
         List<Fluid> fluidInputs = this.fluidInputs();
         int[] matchedTanks = new int[fluidInputs.size()];
         Arrays.fill(matchedTanks, -1);
@@ -299,7 +310,7 @@ public record MultiblockRecipe(
         for (int index = 0; index < fluids.size(); index++) {
             remaining[index] = fluids.get(index).getAmount();
         }
-        if (matchFluidTanks(fluids, fluidInputs, 0, remaining, matchedTanks)) {
+        if (matchFluidTanks(fluids, fluidInputs, 0, remaining, matchedTanks, efficiency)) {
             return matchedTanks;
         }
         Arrays.fill(matchedTanks, -1);
@@ -311,22 +322,24 @@ public record MultiblockRecipe(
             List<Fluid> fluidInputs,
             int inputIndex,
             int[] remaining,
-            int[] matchedTanks) {
+            int[] matchedTanks,
+            UpgradeBonus efficiency) {
         if (inputIndex >= fluidInputs.size()) {
             return true;
         }
         SizedFluidIngredient ingredient = fluidInputs.get(inputIndex).ingredient();
+        int needed = MultiblockUpgradeMath.scaledInput(ingredient.amount(), efficiency);
         for (int tank = 0; tank < fluids.size(); tank++) {
             FluidStack stack = fluids.get(tank);
-            if (remaining[tank] < ingredient.amount() || stack.isEmpty() || !ingredient.test(stack)) {
+            if (remaining[tank] < needed || stack.isEmpty() || !ingredient.test(stack)) {
                 continue;
             }
-            remaining[tank] -= ingredient.amount();
+            remaining[tank] -= needed;
             matchedTanks[inputIndex] = tank;
-            if (this.matchFluidTanks(fluids, fluidInputs, inputIndex + 1, remaining, matchedTanks)) {
+            if (this.matchFluidTanks(fluids, fluidInputs, inputIndex + 1, remaining, matchedTanks, efficiency)) {
                 return true;
             }
-            remaining[tank] += ingredient.amount();
+            remaining[tank] += needed;
             matchedTanks[inputIndex] = -1;
         }
         return false;

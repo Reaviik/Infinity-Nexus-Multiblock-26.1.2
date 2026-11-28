@@ -1,45 +1,14 @@
 package com.Infinity.Nexus.Multiblock.data;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
-import com.Infinity.Nexus.Multiblock.api.BlockMatcher;
-import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
-import com.Infinity.Nexus.Multiblock.api.EnergyCapability;
-import com.Infinity.Nexus.Multiblock.api.FluidFilter;
-import com.Infinity.Nexus.Multiblock.api.FluidTank;
-import com.Infinity.Nexus.Multiblock.api.ItemFilter;
-import com.Infinity.Nexus.Multiblock.api.ItemSlot;
-import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
-import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
-import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
-import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
-import com.Infinity.Nexus.Multiblock.api.MultiblockModel;
-import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
-import com.Infinity.Nexus.Multiblock.api.MultiblockShape;
-import com.Infinity.Nexus.Multiblock.api.MultiblockSounds;
-import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
-import com.Infinity.Nexus.Multiblock.api.MultiblockType;
-import com.Infinity.Nexus.Multiblock.api.SlotPosition;
+import com.Infinity.Nexus.Multiblock.api.*;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockAddons;
 import com.Infinity.Nexus.Multiblock.api.addon.MultiblockResourceType;
 import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
 import com.Infinity.Nexus.Multiblock.config.Config;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
-import com.mojang.serialization.Dynamic;
-import com.mojang.serialization.DynamicOps;
-import com.mojang.serialization.JsonOps;
+import com.mojang.serialization.*;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -60,6 +29,9 @@ import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import org.jspecify.annotations.Nullable;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadListener<JsonObject> {
     private static volatile Map<Identifier, JsonObject> resolvedFiles = Map.of();
@@ -104,6 +76,7 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             MultiblockModel.CODEC.codec().optionalFieldOf("model").forGetter(DefinitionFile::model),
             MultiblockShape.CODEC.optionalFieldOf("shape").forGetter(DefinitionFile::shape),
             PortsFile.CODEC.optionalFieldOf("capability_ports").forGetter(DefinitionFile::capabilityPorts),
+            UpgradesFile.CODEC.optionalFieldOf("upgrades").forGetter(DefinitionFile::upgrades),
             PatternFile.CODEC.fieldOf("pattern").forGetter(DefinitionFile::pattern))
             .apply(instance, DefinitionFile::new));
 
@@ -133,9 +106,15 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
 
         MultiblockPattern.Builder pattern = MultiblockPattern.builder().anchor(file.pattern().anchor());
         file.pattern().matchers().forEach((symbol, matcher) -> pattern.matcher(symbol, matcher));
+        file.upgrades().ifPresent(upgrades -> pattern.upgradeKey(upgrades.key()));
         for (List<String> layer : file.pattern().layers()) {
             pattern.layer(layer.toArray(String[]::new));
         }
+        MultiblockPattern builtPattern = pattern.build();
+        List<MultiblockUpgrade> upgrades = file.upgrades()
+                .map(UpgradesFile::toUpgrades)
+                .orElse(List.of());
+        List<MultiblockMotion> motions = parseMotions(id, raw);
 
         List<ItemSlot> itemSlots = file.itemSlots().stream().map(ItemSlotFile::toSlot).toList();
         List<FluidTank> fluidTanks = file.capabilities().fluids().stream().map(FluidFile::toTank).toList();
@@ -172,7 +151,9 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .model(file.model().orElse(MultiblockModel.EMPTY))
                 .shape(file.shape().orElse(MultiblockShape.EMPTY))
                 .capabilityPorts(capabilityPorts)
-                .pattern(pattern.build());
+                .pattern(builtPattern)
+                .upgrades(upgrades)
+                .motions(motions);
         file.capabilities().energy().ifPresent(energy -> definition.energy(energy.toCapability()));
         file.gui().ifPresent(definition::gui);
         MultiblockDefinition built = definition.build();
@@ -355,6 +336,17 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 .getOrThrow(message -> new IllegalArgumentException("Invalid multiblock definition " + id + ": " + message));
     }
 
+    private static List<MultiblockMotion> parseMotions(Identifier id, JsonObject raw) {
+        JsonElement element = raw.get("motions");
+        if (element == null) {
+            return List.of();
+        }
+        return MultiblockMotion.CODEC.listOf()
+                .parse(JsonOps.INSTANCE, element)
+                .getOrThrow(message -> new IllegalArgumentException(
+                        "Invalid motions in multiblock definition " + id + ": " + message));
+    }
+
     public record DefinitionFile(
             int schemaVersion,
             Identifier id,
@@ -370,6 +362,7 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
             Optional<MultiblockModel> model,
             Optional<MultiblockShape> shape,
             Optional<PortsFile> capabilityPorts,
+            Optional<UpgradesFile> upgrades,
             PatternFile pattern) {
     }
 
@@ -695,6 +688,90 @@ public final class MultiblockDefinitionLoader extends SimpleJsonResourceReloadLi
                 }
                 return Optional.of(current);
             }
+        }
+    }
+
+    public record UpgradesFile(char key, List<UpgradeFile> boosters) {
+        private static final Codec<UpgradesFile> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                SYMBOL_CODEC.fieldOf("key").forGetter(UpgradesFile::key),
+                UpgradeFile.CODEC.listOf().fieldOf("boosters").forGetter(UpgradesFile::boosters))
+                .apply(instance, UpgradesFile::new));
+
+        public List<MultiblockUpgrade> toUpgrades() {
+            if (this.key == ' ') {
+                throw new IllegalArgumentException("Upgrade key cannot be a space");
+            }
+            if (this.boosters.isEmpty()) {
+                throw new IllegalArgumentException("Upgrades need at least one booster");
+            }
+            return this.boosters.stream().map(UpgradeFile::toUpgrade).toList();
+        }
+    }
+
+    public record UpgradeFile(
+            BlockMatcher matcher,
+            String modifier,
+            String mode,
+            Optional<Double> factor,
+            Optional<Double> output,
+            Optional<Double> thread,
+            Optional<Double> tickCost,
+            Optional<Double> energyCost,
+            Optional<Double> inputCost,
+            Optional<Double> damage,
+            int maxBlocks) {
+        private static final Codec<UpgradeFile> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                MATCHER_CODEC.fieldOf("matcher").forGetter(UpgradeFile::matcher),
+                Codec.STRING.fieldOf("modifier").forGetter(UpgradeFile::modifier),
+                Codec.STRING.optionalFieldOf("mode", "additive").forGetter(UpgradeFile::mode),
+                Codec.DOUBLE.optionalFieldOf("factor").forGetter(UpgradeFile::factor),
+                Codec.DOUBLE.optionalFieldOf("output").forGetter(UpgradeFile::output),
+                Codec.DOUBLE.optionalFieldOf("thread").forGetter(UpgradeFile::thread),
+                Codec.DOUBLE.optionalFieldOf("tick_cost").forGetter(UpgradeFile::tickCost),
+                Codec.DOUBLE.optionalFieldOf("energy_cost").forGetter(UpgradeFile::energyCost),
+                Codec.DOUBLE.optionalFieldOf("input_cost").forGetter(UpgradeFile::inputCost),
+                Codec.DOUBLE.optionalFieldOf("damage").forGetter(UpgradeFile::damage),
+                Codec.intRange(1, Integer.MAX_VALUE).fieldOf("max_blocks").forGetter(UpgradeFile::maxBlocks))
+                .apply(instance, UpgradeFile::new));
+
+        public MultiblockUpgrade toUpgrade() {
+            MultiblockUpgrade.Modifier parsedModifier = MultiblockUpgrade.Modifier.byId(this.modifier)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown upgrade modifier '" + this.modifier + "'"));
+            MultiblockUpgrade.Mode parsedMode = MultiblockUpgrade.Mode.byId(this.mode)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unknown upgrade mode '" + this.mode + "'"));
+            double value = this.value(parsedModifier);
+            if (parsedModifier.increases() == false && parsedMode == MultiblockUpgrade.Mode.MULTIPLICATIVE
+                    && value >= 1.0) {
+                throw new IllegalArgumentException("Multiplicative downgrade factor must be below 1");
+            }
+            return new MultiblockUpgrade(this.matcher, parsedModifier, parsedMode, value, this.maxBlocks);
+        }
+
+        private double value(MultiblockUpgrade.Modifier modifier) {
+            Optional<Double> named = switch (modifier) {
+                case OUTPUT -> this.output;
+                case THREAD -> this.thread;
+                case SPEED -> this.tickCost;
+                case ENERGY -> this.energyCost;
+                case EFFICIENCY -> this.inputCost;
+                case DAMAGE -> this.damage;
+            };
+            return named.or(() -> this.factor).orElseThrow(() -> new IllegalArgumentException(
+                    "Upgrade '" + modifier.id() + "' needs a '" + fieldName(modifier)
+                            + "' value (legacy 'factor' also accepted)"));
+        }
+
+        private static String fieldName(MultiblockUpgrade.Modifier modifier) {
+            return switch (modifier) {
+                case OUTPUT -> "output";
+                case THREAD -> "thread";
+                case SPEED -> "tick_cost";
+                case ENERGY -> "energy_cost";
+                case EFFICIENCY -> "input_cost";
+                case DAMAGE -> "damage";
+            };
         }
     }
 

@@ -37,11 +37,25 @@
   var CONTROLLER_RECIPE_KEYS = ["pattern", "key"];
   var CONTROLLER_RECIPE_MAX_SIZE = 3;
   var MAX_LIGHT_LEVEL = 15;
-  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity"];
+  var GUI_ELEMENT_TYPES = ["title", "text", "player_inventory", "slot", "energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity", "booster_button"];
   var GUI_ELEMENT_KEYS = ["type", "x", "y", "width", "height", "text", "slot", "capability", "color", "shadow", "direction", "u", "v"];
   var GUI_DIRECTIONS = ["up", "down", "left", "right"];
   var GUI_KEYS = ["texture", "width", "height", "texture_width", "texture_height", "elements"];
   var SOUND_KEYS = ["processing", "finish"];
+  var UPGRADE_KEYS = ["key", "boosters"];
+  var UPGRADE_BOOSTER_KEYS = [
+    "matcher", "modifier", "mode", "factor", "output", "thread",
+    "tick_cost", "energy_cost", "input_cost", "damage", "max_blocks", "enabled"
+  ];
+  var UPGRADE_MODIFIERS = [
+    { id: "output", label: "output", field: "output", increases: true, hint: "aumenta a quantidade produzida", types: ["recipe"] },
+    { id: "speed", label: "speed", field: "tick_cost", increases: false, hint: "reduz o tempo da receita", types: ["recipe"] },
+    { id: "energy", label: "energy", field: "energy_cost", increases: false, hint: "reduz o consumo de energia", types: ["recipe"] },
+    { id: "efficiency", label: "efficiency", field: "input_cost", increases: false, hint: "reduz o consumo de inputs", types: ["recipe"] },
+    { id: "thread", label: "thread", field: "thread", increases: true, hint: "processa mais crafts por vez", types: ["recipe"] },
+    { id: "damage", label: "damage", field: "damage", increases: true, hint: "aumenta o dano das motions", types: ["recipe", "storage"] }
+  ];
+  var UPGRADE_MODES = ["additive", "multiplicative", "flat"];
   var GUI_DEFAULT_WIDTH = 176;
   var GUI_DEFAULT_HEIGHT = 166;
   var GUI_DEFAULT_TEXTURE_SIZE = 256;
@@ -49,6 +63,7 @@
   var GUI_SLOT_SIZE = 18;
   var GUI_ENTITY_CELL_SIZE = 18;
   var GUI_RESOURCE_LIST_CELL_SIZE = 18;
+  var GUI_BOOSTER_BUTTON_SIZE = 8;
   var GUI_PLAYER_WIDTH = 162;
   var GUI_PLAYER_HEIGHT = 76;
   var KNOWN_ROOT_KEYS = [
@@ -69,6 +84,8 @@
     "recipe",
     "gui",
     "sounds",
+    "motions",
+    "upgrades",
     "pattern",
     "extends",
     "family",
@@ -76,13 +93,19 @@
     "overrides"
   ];
   var KNOWN_PATTERN_KEYS = ["anchor", "layers", "matchers"];
-  var STEP_ORDER = ["identity", "pattern", "matchers", "slots", "capabilities", "controller", "gui", "sounds", "recipes", "inheritance", "review"];
+  var EASING_VALUES = ["linear", "step", "ease_in", "ease_out", "ease_in_out"];
+  var MOTION_KEYS = ["id", "keys", "preserve_nbt", "damage_entities", "damage", "damage_interval", "damage_source", "animation"];
+  var ANIMATION_KEYS = ["loop", "duration", "easing", "pivot", "keyframes", "fill_speed"];
+  var KEYFRAME_KEYS = ["time", "offset", "rotation", "easing"];
+  var STEP_ORDER = ["identity", "pattern", "matchers", "upgrades", "motions", "slots", "capabilities", "controller", "gui", "sounds", "recipes", "inheritance", "review"];
   var CHECK_LABELS = {
     schema: "schema_version = 2",
     identity: "id, namespace, path e type válidos",
     geometry: "camadas e linhas uniformes",
     anchor: "exatamente uma âncora",
     matchers: "todos os símbolos com matcher válido",
+    upgrades: "boosters e key de upgrade válidos",
+    motions: "motions com keys, keyframes e duração válidos",
     slots: "item_slots válidos",
     capabilities: "capabilities válidas",
     capabilityPorts: "capability_ports válidas",
@@ -106,6 +129,29 @@
       return structuredClone(value);
     }
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function flattenExtrasWrappers(value) {
+    if (Array.isArray(value)) {
+      return value.map(flattenExtrasWrappers);
+    }
+    if (!isPlainObject(value)) {
+      return value;
+    }
+    var result = {};
+    Object.keys(value).forEach(function (key) {
+      var child = flattenExtrasWrappers(value[key]);
+      if (key === "extras" && isPlainObject(child)) {
+        Object.keys(child).forEach(function (inner) {
+          if (inner !== "extras" && !Object.prototype.hasOwnProperty.call(result, inner)) {
+            result[inner] = child[inner];
+          }
+        });
+        return;
+      }
+      result[key] = child;
+    });
+    return result;
   }
 
   function isPlainObject(value) {
@@ -688,7 +734,7 @@
     }
     Object.keys(raw).forEach(function (key) {
       if (["type", "definition", "inputs", "outputs", "ingredients", "fluid_ingredients",
-        "output", "result", "energy", "time"].indexOf(key) === -1) {
+        "output", "result", "energy", "time", "extras"].indexOf(key) === -1) {
         recipe.extras[key] = clone(raw[key]);
       }
     });
@@ -766,6 +812,7 @@
 
   function recipePatternSymbols(state) {
     var symbols = new Set();
+    var upgradeKey = isPlainObject(state.upgrades) ? trimString(state.upgrades.key) : "";
     var layers = Array.isArray(state.layers) ? state.layers : [];
     layers.forEach(function (layer) {
       if (!Array.isArray(layer)) {
@@ -777,7 +824,7 @@
         }
         for (var index = 0; index < row.length; index += 1) {
           var symbol = row.charAt(index);
-          if (symbol !== " ") {
+          if (symbol !== " " && symbol !== upgradeKey) {
             symbols.add(symbol);
           }
         }
@@ -1105,7 +1152,7 @@
     var extras = isPlainObject(source.extras) ? source.extras : {};
     Object.keys(extras).forEach(function (key) {
       if (["type", "definition", "inputs", "outputs", "ingredients", "fluid_ingredients",
-        "output", "result", "energy", "time"].indexOf(key) === -1) {
+        "output", "result", "energy", "time", "extras"].indexOf(key) === -1) {
         built[key] = clone(extras[key]);
       }
     });
@@ -1885,7 +1932,7 @@
       }
     });
     Object.keys(value).forEach(function (key) {
-      if (key !== "tanks") {
+      if (key !== "tanks" && key !== "extras") {
         chemical.extras[key] = clone(value[key]);
       }
     });
@@ -1981,7 +2028,7 @@
     capabilities.essentia = parseEssentia(value.essentia, notes);
     Object.keys(value).forEach(function (key) {
       if (key !== "energy" && key !== "fluids" && key !== "chemical"
-          && key !== "mana" && key !== "essentia") {
+          && key !== "mana" && key !== "essentia" && key !== "extras") {
         capabilities.extras[key] = clone(value[key]);
       }
     });
@@ -2379,7 +2426,7 @@
         ? capabilities.chemical.extras
         : {};
       Object.keys(chemicalExtras).forEach(function (key) {
-        if (key !== "tanks") {
+        if (key !== "tanks" && key !== "extras") {
           result.chemical[key] = clone(chemicalExtras[key]);
         }
       });
@@ -2399,7 +2446,7 @@
     var extras = isPlainObject(capabilities.extras) ? capabilities.extras : {};
     Object.keys(extras).forEach(function (key) {
       if (key !== "energy" && key !== "fluids" && key !== "chemical"
-          && key !== "mana" && key !== "essentia") {
+          && key !== "mana" && key !== "essentia" && key !== "extras") {
         result[key] = clone(extras[key]);
       }
     });
@@ -3182,7 +3229,7 @@
       element.shadow = false;
     } else if (element.type === "text") {
       element.x = 8;
-      element.y = 75;
+      element.y = 71;
       element.color = "404040";
       element.shadow = false;
     } else if (element.type === "player_inventory") {
@@ -3244,6 +3291,13 @@
       element.y = 16;
       element.width = GUI_ENTITY_CELL_SIZE * 3;
       element.height = GUI_ENTITY_CELL_SIZE * 3;
+    } else if (element.type === "booster_button") {
+      element.x = GUI_DEFAULT_WIDTH - GUI_BOOSTER_BUTTON_SIZE - 8;
+      element.y = 4;
+      element.width = GUI_BOOSTER_BUTTON_SIZE;
+      element.height = GUI_BOOSTER_BUTTON_SIZE;
+      element.text = "B";
+      element.color = "0xFFFFC107";
     }
     return element;
   }
@@ -3547,6 +3601,12 @@
     return result;
   }
 
+  function soundPathFromName(name) {
+    var base = String(name || "").replace(/\.ogg$/i, "");
+    var path = base.toLowerCase().replace(/[^a-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+    return path || "sound";
+  }
+
   function createSounds() {
     return {
       processing: "",
@@ -3655,7 +3715,8 @@
       }
     } else if (type === "energy_bar" || type === "fluid_bar"
         || type === "chemical_bar" || type === "mana_bar" || type === "resource_list"
-        || type === "progress_bar" || type === "arrow" || type === "entity") {
+        || type === "progress_bar" || type === "arrow" || type === "entity"
+        || type === "booster_button") {
       if (width <= 0 || height <= 0) {
         return "Elementos size-dependentes de GUI precisam de width e height positivos.";
       }
@@ -3815,6 +3876,15 @@
       } else if ((type === "progress_bar" || type === "arrow" || type === "entity")
           && state.type !== "recipe") {
         return type + " só funciona em type=recipe.";
+      } else if (type === "booster_button") {
+        var upgradeBoosters = isPlainObject(state.upgrades) && Array.isArray(state.upgrades.boosters)
+          ? state.upgrades.boosters.filter(function (booster) {
+              return !isPlainObject(booster) || booster.enabled !== false;
+            })
+          : [];
+        if (upgradeBoosters.length === 0) {
+          return "booster_button exige upgrades com ao menos um booster ativo.";
+        }
       }
     }
     for (var slotIndex = 0; slotIndex < positionedSlots.length; slotIndex += 1) {
@@ -3930,6 +4000,545 @@
     return result;
   }
 
+  function validEasing(value) {
+    return EASING_VALUES.indexOf(trimString(value)) !== -1;
+  }
+
+  function motionNumber(value, fallback) {
+    var number = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function motionInt(value, fallback) {
+    var number = motionNumber(value, null);
+    return number === null ? fallback : Math.trunc(number);
+  }
+
+  function motionVec3(value, fallback) {
+    if (!isPlainObject(value)) {
+      return clone(fallback);
+    }
+    var x = motionNumber(value.x, null);
+    var y = motionNumber(value.y, null);
+    var z = motionNumber(value.z, null);
+    if (x === null || y === null || z === null) {
+      return clone(fallback);
+    }
+    return { x: x, y: y, z: z };
+  }
+
+  function parseMotionVec3(value, notes, path) {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    if (!Array.isArray(value) || value.length !== 3) {
+      notes.push({
+        severity: "warning",
+        message: path + " precisa ser uma lista [x, y, z]; foi ignorado."
+      });
+      return null;
+    }
+    var x = motionNumber(value[0], null);
+    var y = motionNumber(value[1], null);
+    var z = motionNumber(value[2], null);
+    if (x === null || y === null || z === null) {
+      notes.push({
+        severity: "warning",
+        message: path + " tem valores não numéricos; foi ignorado."
+      });
+      return null;
+    }
+    return { x: x, y: y, z: z };
+  }
+
+  function createMotionKeyframe(time) {
+    return {
+      time: motionInt(time, 0),
+      offset: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      easing: "",
+      extras: {}
+    };
+  }
+
+  function createMotion() {
+    return {
+      id: "",
+      keys: [],
+      preserveNbt: false,
+      damageEntities: false,
+      damage: 4,
+      damageInterval: 10,
+      damageSource: "minecraft:generic",
+      animation: {
+        loop: true,
+        duration: 0,
+        easing: "linear",
+        pivot: null,
+        keyframes: [],
+        fillSpeed: false,
+        extras: {}
+      },
+      extras: {}
+    };
+  }
+
+  function parseMotionKeyframe(raw, notes, path) {
+    if (!isPlainObject(raw)) {
+      notes.push({
+        severity: "warning",
+        message: path + " não é um objeto e foi ignorado."
+      });
+      return null;
+    }
+    var frame = createMotionKeyframe(raw.time);
+    var offset = parseMotionVec3(raw.offset, notes, path + ".offset");
+    if (offset) {
+      frame.offset = offset;
+    }
+    var rotation = parseMotionVec3(raw.rotation, notes, path + ".rotation");
+    if (rotation) {
+      frame.rotation = rotation;
+    }
+    if (raw.easing !== undefined) {
+      if (validEasing(raw.easing)) {
+        frame.easing = trimString(raw.easing);
+      } else {
+        notes.push({
+          severity: "warning",
+          message: path + ".easing inválido foi ignorado."
+        });
+      }
+    }
+    Object.keys(raw).forEach(function (key) {
+      if (KEYFRAME_KEYS.indexOf(key) === -1) {
+        frame.extras[key] = clone(raw[key]);
+      }
+    });
+    return frame;
+  }
+
+  function parseMotion(raw, notes, index) {
+    var path = "motions[" + index + "]";
+    if (!isPlainObject(raw)) {
+      notes.push({
+        severity: "warning",
+        message: path + " não é um objeto e foi ignorado."
+      });
+      return null;
+    }
+    var motion = createMotion();
+    motion.id = trimString(raw.id);
+    if (!motion.id) {
+      notes.push({
+        severity: "warning",
+        message: path + " não tem id válido."
+      });
+    }
+
+    if (Array.isArray(raw.keys)) {
+      motion.keys = raw.keys.filter(function (key) {
+        return typeof key === "string" && key.length === 1;
+      });
+      if (motion.keys.length !== raw.keys.length) {
+        notes.push({
+          severity: "warning",
+          message: path + ".keys tem símbolos inválidos que foram ignorados."
+        });
+      }
+    } else if (raw.keys !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: path + ".keys precisa ser uma lista de símbolos."
+      });
+    }
+
+    motion.preserveNbt = raw.preserve_nbt === true;
+    motion.damageEntities = raw.damage_entities === true;
+    motion.damage = motionNumber(raw.damage, 4);
+    motion.damageInterval = motionInt(raw.damage_interval, 10);
+    motion.damageSource = typeof raw.damage_source === "string" && trimString(raw.damage_source)
+      ? trimString(raw.damage_source)
+      : "minecraft:generic";
+
+    var animation = isPlainObject(raw.animation) ? raw.animation : {};
+    if (raw.animation !== undefined && !isPlainObject(raw.animation)) {
+      notes.push({
+        severity: "warning",
+        message: path + ".animation precisa ser um objeto; usando valores padrão."
+      });
+    }
+    motion.animation.loop = animation.loop !== false;
+    motion.animation.duration = motionInt(animation.duration, 0);
+    motion.animation.easing = validEasing(animation.easing) ? trimString(animation.easing) : "linear";
+    motion.animation.pivot = parseMotionVec3(animation.pivot, notes, path + ".animation.pivot");
+    motion.animation.fillSpeed = animation.fill_speed === true;
+    if (Array.isArray(animation.keyframes)) {
+      motion.animation.keyframes = animation.keyframes.map(function (frame, frameIndex) {
+        return parseMotionKeyframe(frame, notes, path + ".animation.keyframes[" + frameIndex + "]");
+      }).filter(Boolean);
+    } else if (animation.keyframes !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: path + ".animation.keyframes precisa ser uma lista."
+      });
+    }
+
+    Object.keys(raw).forEach(function (key) {
+      if (MOTION_KEYS.indexOf(key) === -1) {
+        motion.extras[key] = clone(raw[key]);
+      }
+    });
+    Object.keys(animation).forEach(function (key) {
+      if (ANIMATION_KEYS.indexOf(key) === -1) {
+        motion.animation.extras[key] = clone(animation[key]);
+      }
+    });
+    return motion;
+  }
+
+  function parseMotions(value, notes) {
+    if (value === undefined || value === null) {
+      return [];
+    }
+    if (!Array.isArray(value)) {
+      notes.push({
+        severity: "warning",
+        message: "motions precisa ser uma lista; foi ignorado."
+      });
+      return [];
+    }
+    return value.map(function (motion, index) {
+      return parseMotion(motion, notes, index);
+    }).filter(Boolean);
+  }
+
+  function buildMotionVec3(value) {
+    var vector = motionVec3(value, { x: 0, y: 0, z: 0 });
+    return [vector.x, vector.y, vector.z];
+  }
+
+  function buildMotionKeyframe(frame) {
+    if (!isPlainObject(frame)) {
+      return null;
+    }
+    var result = {
+      time: motionInt(frame.time, 0),
+      offset: buildMotionVec3(frame.offset),
+      rotation: buildMotionVec3(frame.rotation)
+    };
+    if (validEasing(frame.easing)) {
+      result.easing = trimString(frame.easing);
+    }
+    var extras = isPlainObject(frame.extras) ? frame.extras : {};
+    Object.keys(extras).forEach(function (key) {
+      if (KEYFRAME_KEYS.indexOf(key) === -1) {
+        result[key] = clone(extras[key]);
+      }
+    });
+    return result;
+  }
+
+  function buildMotions(motions) {
+    if (!Array.isArray(motions)) {
+      return [];
+    }
+    return motions.map(function (motion) {
+      if (!isPlainObject(motion)) {
+        return null;
+      }
+      var result = {
+        id: trimString(motion.id),
+        keys: (Array.isArray(motion.keys) ? motion.keys : []).map(function (key) {
+          return typeof key === "string" ? key : String(key === undefined || key === null ? "" : key);
+        })
+      };
+      if (motion.preserveNbt === true) {
+        result.preserve_nbt = true;
+      }
+      if (motion.damageEntities === true) {
+        result.damage_entities = true;
+      }
+      var damage = motionNumber(motion.damage, 4);
+      if (damage !== 4) {
+        result.damage = damage;
+      }
+      var damageInterval = motionInt(motion.damageInterval, 10);
+      if (damageInterval !== 10) {
+        result.damage_interval = damageInterval;
+      }
+      var damageSource = trimString(motion.damageSource);
+      if (damageSource && damageSource !== "minecraft:generic") {
+        result.damage_source = damageSource;
+      }
+
+      var animation = isPlainObject(motion.animation) ? motion.animation : {};
+      var animationOut = {
+        loop: animation.loop !== false,
+        duration: motionInt(animation.duration, 0),
+        easing: validEasing(animation.easing) ? trimString(animation.easing) : "linear",
+        keyframes: (Array.isArray(animation.keyframes) ? animation.keyframes : []).map(buildMotionKeyframe)
+          .filter(Boolean)
+      };
+      if (animation.fillSpeed === true) {
+        animationOut.fill_speed = true;
+      }
+      var pivot = motionVec3(animation.pivot, null);
+      if (pivot) {
+        animationOut.pivot = [pivot.x, pivot.y, pivot.z];
+      }
+      var animationExtras = isPlainObject(animation.extras) ? animation.extras : {};
+      Object.keys(animationExtras).forEach(function (key) {
+        if (ANIMATION_KEYS.indexOf(key) === -1) {
+          animationOut[key] = clone(animationExtras[key]);
+        }
+      });
+      result.animation = animationOut;
+
+      var extras = isPlainObject(motion.extras) ? motion.extras : {};
+      Object.keys(extras).forEach(function (key) {
+        if (MOTION_KEYS.indexOf(key) === -1) {
+          result[key] = clone(extras[key]);
+        }
+      });
+      return result;
+    }).filter(Boolean);
+  }
+
+  function normalizeMotions(value) {
+    return parseMotions(value, []);
+  }
+
+  function scaleMotionDuration(motion, target) {
+    if (!isPlainObject(motion) || !isPlainObject(motion.animation)) {
+      return motion;
+    }
+    var duration = Math.max(0, motionInt(target, 0));
+    var previous = Math.max(0, motionInt(motion.animation.duration, 0));
+    var frames = Array.isArray(motion.animation.keyframes) ? motion.animation.keyframes : [];
+    if (previous > 0 && frames.length > 0) {
+      var factor = duration / previous;
+      frames.forEach(function (frame) {
+        if (!isPlainObject(frame)) {
+          return;
+        }
+        frame.time = Math.max(0, Math.min(duration, Math.round(motionNumber(frame.time, 0) * factor)));
+      });
+    }
+    motion.animation.duration = duration;
+    return motion;
+  }
+
+  function upgradeModifierInfo(id) {
+    var wanted = trimString(id);
+    for (var index = 0; index < UPGRADE_MODIFIERS.length; index += 1) {
+      if (UPGRADE_MODIFIERS[index].id === wanted) {
+        return UPGRADE_MODIFIERS[index];
+      }
+    }
+    return null;
+  }
+
+  function upgradeModifierAllowed(id, type) {
+    var info = upgradeModifierInfo(id);
+    if (!info) {
+      return false;
+    }
+    var wanted = trimString(type) || "recipe";
+    return Array.isArray(info.types) ? info.types.indexOf(wanted) !== -1 : true;
+  }
+
+  function upgradeModifiersForType(type) {
+    var wanted = trimString(type) || "recipe";
+    return UPGRADE_MODIFIERS.filter(function (entry) {
+      return Array.isArray(entry.types) ? entry.types.indexOf(wanted) !== -1 : true;
+    });
+  }
+
+  function createUpgradeBooster(type) {
+    return {
+      matcher: createMatcher("block"),
+      modifier: type === "storage" ? "damage" : "output",
+      mode: "additive",
+      value: "0.05",
+      maxBlocks: "20",
+      enabled: true,
+      extras: {}
+    };
+  }
+
+  function createUpgrades() {
+    return {
+      key: "U",
+      boosters: [],
+      extras: {}
+    };
+  }
+
+  function parseUpgradeBooster(raw, notes, path) {
+    if (!isPlainObject(raw)) {
+      notes.push({
+        severity: "warning",
+        message: path + " não é um objeto e foi ignorado."
+      });
+      return null;
+    }
+    var booster = createUpgradeBooster();
+    booster.matcher = parseMatcherValue(raw.matcher);
+    booster.modifier = trimString(raw.modifier) || "output";
+    booster.mode = trimString(raw.mode) || "additive";
+    var info = upgradeModifierInfo(booster.modifier);
+    var value = info ? raw[info.field] : undefined;
+    if (value === undefined || value === null) {
+      value = raw.factor;
+    }
+    booster.value = value === undefined || value === null ? "" : String(value);
+    booster.maxBlocks = raw.max_blocks === undefined || raw.max_blocks === null
+      ? ""
+      : String(raw.max_blocks);
+    booster.enabled = raw.enabled !== false;
+    Object.keys(raw).forEach(function (key) {
+      if (UPGRADE_BOOSTER_KEYS.indexOf(key) === -1) {
+        booster.extras[key] = clone(raw[key]);
+      }
+    });
+    return booster;
+  }
+
+  function parseUpgrades(value, notes) {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    if (!isPlainObject(value)) {
+      notes.push({
+        severity: "warning",
+        message: "upgrades precisa ser um objeto; foi ignorado."
+      });
+      return null;
+    }
+    var upgrades = createUpgrades();
+    upgrades.key = trimString(value.key) || "U";
+    if (!trimString(value.key)) {
+      notes.push({
+        severity: "warning",
+        message: "upgrades.key ausente foi normalizada para U."
+      });
+    }
+    if (Array.isArray(value.boosters)) {
+      upgrades.boosters = value.boosters.map(function (raw, index) {
+        return parseUpgradeBooster(raw, notes, "upgrades.boosters[" + index + "]");
+      }).filter(Boolean);
+    } else if (value.boosters !== undefined) {
+      notes.push({
+        severity: "warning",
+        message: "upgrades.boosters precisa ser uma lista."
+      });
+    }
+    Object.keys(value).forEach(function (key) {
+      if (UPGRADE_KEYS.indexOf(key) === -1) {
+        upgrades.extras[key] = clone(value[key]);
+      }
+    });
+    return upgrades;
+  }
+
+  function buildUpgradeBooster(booster) {
+    if (!isPlainObject(booster) || booster.enabled === false) {
+      return null;
+    }
+    var info = upgradeModifierInfo(booster.modifier) || UPGRADE_MODIFIERS[0];
+    var mode = trimString(booster.mode) || "additive";
+    var value = toNumber(booster.value);
+    var result = {
+      matcher: buildMatcherValue(booster.matcher),
+      modifier: info.id
+    };
+    if (mode !== "additive") {
+      result.mode = mode;
+    }
+    result[info.field] = value === null ? 0 : value;
+    result.max_blocks = toIntOr(booster.maxBlocks, 1);
+    Object.keys(isPlainObject(booster.extras) ? booster.extras : {}).forEach(function (key) {
+      if (UPGRADE_BOOSTER_KEYS.indexOf(key) === -1) {
+        result[key] = clone(booster.extras[key]);
+      }
+    });
+    return result;
+  }
+
+  function buildUpgrades(upgrades) {
+    if (!isPlainObject(upgrades)) {
+      return null;
+    }
+    var result = {};
+    Object.keys(isPlainObject(upgrades.extras) ? upgrades.extras : {}).forEach(function (key) {
+      if (UPGRADE_KEYS.indexOf(key) === -1) {
+        result[key] = clone(upgrades.extras[key]);
+      }
+    });
+    result.key = trimString(upgrades.key);
+    result.boosters = (Array.isArray(upgrades.boosters) ? upgrades.boosters : [])
+      .map(buildUpgradeBooster)
+      .filter(Boolean);
+    return result;
+  }
+
+  function upgradeBoosterProblem(booster) {
+    if (!isPlainObject(booster)) {
+      return "Booster inválido.";
+    }
+    if (booster.enabled === false) {
+      return "";
+    }
+    var matcherIssue = matcherProblem(booster.matcher);
+    if (matcherIssue) {
+      return "Matcher: " + matcherIssue;
+    }
+    var info = upgradeModifierInfo(booster.modifier);
+    if (!info) {
+      return "modifier inválido. Use " + UPGRADE_MODIFIERS.map(function (entry) {
+        return entry.id;
+      }).join(", ") + ".";
+    }
+    var mode = trimString(booster.mode) || "additive";
+    if (UPGRADE_MODES.indexOf(mode) === -1) {
+      return "mode inválido. Use " + UPGRADE_MODES.join(", ") + ".";
+    }
+    var value = toNumber(booster.value);
+    if (value === null || !isFinite(value) || value <= 0) {
+      return "O valor precisa ser um número maior que 0.";
+    }
+    if (info.increases === false && mode === "multiplicative" && value >= 1) {
+      return "Multiplicative de redução precisa ser menor que 1.";
+    }
+    var maxBlocks = toInt(booster.maxBlocks);
+    if (maxBlocks === null || maxBlocks < 1) {
+      return "max_blocks precisa ser um inteiro maior ou igual a 1.";
+    }
+    return "";
+  }
+
+  function normalizeUpgrades(value) {
+    if (!isPlainObject(value)) {
+      return null;
+    }
+    var upgrades = Object.assign(createUpgrades(), value);
+    if (!isPlainObject(upgrades.extras)) {
+      upgrades.extras = {};
+    }
+    upgrades.key = trimString(upgrades.key) || "U";
+    upgrades.boosters = (Array.isArray(upgrades.boosters) ? upgrades.boosters : [])
+      .filter(isPlainObject)
+      .map(function (booster) {
+        var normalized = Object.assign(createUpgradeBooster(), booster);
+        if (!isPlainObject(normalized.extras)) {
+          normalized.extras = {};
+        }
+        return normalized;
+      });
+    return upgrades;
+  }
+
   function createDefaultState() {
     return {
       schemaVersion: SCHEMA_VERSION,
@@ -3949,6 +4558,8 @@
       gui: null,
       sounds: createSounds(),
       recipes: [],
+      motions: [],
+      upgrades: null,
       inheritance: createInheritance(),
       anchor: "C",
       layers: [
@@ -3991,6 +4602,30 @@
         extras: {}
       },
       recipes: [],
+      motions: [{
+        id: "example_spin",
+        keys: ["I"],
+        preserveNbt: false,
+        damageEntities: false,
+        damage: 4,
+        damageInterval: 10,
+        damageSource: "minecraft:generic",
+        animation: {
+          loop: true,
+          duration: 200,
+          easing: "linear",
+          pivot: { x: 1.5, y: 1.5, z: 1.5 },
+          keyframes: [
+            createMotionKeyframe(0),
+            Object.assign(createMotionKeyframe(200), {
+              rotation: { x: 0, y: 360, z: 0 }
+            })
+          ],
+          extras: {}
+        },
+        extras: {}
+      }],
+      upgrades: null,
       inheritance: createInheritance(),
       anchor: "C",
       layers: [
@@ -4206,6 +4841,7 @@
     if (!isPlainObject(raw)) {
       throw new Error("O JSON raiz precisa ser um objeto.");
     }
+    raw = flattenExtrasWrappers(raw);
 
     var notes = [];
     var state = createEmptyState();
@@ -4276,6 +4912,8 @@
     state.controllerRecipe = parseControllerRecipe(raw.recipe, notes);
     state.gui = parseGui(raw.gui, notes);
     state.sounds = parseSounds(raw.sounds, notes);
+    state.motions = parseMotions(raw.motions, notes);
+    state.upgrades = parseUpgrades(raw.upgrades, notes);
     state.inheritance = parseInheritance(raw, notes);
 
     var pattern = isPlainObject(raw.pattern) ? raw.pattern : null;
@@ -4451,6 +5089,15 @@
         definition.sounds = sounds;
       }
     }
+    if (Array.isArray(state.motions) && state.motions.length > 0) {
+      definition.motions = buildMotions(state.motions);
+    }
+    if (isPlainObject(state.upgrades)) {
+      var upgrades = buildUpgrades(state.upgrades);
+      if (upgrades) {
+        definition.upgrades = upgrades;
+      }
+    }
 
     Object.keys(extras).forEach(function (key) {
       if (KNOWN_ROOT_KEYS.includes(key)) {
@@ -4478,7 +5125,7 @@
     });
     definition.pattern = pattern;
 
-    return definition;
+    return flattenExtrasWrappers(definition);
   }
 
   function issue(code, severity, step, field, message) {
@@ -4766,7 +5413,8 @@
               }
             } else if (type === "energy_bar" || type === "fluid_bar"
                 || type === "chemical_bar" || type === "mana_bar" || type === "resource_list"
-                || type === "progress_bar" || type === "arrow" || type === "entity") {
+                || type === "progress_bar" || type === "arrow" || type === "entity"
+                || type === "booster_button") {
               if (width === null || width <= 0 || height === null || height <= 0) {
                 add("gui.element.size.invalid", "error", "gui", field,
                   "Elementos size-dependentes de GUI precisam de width e height positivos.");
@@ -4903,6 +5551,16 @@
                   && state.type !== "recipe") {
                 add("gui.recipe.required", "error", "gui", field,
                   type + " só funciona em type=recipe.");
+              } else if (type === "booster_button") {
+                var guiBoosters = isPlainObject(state.upgrades) && Array.isArray(state.upgrades.boosters)
+                  ? state.upgrades.boosters.filter(function (booster) {
+                      return !isPlainObject(booster) || booster.enabled !== false;
+                    })
+                  : [];
+                if (guiBoosters.length === 0) {
+                  add("gui.booster.required", "error", "gui", field,
+                    "booster_button exige upgrades com ao menos um booster ativo.");
+                }
               }
             });
             positionedSlots.forEach(function (slot) {
@@ -5037,6 +5695,13 @@
     var matcherSource = isPlainObject(state.matchers) ? state.matchers : {};
     var matcherKeys = Object.keys(matcherSource);
     var usedSymbols = Array.from(symbolCounts.keys());
+    var upgradeKey = "";
+    if (isPlainObject(state.upgrades)) {
+      var rawUpgradeKey = trimString(state.upgrades.key);
+      if (isSingleSymbol(rawUpgradeKey) && rawUpgradeKey !== " ") {
+        upgradeKey = rawUpgradeKey;
+      }
+    }
 
     matcherKeys.forEach(function (symbol) {
       if (!isSingleSymbol(symbol)) {
@@ -5047,6 +5712,9 @@
       if (symbol === state.anchor) {
         add("matcher.anchor.ignored", "warning", "matchers", "matcher:" + symbol,
           "O matcher da âncora é ignorado pelo loader.");
+      } else if (symbol === upgradeKey) {
+        add("upgrade.key.matcher", "error", "upgrades", "upgradeKey",
+          "A key de upgrade \"" + symbol + "\" não pode ter matcher.");
       } else if (!symbolCounts.has(symbol)) {
         add("matcher.unused", "warning", "matchers", "matcher:" + symbol,
           "O símbolo \"" + symbol + "\" tem matcher, mas não aparece no pattern.");
@@ -5054,7 +5722,7 @@
     });
 
     usedSymbols.forEach(function (symbol) {
-      if (symbol === state.anchor) {
+      if (symbol === state.anchor || symbol === upgradeKey) {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(matcherSource, symbol)) {
@@ -5100,6 +5768,9 @@
     }
 
     matcherKeys.forEach(function (symbol) {
+      if (symbol === upgradeKey) {
+        return;
+      }
       var matcher = matcherSource[symbol];
       if (!matcher || typeof matcher !== "object") {
         matchersOk = false;
@@ -5147,6 +5818,241 @@
           "Formato de matcher desconhecido para \"" + symbol + "\".");
       }
     });
+
+    var upgradesOk = true;
+    if (state.upgrades !== null && state.upgrades !== undefined) {
+      if (!isPlainObject(state.upgrades)) {
+        upgradesOk = false;
+        add("upgrades.invalid", "error", "upgrades", "upgrades",
+          "upgrades precisa ser um objeto ou ficar ausente.");
+      } else {
+        var upgradesKey = trimString(state.upgrades.key);
+        if (!isSingleSymbol(upgradesKey) || upgradesKey === " ") {
+          upgradesOk = false;
+          add("upgrade.key.invalid", "error", "upgrades", "upgradeKey",
+            "A key de upgrade precisa ter exatamente um caractere e não pode ser espaço.");
+        } else {
+          if (upgradesKey === state.anchor) {
+            upgradesOk = false;
+            add("upgrade.key.anchor", "error", "upgrades", "upgradeKey",
+              "A key de upgrade não pode ser a âncora \"" + upgradesKey + "\".");
+          }
+          if (Object.prototype.hasOwnProperty.call(matcherSource, upgradesKey)) {
+            upgradesOk = false;
+          }
+          if (!symbolCounts.has(upgradesKey)) {
+            upgradesOk = false;
+            add("upgrade.key.missing", "error", "upgrades", "upgradeKey",
+              "A key de upgrade \"" + upgradesKey + "\" precisa aparecer no pattern.");
+          }
+        }
+        var boosters = Array.isArray(state.upgrades.boosters) ? state.upgrades.boosters : [];
+        var activeBoosters = boosters.filter(function (booster) {
+          return !isPlainObject(booster) || booster.enabled !== false;
+        });
+        if (activeBoosters.length === 0) {
+          upgradesOk = false;
+          add("upgrades.boosters.required", "error", "upgrades", "upgrades",
+            "upgrades precisa ter pelo menos um booster ativo.");
+        }
+        boosters.forEach(function (booster, index) {
+          if (isPlainObject(booster) && booster.enabled === false) {
+            return;
+          }
+          var problem = upgradeBoosterProblem(booster);
+          if (problem) {
+            upgradesOk = false;
+            add("upgrade.booster.invalid", "error", "upgrades", "upgradeBooster:" + index,
+              "Booster " + (index + 1) + ": " + problem);
+          }
+          if (isPlainObject(booster) && upgradeModifierInfo(booster.modifier) &&
+              !upgradeModifierAllowed(booster.modifier, state.type)) {
+            add("upgrades.type", "warning", "upgrades", "upgradeBooster:" + index,
+              "O modifier \"" + trimString(booster.modifier) + "\" não tem efeito em type=" +
+              state.type + "; use " + upgradeModifiersForType(state.type).map(function (entry) {
+                return entry.id;
+              }).join(", ") + ".");
+          }
+        });
+      }
+    }
+
+    var motionsOk = true;
+    if (state.motions !== null && state.motions !== undefined && !Array.isArray(state.motions)) {
+      motionsOk = false;
+      add("motions.invalid", "error", "motions", "motions",
+        "motions precisa ser uma lista ou ficar ausente.");
+    } else if (Array.isArray(state.motions) && state.motions.length > 0) {
+      var motionIds = new Set();
+      var motionKeyOwners = {};
+      state.motions.forEach(function (motion, index) {
+        var field = "motion:" + index;
+        if (!isPlainObject(motion)) {
+          motionsOk = false;
+          add("motion.invalid", "error", "motions", field,
+            "A motion " + index + " precisa ser um objeto.");
+          return;
+        }
+        var motionId = trimString(motion.id);
+        if (!motionId) {
+          motionsOk = false;
+          add("motion.id.required", "error", "motions", field,
+            "A motion " + index + " precisa de um id.");
+        } else if (motionIds.has(motionId)) {
+          motionsOk = false;
+          add("motion.id.duplicate", "error", "motions", field,
+            "O id de motion \"" + motionId + "\" aparece mais de uma vez.");
+        } else {
+          motionIds.add(motionId);
+        }
+
+        var keys = Array.isArray(motion.keys) ? motion.keys : null;
+        if (!keys || keys.length === 0) {
+          motionsOk = false;
+          add("motion.keys.required", "error", "motions", field,
+            "A motion \"" + (motionId || index) + "\" precisa de pelo menos uma key.");
+        } else {
+          var ownKeys = new Set();
+          keys.forEach(function (key) {
+            var symbol = typeof key === "string" ? key : String(key === undefined || key === null ? "" : key);
+            if (!isSingleSymbol(symbol)) {
+              motionsOk = false;
+              add("motion.key.invalid", "error", "motions", field,
+                "Cada key da motion \"" + (motionId || index) + "\" precisa ter exatamente um caractere.");
+              return;
+            }
+            if (symbol === state.anchor) {
+              motionsOk = false;
+              add("motion.key.anchor", "error", "motions", field,
+                "A motion \"" + (motionId || index) + "\" não pode usar a âncora \"" + symbol + "\".");
+              return;
+            }
+            if (!symbolCounts.has(symbol)) {
+              motionsOk = false;
+              add("motion.key.unknown", "error", "motions", field,
+                "A key \"" + symbol + "\" da motion \"" + (motionId || index) + "\" não aparece no pattern.");
+              return;
+            }
+            if (ownKeys.has(symbol)) {
+              motionsOk = false;
+              add("motion.key.repeated", "error", "motions", field,
+                "A key \"" + symbol + "\" aparece mais de uma vez na motion \"" + (motionId || index) + "\".");
+              return;
+            }
+            ownKeys.add(symbol);
+            if (motionKeyOwners[symbol] !== undefined) {
+              motionsOk = false;
+              add("motion.key.shared", "error", "motions", field,
+                "A key \"" + symbol + "\" já pertence à motion \"" + motionKeyOwners[symbol] + "\".");
+            } else {
+              motionKeyOwners[symbol] = motionId || String(index);
+            }
+          });
+        }
+
+        var damage = motionNumber(motion.damage, null);
+        if (damage === null || damage < 0) {
+          motionsOk = false;
+          add("motion.damage.invalid", "error", "motions", field,
+            "damage da motion \"" + (motionId || index) + "\" precisa ser um número maior ou igual a 0.");
+        }
+        var damageInterval = toInt(motion.damageInterval);
+        if (damageInterval === null || damageInterval < 1) {
+          motionsOk = false;
+          add("motion.damage_interval.invalid", "error", "motions", field,
+            "damage_interval da motion \"" + (motionId || index) + "\" precisa ser um inteiro maior ou igual a 1.");
+        }
+        var damageSource = trimString(motion.damageSource) || "minecraft:generic";
+        if (!isValidIdentifier(damageSource)) {
+          motionsOk = false;
+          add("motion.damage_source.invalid", "error", "motions", field,
+            "damage_source da motion \"" + (motionId || index) + "\" precisa ser um identifier válido.");
+        }
+
+        var animation = isPlainObject(motion.animation) ? motion.animation : null;
+        if (!animation) {
+          motionsOk = false;
+          add("motion.animation.invalid", "error", "motions", field,
+            "A motion \"" + (motionId || index) + "\" precisa de um objeto animation.");
+          return;
+        }
+        var duration = toInt(animation.duration);
+        if (duration === null || duration < 0) {
+          motionsOk = false;
+          add("motion.duration.invalid", "error", "motions", field,
+            "duration da motion \"" + (motionId || index) + "\" precisa ser um inteiro maior ou igual a 0.");
+        }
+        if (!validEasing(animation.easing)) {
+          motionsOk = false;
+          add("motion.easing.invalid", "error", "motions", field,
+            "easing da motion \"" + (motionId || index) + "\" precisa ser " + EASING_VALUES.join(", ") + ".");
+        }
+        if (animation.pivot !== null && animation.pivot !== undefined && !motionVec3(animation.pivot, null)) {
+          motionsOk = false;
+          add("motion.pivot.invalid", "error", "motions", field,
+            "pivot da motion \"" + (motionId || index) + "\" precisa ter x, y e z numéricos.");
+        }
+        if (animation.fillSpeed === true && state.type !== "storage") {
+          add("motion.fill_speed.type", "warning", "motions", field,
+            "fill_speed só acelera a motion em type=storage; em " + state.type + " ele é ignorado.");
+        }
+
+        var frames = Array.isArray(animation.keyframes) ? animation.keyframes : null;
+        if (!frames) {
+          motionsOk = false;
+          add("motion.keyframes.invalid", "error", "motions", field,
+            "keyframes da motion \"" + (motionId || index) + "\" precisa ser uma lista.");
+          return;
+        }
+        if (duration !== null && duration > 0 && frames.length === 0) {
+          add("motion.keyframes.empty", "warning", "motions", field,
+            "A motion \"" + (motionId || index) + "\" tem duração, mas nenhum keyframe; ela fica parada.");
+        }
+        var previousTime = -1;
+        frames.forEach(function (frame, frameIndex) {
+          var frameField = field + ".keyframes:" + frameIndex;
+          if (!isPlainObject(frame)) {
+            motionsOk = false;
+            add("motion.keyframe.invalid", "error", "motions", frameField,
+              "O keyframe " + frameIndex + " da motion \"" + (motionId || index) + "\" precisa ser um objeto.");
+            return;
+          }
+          var time = toInt(frame.time);
+          if (time === null || time < 0) {
+            motionsOk = false;
+            add("motion.keyframe.time.invalid", "error", "motions", frameField,
+              "time do keyframe " + frameIndex + " precisa ser um inteiro maior ou igual a 0.");
+          } else if (duration !== null && time > duration) {
+            motionsOk = false;
+            add("motion.keyframe.time.range", "error", "motions", frameField,
+              "time do keyframe " + frameIndex + " precisa ficar entre 0 e " + duration + ".");
+          } else if (time < previousTime) {
+            motionsOk = false;
+            add("motion.keyframe.time.order", "error", "motions", frameField,
+              "Os keyframes da motion \"" + (motionId || index) + "\" precisam estar em ordem crescente de time.");
+          }
+          if (time !== null && time >= 0) {
+            previousTime = time;
+          }
+          if (frame.offset !== null && frame.offset !== undefined && !motionVec3(frame.offset, null)) {
+            motionsOk = false;
+            add("motion.keyframe.offset.invalid", "error", "motions", frameField,
+              "offset do keyframe " + frameIndex + " precisa ter x, y e z numéricos.");
+          }
+          if (frame.rotation !== null && frame.rotation !== undefined && !motionVec3(frame.rotation, null)) {
+            motionsOk = false;
+            add("motion.keyframe.rotation.invalid", "error", "motions", frameField,
+              "rotation do keyframe " + frameIndex + " precisa ter x, y e z numéricos.");
+          }
+          if (frame.easing !== undefined && frame.easing !== null && trimString(frame.easing) &&
+              !validEasing(frame.easing)) {
+            motionsOk = false;
+            add("motion.keyframe.easing.invalid", "error", "motions", frameField,
+              "easing do keyframe " + frameIndex + " precisa ser " + EASING_VALUES.join(", ") + ".");
+          }
+        });
+      });
+    }
 
     var slotsOk = true;
     if (state.itemSlots !== null && state.itemSlots !== undefined) {
@@ -5572,6 +6478,18 @@
       step: "matchers"
     });
     checks.push({
+      id: "upgrades",
+      label: CHECK_LABELS.upgrades,
+      ok: upgradesOk,
+      step: "upgrades"
+    });
+    checks.push({
+      id: "motions",
+      label: CHECK_LABELS.motions,
+      ok: motionsOk,
+      step: "motions"
+    });
+    checks.push({
       id: "slots",
       label: CHECK_LABELS.slots,
       ok: slotsOk,
@@ -5732,6 +6650,64 @@
     return "";
   }
 
+  var UPGRADE_MATH_EPSILON = 1.0E-9;
+  var MAX_UPGRADE_THREADS = 64;
+
+  function combineUpgradeBonus(entries, increases) {
+    var additive = 0.0;
+    var multiplicative = 1.0;
+    var flat = 0.0;
+    (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+      var count = Math.max(0, Math.trunc(Number(entry && entry.count) || 0));
+      var factor = Number(entry && entry.factor);
+      if (count <= 0 || !Number.isFinite(factor) || factor <= 0.0) {
+        return;
+      }
+      var mode = entry.mode || "additive";
+      if (mode === "multiplicative") {
+        multiplicative *= Math.pow(increases ? 1.0 + factor : Math.max(0.0, 1.0 - factor), count);
+      } else if (mode === "flat") {
+        flat += count * factor;
+      } else {
+        additive += count * factor;
+      }
+    });
+    var multiplier = increases
+      ? (1.0 + additive) * multiplicative
+      : Math.max(0.0, Math.min(1.0, (1.0 - additive) * multiplicative));
+    return { multiplier: multiplier, flat: flat };
+  }
+
+  function scaleUpgradeOutput(base, bonus) {
+    if (!(base > 0)) {
+      return { whole: 0, fraction: 0 };
+    }
+    var exact = base * bonus.multiplier + bonus.flat;
+    var whole = Math.max(1, Math.min(2147483647, Math.floor(exact + UPGRADE_MATH_EPSILON)));
+    return { whole: whole, fraction: Math.max(0.0, exact - whole) };
+  }
+
+  function reduceUpgradeValue(base, bonus) {
+    if (!(base > 0)) {
+      return 0;
+    }
+    var exact = base * bonus.multiplier - bonus.flat;
+    return Math.max(1, Math.ceil(exact - UPGRADE_MATH_EPSILON));
+  }
+
+  function upgradeThreads(bonus) {
+    var extra = (bonus.multiplier - 1.0) + bonus.flat;
+    return Math.min(MAX_UPGRADE_THREADS, 1 + Math.max(0, Math.floor(extra + UPGRADE_MATH_EPSILON)));
+  }
+
+  function scaleUpgradeDamage(base, bonus) {
+    if (!(base > 0)) {
+      return 0;
+    }
+    var exact = base * bonus.multiplier + bonus.flat;
+    return Number.isFinite(exact) ? Math.max(0.0, exact) : base;
+  }
+
   return {
     SCHEMA_VERSION: SCHEMA_VERSION,
     RECIPE_TYPE: RECIPE_TYPE,
@@ -5798,9 +6774,36 @@
     createControllerRecipe: createControllerRecipe,
     createGui: createGui,
     createGuiElement: createGuiElement,
+    soundPathFromName: soundPathFromName,
     createSounds: createSounds,
     parseSounds: parseSounds,
     buildSounds: buildSounds,
+    createMotion: createMotion,
+    createMotionKeyframe: createMotionKeyframe,
+    parseMotions: parseMotions,
+    buildMotions: buildMotions,
+    normalizeMotions: normalizeMotions,
+    scaleMotionDuration: scaleMotionDuration,
+    createUpgradeBooster: createUpgradeBooster,
+    upgradeModifierAllowed: upgradeModifierAllowed,
+    upgradeModifiersForType: upgradeModifiersForType,
+    createUpgrades: createUpgrades,
+    parseUpgrades: parseUpgrades,
+    buildUpgrades: buildUpgrades,
+    upgradeBoosterProblem: upgradeBoosterProblem,
+    normalizeUpgrades: normalizeUpgrades,
+    combineUpgradeBonus: combineUpgradeBonus,
+    scaleUpgradeOutput: scaleUpgradeOutput,
+    reduceUpgradeValue: reduceUpgradeValue,
+    upgradeThreads: upgradeThreads,
+    scaleUpgradeDamage: scaleUpgradeDamage,
+    MAX_UPGRADE_THREADS: MAX_UPGRADE_THREADS,
+    UPGRADE_MODIFIERS: UPGRADE_MODIFIERS.map(function (entry) {
+      return Object.assign({}, entry);
+    }),
+    UPGRADE_MODES: UPGRADE_MODES.slice(),
+    validEasing: validEasing,
+    EASING_VALUES: EASING_VALUES.slice(),
     parseItemSlots: parseItemSlots,
     parseCapabilities: parseCapabilities,
     parseCapabilityPorts: parseCapabilityPorts,

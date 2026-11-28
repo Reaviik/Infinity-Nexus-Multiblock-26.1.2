@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "up": "infinity_nexus_multiblock:block/fallback/top_on",
+    "down": "infinity_nexus_multiblock:block/fallback/bottom_on",
+    "north": "infinity_nexus_multiblock:block/fallback/front_on_building",
+    "south": "infinity_nexus_multiblock:block/fallback/back_on",
+    "west": "infinity_nexus_multiblock:block/fallback/left_on",
+    "east": "infinity_nexus_multiblock:block/fallback/right_on",
+    "particle": "infinity_nexus_multiblock:block/fallback/front_on_building"
+  }
+}

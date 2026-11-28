@@ -4,10 +4,47 @@
 ### <span style="color:#E67E23;"> **Change**:</span>
 ### <span style="color:#BA372A;"> **Removed**:</span>
 
+## <span style="color:#2DC26B;">` V: 1.1.9`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Boosters blocks types [`output`, `speed`, `energy`, `efficiency`, `thread`, `damage`] more details in [Multiblock Maker](https://incmm.netlify.app/wiki/).    
+Boosters is an optional blocks to increment single aspect of multiblock process like generation or damage.    
+- Animation, is a sistem to move certain blocks based on keys of multiblock making this keys an entities and move it.    
+- Fill and Drain fluids with tanks or buckets interaction on multiblock ports/gui/structure.     
+- Clear tank fluid on interact with a sponge in a fluid tank in multiblock gui. 
+### <span style="color:#F1C40F;"> **Fix**:</span>
+- Wiki
+- Custom controller render type
+### <span style="color:#E67E23;"> **Change**:</span>
+### <span style="color:#BA372A;"> **Removed**:</span>
+
+---
+
+## <span style="color:#2DC26B;">` V: 1.1.8`</span>
+### <span style="color:#3598DB;"> **Add**:</span>
+- Jade multiblock name support
+
+---
+
 ## <span style="color:#2DC26B;">` V: 1.1.7`</span>
 ### <span style="color:#3598DB;"> **Add**:</span>
-- Custom model for controller idle/building/formed
-- Custom controller shape 
+- Custom model for controller idle/active/building
+`"model": {
+    "idle": "minecraft:block/furnace",
+    "active": "minecraft:block/furnace_on",
+    "building": "minecraft:block/crafting_table"
+}`
+- Custom controller shape
+`"shape": [
+[
+  0,
+  0,
+  0,
+  16,
+  16,
+  16
+  ],
+]
+`
 ### <span style="color:#E67E23;"> **Change**:</span>
 - Update builder
 

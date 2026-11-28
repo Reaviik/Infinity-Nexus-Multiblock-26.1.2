@@ -1,0 +1,31 @@
+{
+  "variants": {
+    "facing=north": {
+      "type": "infinity_nexus_multiblock:controller",
+      "model": "infinity_nexus_multiblock:block/multiblock_controller",
+      "active_model": "infinity_nexus_multiblock:block/multiblock_controller_on",
+      "building_model": "infinity_nexus_multiblock:block/multiblock_controller_building"
+    },
+    "facing=east": {
+      "type": "infinity_nexus_multiblock:controller",
+      "model": "infinity_nexus_multiblock:block/multiblock_controller",
+      "active_model": "infinity_nexus_multiblock:block/multiblock_controller_on",
+      "building_model": "infinity_nexus_multiblock:block/multiblock_controller_building",
+      "y": 90
+    },
+    "facing=south": {
+      "type": "infinity_nexus_multiblock:controller",
+      "model": "infinity_nexus_multiblock:block/multiblock_controller",
+      "active_model": "infinity_nexus_multiblock:block/multiblock_controller_on",
+      "building_model": "infinity_nexus_multiblock:block/multiblock_controller_building",
+      "y": 180
+    },
+    "facing=west": {
+      "type": "infinity_nexus_multiblock:controller",
+      "model": "infinity_nexus_multiblock:block/multiblock_controller",
+      "active_model": "infinity_nexus_multiblock:block/multiblock_controller_on",
+      "building_model": "infinity_nexus_multiblock:block/multiblock_controller_building",
+      "y": 270
+    }
+  }
+}

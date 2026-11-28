@@ -2,7 +2,6 @@
   "use strict";
 
   var V = window.MultiblockValidation;
-  var Preview = window.MultiblockPreview;
   var STORAGE_KEY = "infinity-nexus-multiblock-builder.v2";
   var STORAGE_VERSION = 2;
   var ERASER = " ";
@@ -51,6 +50,8 @@
     { id: "identity", label: "Identidade", hint: "id, type, metadados" },
     { id: "pattern", label: "Pattern", hint: "camadas e âncora" },
     { id: "matchers", label: "Matchers", hint: "blocos e tags" },
+    { id: "upgrades", label: "Boosters", hint: "key e upgrades" },
+    { id: "motions", label: "Animações", hint: "keys, keyframes e pivot" },
     { id: "slots", label: "Slots", hint: "item_slots" },
     { id: "capabilities", label: "Capabilities", hint: "energia, tanques, essentia e portas" },
     { id: "controller", label: "Controller", hint: "texturas, item e receita" },
@@ -74,7 +75,8 @@
     tier: "tier",
     priority: "priority",
     inventoryRows: "inventoryRows",
-    anchor: "anchorSymbol"
+    anchor: "anchorSymbol",
+    upgradeKey: "upgradeKey"
   };
   var FIELD_TARGETS = {
     namespace: "namespace",
@@ -97,6 +99,7 @@
   var activeStep = "identity";
   var activeLayer = 0;
   var activeSymbol = null;
+  var paletteRenameSymbol = null;
   var dragging = false;
   var dragButton = 0;
   var lastPaintKey = "";
@@ -104,14 +107,78 @@
   var toastTimer = null;
   var minecraftSoundData = null;
   var minecraftSoundOptionsRendered = false;
+  var SOUND_FIELDS = ["processing", "finish"];
+  var soundUploadState = { processing: null, finish: null };
+  var soundAudioState = { processing: null, finish: null };
+  var soundUploadTarget = "";
   var ModelPreview = window.ModelPreview3D;
+  var MotionPreview = window.MotionPreview3D;
+  var MotionPreviewWebGL = window.MotionPreview3DWebGL;
+  var motionPreviewWebGLAvailable = null;
+  var motionPreviewWebGLFailed = false;
   var MODEL_KEYS = ["idle", "active", "building"];
   var DEFAULT_MODEL_IDS = {
     idle: "infinity_nexus_multiblock:block/multiblock_controller",
     active: "infinity_nexus_multiblock:block/multiblock_controller_on",
     building: "infinity_nexus_multiblock:block/multiblock_controller_building"
   };
+  var MOTION_DAMAGE_SOURCES = [
+    "minecraft:generic",
+    "minecraft:player_attack",
+    "minecraft:mob_attack",
+    "minecraft:mob_attack_no_aggro",
+    "minecraft:in_fire",
+    "minecraft:on_fire",
+    "minecraft:lava",
+    "minecraft:hot_floor",
+    "minecraft:campfire",
+    "minecraft:cactus",
+    "minecraft:fall",
+    "minecraft:fly_into_wall",
+    "minecraft:drown",
+    "minecraft:starve",
+    "minecraft:magic",
+    "minecraft:indirect_magic",
+    "minecraft:wither",
+    "minecraft:dragon_breath",
+    "minecraft:freeze",
+    "minecraft:lightning_bolt",
+    "minecraft:out_of_world",
+    "minecraft:generic_kill",
+    "minecraft:outside_border",
+    "minecraft:stalagmite",
+    "minecraft:sweet_berry_bush",
+    "minecraft:in_wall",
+    "minecraft:cramming",
+    "minecraft:dry_out",
+    "minecraft:sonic_boom",
+    "minecraft:thorns",
+    "minecraft:explosion",
+    "minecraft:player_explosion",
+    "minecraft:mob_projectile",
+    "minecraft:arrow",
+    "minecraft:trident",
+    "minecraft:fireball",
+    "minecraft:unattributed_fireball",
+    "minecraft:wither_skull",
+    "minecraft:falling_block",
+    "minecraft:falling_anvil",
+    "minecraft:falling_stalactite",
+    "minecraft:sting",
+    "minecraft:spit",
+    "minecraft:fireworks",
+    "minecraft:thrown",
+    "minecraft:wind_charge",
+    "minecraft:bad_respawn_point"
+  ];
   var controllerMode = "default";
+  var motionMode = "none";
+  var upgradeMode = "none";
+  var upgradeSimulationState = {
+    recipe: null,
+    notes: [],
+    counts: {}
+  };
   var modelPreviewState = {
     parsed: null,
     baseParsed: null,
@@ -124,6 +191,8 @@
     fieldRequest: 0,
     images: [],
     textureImages: {},
+    animatedTextures: {},
+    animationRaf: 0,
     localModels: {},
     importTarget: "",
     textureTarget: "",
@@ -136,11 +205,44 @@
     dragging: false,
     lastX: 0,
     lastY: 0,
-    view: { yaw: 2.95, pitch: 0.42, zoom: 1 },
+    view: { yaw: Math.PI * 5 / 4, pitch: 0.5, zoom: 1 },
     showFloor: true,
     showReference: true
   };
   var modelPreviewFieldTimer = null;
+  var motionPreviewState = {
+    playing: true,
+    time: 0,
+    speed: 1,
+    lastFrame: 0,
+    raf: null,
+    selectedMotionIndex: 0,
+    selectedMotionId: "",
+    selectedKeyframe: 0,
+    hiddenKeys: {},
+    opacity: 0.65,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    camera: "isometric",
+    view: { yaw: Math.PI / 4, pitch: 0.5, zoom: 1 },
+    revision: 0
+  };
+  var railPreviewState = {
+    time: 0,
+    lastFrame: 0,
+    raf: null
+  };
+
+  var MOTION_CAMERA_VIEWS = {
+    isometric: { yaw: Math.PI / 4, pitch: 0.5, zoom: 1 },
+    front: { yaw: 0, pitch: 0, zoom: 1 },
+    back: { yaw: Math.PI, pitch: 0, zoom: 1 },
+    side: { yaw: Math.PI / 2, pitch: 0, zoom: 1 },
+    top: { yaw: 0, pitch: Math.PI / 2, zoom: 1 },
+    bottom: { yaw: 0, pitch: -Math.PI / 2, zoom: 1 }
+  };
+  var RAIL_PREVIEW_VIEW = { yaw: Math.PI / 4, pitch: 0.5, zoom: 1 };
 
   function $(id) {
     return document.getElementById(id);
@@ -310,7 +412,9 @@
         state: state,
         importNotes: importNotes,
         activeStep: activeStep,
-        controllerMode: controllerMode
+        controllerMode: controllerMode,
+        motionMode: motionMode,
+        upgradeMode: upgradeMode
       }));
     } catch (error) {
       return;
@@ -369,6 +473,12 @@
       }
       return normalized;
     });
+    state.motions = V.normalizeMotions(state.motions);
+    if (!isPlainObject(state.upgrades) && isPlainObject(state.extras.upgrades)) {
+      state.upgrades = V.parseUpgrades(state.extras.upgrades, []);
+    }
+    state.upgrades = V.normalizeUpgrades(state.upgrades);
+    delete state.extras.upgrades;
     if (state.itemSlots === undefined) {
       if (Array.isArray(state.extras.item_slots)) {
         state.itemSlots = V.parseItemSlots(state.extras.item_slots, []);
@@ -495,6 +605,21 @@
     controllerMode = saved.controllerMode === "custom" || saved.controllerMode === "default"
       ? saved.controllerMode
       : deriveControllerMode();
+    motionMode = saved.motionMode === "custom" || saved.motionMode === "none"
+      ? saved.motionMode
+      : deriveMotionMode();
+    if (motionMode === "none" && motionsState().length > 0) {
+      motionMode = "custom";
+    }
+    upgradeMode = saved.upgradeMode === "custom" || saved.upgradeMode === "none"
+      ? saved.upgradeMode
+      : deriveUpgradeMode();
+    if (upgradeMode === "none" && isPlainObject(state.upgrades)) {
+      upgradeMode = "custom";
+    }
+    if (upgradeMode === "custom" && !isPlainObject(state.upgrades)) {
+      state.upgrades = V.createUpgrades();
+    }
     modelPreviewState.localModels = {};
     resetPreviewTextureOverrides();
     if (controllerMode === "default") {
@@ -558,6 +683,46 @@
       Object.prototype.hasOwnProperty.call(state.matchers, symbol);
   }
 
+  function matcherSummary(symbol) {
+    if (!hasMatcher(symbol)) {
+      return "";
+    }
+    var matcher = state.matchers[symbol];
+    if (!isPlainObject(matcher) || matcher.kind === "invalid") {
+      return "matcher inválido";
+    }
+    var base;
+    if (matcher.kind === "tag") {
+      var tag = trim(matcher.tag);
+      if (!tag) {
+        return "matcher inválido";
+      }
+      base = tag.charAt(0) === "#" ? tag : "#" + tag;
+    } else {
+      base = trim(matcher.block);
+      if (!base) {
+        return "matcher inválido";
+      }
+    }
+    var rows = Array.isArray(matcher.state) ? matcher.state : [];
+    if (rows.length > 0) {
+      base += "[" + rows.map(function (row) {
+        return trim(row.key) + "=" + trim(row.value);
+      }).join(",") + "]";
+    }
+    return base;
+  }
+
+  function symbolHover(symbol) {
+    if (symbol === state.anchor) {
+      return symbol + " = âncora";
+    }
+    if (symbol === upgradeKey()) {
+      return symbol + " = key de upgrade (sem matcher)";
+    }
+    return symbol + " = " + (matcherSummary(symbol) || "sem matcher");
+  }
+
   function collectPaletteSymbols(usage) {
     var set = {};
     if (V.isSingleSymbol(state.anchor) && state.anchor !== " ") {
@@ -568,6 +733,10 @@
         set[symbol] = true;
       }
     });
+    var key = upgradeKey();
+    if (V.isSingleSymbol(key) && key !== " ") {
+      set[key] = true;
+    }
     Object.keys(usage).forEach(function (symbol) {
       if (V.isSingleSymbol(symbol) && symbol !== " ") {
         set[symbol] = true;
@@ -624,8 +793,9 @@
 
   function missingSymbols() {
     var missing = [];
+    var key = upgradeKey();
     Object.keys(currentUsage).forEach(function (symbol) {
-      if (symbol !== " " && symbol !== state.anchor && !hasMatcher(symbol)) {
+      if (symbol !== " " && symbol !== state.anchor && symbol !== key && !hasMatcher(symbol)) {
         missing.push(symbol);
       }
     });
@@ -640,19 +810,25 @@
     if (symbol === state.anchor) {
       return "Âncora " + symbol + " em " + position;
     }
-    return "Símbolo " + symbol + " em " + position +
-      (hasMatcher(symbol) ? "" : ", sem matcher");
+    if (symbol === upgradeKey()) {
+      return "Key de upgrade " + symbol + " em " + position;
+    }
+    return symbolHover(symbol) + " em " + position;
   }
 
   function applyCellClasses(button, row, column, symbol) {
     var isAnchor = symbol !== " " && symbol === state.anchor;
-    var isUnmatched = symbol !== " " && !isAnchor && !hasMatcher(symbol);
+    var isUpgrade = symbol !== " " && symbol === upgradeKey();
+    var isUnmatched = symbol !== " " && !isAnchor && !isUpgrade && !hasMatcher(symbol);
     var classes = ["cell"];
     if (symbol === " ") {
       classes.push("is-empty");
     }
     if (isAnchor) {
       classes.push("is-anchor");
+    }
+    if (isUpgrade) {
+      classes.push("is-upgrade");
     }
     if (isUnmatched) {
       classes.push("is-unmatched");
@@ -696,7 +872,6 @@
 
   function syncInputs() {
     var dimensions = getDimensions();
-    $("schemaVersion").value = String(V.SCHEMA_VERSION);
     $("namespace").value = state.namespace || "";
     $("path").value = state.path || "";
     $("tier").value = state.tier === undefined || state.tier === null ? "" : String(state.tier);
@@ -728,7 +903,7 @@
 
   function renderFieldErrors() {
     ["namespace", "path", "tier", "priority", "inventoryRows", "anchor", "pattern", "inheritanceParent",
-      "soundProcessing", "soundFinish"].forEach(function (field) {
+      "soundProcessing", "soundFinish", "upgradeKey"].forEach(function (field) {
       setFieldError(field);
     });
     Object.keys(FIELD_INPUTS).forEach(function (field) {
@@ -753,6 +928,7 @@
     setStepBadge("identityBadge", "identity");
     setStepBadge("patternBadge", "pattern");
     setStepBadge("matchersBadge", "matchers");
+    setStepBadge("upgradesBadge", "upgrades");
     setStepBadge("slotsBadge", "slots");
     setStepBadge("capabilitiesBadge", "capabilities");
     setStepBadge("controllerBadge", "controller");
@@ -834,6 +1010,10 @@
     var palettePanel = $("palettePanel");
     if (palettePanel) {
       palettePanel.hidden = activeStep !== "pattern";
+    }
+    var patternPreviewCard = $("patternPreviewCard");
+    if (patternPreviewCard) {
+      patternPreviewCard.hidden = activeStep === "motions";
     }
   }
 
@@ -971,7 +1151,7 @@
       var descriptor = isAnchor ? "âncora" : unmatched ? "sem matcher" : count > 0 ? "×" + count : "não usado";
       parts.push("<button type='button' class='palette-chip" + (active ? " is-active" : "") +
         (unmatched ? " is-unmatched" : "") + "' data-symbol='" + esc(symbol) +
-        "' aria-pressed='" + (active ? "true" : "false") + "' title='Símbolo " + esc(symbol) + ": " +
+        "' aria-pressed='" + (active ? "true" : "false") + "' title='" + esc(symbolHover(symbol)) + " · " +
         esc(descriptor) + "'><span class='swatch' style='--c:" + getColor(symbol) + "'>" + esc(symbol) +
         "</span><span class='palette-count'>" + esc(descriptor) + "</span></button>");
     });
@@ -980,13 +1160,16 @@
       "' data-symbol=' ' aria-pressed='" + (eraserActive ? "true" : "false") +
       "' title='Apagar célula'><span class='swatch swatch-eraser'>⌫</span><span class='palette-count'>apagar</span></button>");
     $("palette").innerHTML = parts.join("");
+    updatePaletteForm();
   }
 
   function renderLegend() {
     var used = Object.keys(currentUsage).sort(compareSymbols);
     $("legend").innerHTML = used.map(function (symbol) {
-      var descriptor = symbol === state.anchor ? "âncora" : "×" + currentUsage[symbol];
-      return "<span class='legend-entry' style='--c:" + getColor(symbol) + "' title='Símbolo " + esc(symbol) +
+      var descriptor = symbol === state.anchor
+        ? "âncora"
+        : (symbol === upgradeKey() ? "upgrade" : "×" + currentUsage[symbol]);
+      return "<span class='legend-entry' style='--c:" + getColor(symbol) + "' title='" + esc(symbolHover(symbol)) +
         "'> <span class='legend-swatch'></span>" + esc(symbol) + " · " + esc(descriptor) + "</span>";
     }).join("");
   }
@@ -994,6 +1177,9 @@
   function matcherFeedback(symbol, matcher) {
     if (!V.isSingleSymbol(symbol)) {
       return { tone: "is-error", text: "A chave do matcher precisa ter exatamente um caractere." };
+    }
+    if (symbol === upgradeKey()) {
+      return { tone: "is-error", text: "Esta key é usada pelos boosters e não deve ter matcher." };
     }
     var problem = V.matcherProblem(matcher);
     if (problem) {
@@ -1081,7 +1267,7 @@
     if (serialized === undefined) {
       serialized = "null";
     }
-    return "<div class='" + cardClass + "' data-symbol='" + esc(symbol) + "'><div class='matcher-head'><span class='swatch' style='--c:" +
+    return "<div class='" + cardClass + "' data-symbol='" + esc(symbol) + "'><div class='matcher-head'><span class='swatch' title='" + esc(symbolHover(symbol)) + "' style='--c:" +
       color + "'>" + esc(symbol) + "</span><div class='matcher-title'><strong>Símbolo \"" + esc(symbol) +
       "\"</strong><small>" + esc(detail) + (V.isSingleSymbol(symbol) ? "" : " · chave inválida") +
       "</small></div>" + remove + "</div><div class='matcher-form'><div class='field'><span class='field-label'>Tipo</span>" +
@@ -1099,8 +1285,9 @@
   function renderMatchers() {
     var symbols = [];
     var seen = {};
+    var key = upgradeKey();
     Object.keys(currentUsage).forEach(function (symbol) {
-      if (symbol !== " " && symbol !== state.anchor && !seen[symbol]) {
+      if (symbol !== " " && symbol !== state.anchor && symbol !== key && !seen[symbol]) {
         seen[symbol] = true;
         symbols.push(symbol);
       }
@@ -1116,19 +1303,2282 @@
     if (missing.length > 0) {
       var chips = missing.map(function (symbol) {
         return "<button type='button' class='chip' data-create-missing='" + esc(symbol) +
-          "' title='Criar matcher para " + esc(symbol) + "'>" + esc(symbol) + "</button>";
+          "' title='" + esc(symbolHover(symbol)) + " · criar matcher'>" + esc(symbol) + "</button>";
       }).join("");
       $("missingMatchers").innerHTML = "<div class='missing-card'><span><strong>Sem matcher:</strong></span><div class='missing-symbols'>" +
         chips + "</div><button type='button' class='btn btn-tiny' data-create-all='true'>Criar todos</button></div>";
     } else {
       var usedCount = Object.keys(currentUsage).filter(function (symbol) {
-        return symbol !== " " && symbol !== state.anchor;
+        return symbol !== " " && symbol !== state.anchor && symbol !== key;
       }).length;
       $("missingMatchers").innerHTML = "<div class='missing-empty'>" +
         (usedCount > 0 ? "Todos os símbolos usados têm matcher." : "Pinte símbolos no pattern para configurar matchers.") +
         "</div>";
     }
     $("matcherList").innerHTML = symbols.map(matcherCardHtml).join("");
+  }
+
+  function upgradesState() {
+    return isPlainObject(state.upgrades) ? state.upgrades : null;
+  }
+
+  function upgradeKey() {
+    var upgrades = upgradesState();
+    return upgrades ? trim(upgrades.key) : "";
+  }
+
+  function deriveUpgradeMode() {
+    return isPlainObject(state.upgrades) ? "custom" : "none";
+  }
+
+  function upgradeModifierInfo(id) {
+    var wanted = trim(id);
+    var list = V.UPGRADE_MODIFIERS || [];
+    for (var index = 0; index < list.length; index += 1) {
+      if (list[index].id === wanted) {
+        return list[index];
+      }
+    }
+    return null;
+  }
+
+  function boosterEnabled(booster) {
+    return !isPlainObject(booster) || booster.enabled !== false;
+  }
+
+  function upgradeModeSummaryText() {
+    var upgrades = upgradesState();
+    if (!upgrades) {
+      return "Sem boosters; o JSON não inclui upgrades.";
+    }
+    var key = trim(upgrades.key) || "?";
+    var boosters = Array.isArray(upgrades.boosters) ? upgrades.boosters : [];
+    var enabledCount = boosters.filter(boosterEnabled).length;
+    if (enabledCount === boosters.length) {
+      return "Key " + key + " · " + boosters.length + (boosters.length === 1 ? " booster" : " boosters");
+    }
+    return "Key " + key + " · " + enabledCount + " ativo(s) de " + boosters.length + " booster(s)";
+  }
+
+  function updateUpgradeSummary() {
+    var upgrades = upgradesState();
+    var summary = $("upgradeModeSummary");
+    if (summary) {
+      summary.textContent = upgradeModeSummaryText();
+    }
+    if (!upgrades) {
+      return;
+    }
+    var key = upgradeKey();
+    var cells = key ? (currentUsage[key] || 0) : 0;
+    var boosters = Array.isArray(upgrades.boosters) ? upgrades.boosters : [];
+    if ($("upgradeCellsPreview")) {
+      $("upgradeCellsPreview").textContent = String(cells);
+    }
+    var enabledCount = boosters.filter(boosterEnabled).length;
+    if ($("upgradeCountPreview")) {
+      $("upgradeCountPreview").textContent = String(enabledCount) + " / " + String(boosters.length);
+    }
+    if ($("upgradeBoostersSummary")) {
+      $("upgradeBoostersSummary").textContent = boosters.length === 0
+        ? "Nenhum booster."
+        : enabledCount + (enabledCount === 1 ? " ativo de " : " ativos de ") +
+          boosters.length + (boosters.length === 1 ? " booster." : " boosters.");
+    }
+    if ($("upgradeBoostersEmpty")) {
+      $("upgradeBoostersEmpty").hidden = boosters.length > 0;
+    }
+    if ($("upgradeJson")) {
+      var built = V.buildUpgrades(upgrades);
+      $("upgradeJson").textContent = built ? JSON.stringify(built, null, 2) : "";
+    }
+  }
+
+  var UPGRADE_SIM_EPSILON = 1.0E-9;
+
+  function upgradeSimulationCells() {
+    var key = upgradeKey();
+    return key ? (currentUsage[key] || 0) : 0;
+  }
+
+  function upgradeSimulationBoosterLimit(booster, cells) {
+    var maxBlocks = Math.max(1, Math.trunc(Number(booster && booster.maxBlocks) || 1));
+    return Math.max(0, Math.min(maxBlocks, cells));
+  }
+
+  function upgradeSimulationBoosterCount(booster, index, cells) {
+    var limit = upgradeSimulationBoosterLimit(booster, cells);
+    var stored = upgradeSimulationState.counts[index];
+    if (stored === undefined || stored === null || stored === "") {
+      return limit;
+    }
+    var count = Math.trunc(Number(stored));
+    if (!Number.isFinite(count)) {
+      return limit;
+    }
+    return Math.max(0, Math.min(limit, count));
+  }
+
+  function upgradeSimBonus(modifierId) {
+    var info = upgradeModifierInfo(modifierId);
+    var increases = info ? info.increases === true : false;
+    var entries = [];
+    var upgrades = upgradesState();
+    if (upgrades && Array.isArray(upgrades.boosters)) {
+      var cells = upgradeSimulationCells();
+      upgrades.boosters.forEach(function (booster, index) {
+        if (!isPlainObject(booster) || !boosterEnabled(booster) || booster.modifier !== modifierId) {
+          return;
+        }
+        var count = upgradeSimulationBoosterCount(booster, index, cells);
+        if (count <= 0) {
+          return;
+        }
+        var factor = Number(booster.value);
+        if (!Number.isFinite(factor) || factor <= 0) {
+          return;
+        }
+
+        entries.push({ count: count, factor: factor, mode: booster.mode || "additive" });
+      });
+    }
+    var bonus = V.combineUpgradeBonus(entries, increases);
+    bonus.counted = entries.reduce(function (total, entry) {
+      return total + entry.count;
+    }, 0);
+    return bonus;
+  }
+
+  function upgradeSimScaledAmount(base, bonus) {
+    return V.scaleUpgradeOutput(base, bonus);
+  }
+
+  function upgradeSimReduced(base, bonus) {
+    return V.reduceUpgradeValue(base, bonus);
+  }
+
+  function upgradeSimThreads(bonus) {
+    return V.upgradeThreads(bonus);
+  }
+
+  function upgradeSimDamage(base, bonus) {
+    return V.scaleUpgradeDamage(base, bonus);
+  }
+
+  function upgradeSimFormat(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) {
+      return "0";
+    }
+    var rounded = Math.round(number);
+    if (Math.abs(number - rounded) < 0.000001) {
+      return String(rounded);
+    }
+    return String(Math.round(number * 100) / 100);
+  }
+
+  function upgradeSimPercent(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) {
+      return "0%";
+    }
+    return String(Math.round(number * 1000) / 10) + "%";
+  }
+
+  function upgradeSimBonusText(bonus, modifierId) {
+    if (!bonus.counted) {
+      return "sem booster de " + modifierId;
+    }
+    var parts = [];
+    if (Math.abs(bonus.multiplier - 1) > UPGRADE_SIM_EPSILON) {
+      parts.push("×" + upgradeSimFormat(bonus.multiplier));
+    }
+    if (Math.abs(bonus.flat) > UPGRADE_SIM_EPSILON) {
+      parts.push((bonus.flat >= 0 ? "+" : "") + upgradeSimFormat(bonus.flat));
+    }
+    return modifierId + " " + (parts.length ? parts.join(" ") : "sem alteração");
+  }
+
+  function upgradeSimRecipeTime(recipe) {
+    var time = Math.trunc(Number(recipe && recipe.time));
+    return Number.isFinite(time) && time > 0 ? time : 0;
+  }
+
+  function upgradeSimRecipeEnergy(recipe) {
+    var total = 0;
+    var rows = recipe && Array.isArray(recipe.inputRows) ? recipe.inputRows : [];
+    rows.forEach(function (row) {
+      if (row && row.kind === "energy") {
+        total += Math.max(0, Math.trunc(Number(row.amount) || 0));
+      }
+    });
+    return total;
+  }
+
+  function upgradeSimRowAmount(row) {
+    if (!row) {
+      return 0;
+    }
+    if (row.kind === "item" || row.kind === "entity") {
+      return Math.max(0, Math.trunc(Number(row.count) || 0));
+    }
+    return Math.max(0, Math.trunc(Number(row.amount) || 0));
+  }
+
+  function upgradeSimRowLabel(row) {
+    if (!row) {
+      return "?";
+    }
+    var kind = row.kind || "item";
+    if (kind === "mana") {
+      return "mana";
+    }
+    if (kind === "energy") {
+      return "energia";
+    }
+    var id = trim(row.resource);
+    if (!id && kind === "entity") {
+      id = trim(row.spawn);
+    }
+    return kind + " · " + (id || "(vazio)");
+  }
+
+  function upgradeSimChanceText(row) {
+    var chance = Number(row && row.chance);
+    if (!Number.isFinite(chance) || chance >= 1) {
+      return "";
+    }
+    return "chance " + upgradeSimPercent(chance);
+  }
+
+  function upgradeSimRowHtml(label, value, detail, warning) {
+    return "<div class='upgrade-sim-row" + (warning ? " is-warning" : "") + "'><span>" +
+      esc(label) + "</span><strong>" + esc(value) + "</strong>" +
+      (detail ? "<small>" + esc(detail) + "</small>" : "") + "</div>";
+  }
+
+  function renderUpgradeSimulationCounts() {
+    var countsEl = $("upgradeSimulationCounts");
+    if (!countsEl) {
+      return;
+    }
+    var upgrades = upgradesState();
+    var boosters = upgrades && Array.isArray(upgrades.boosters) ? upgrades.boosters : [];
+    var cells = upgradeSimulationCells();
+    var active = [];
+    boosters.forEach(function (booster, index) {
+      if (isPlainObject(booster) && boosterEnabled(booster)) {
+        active.push({ booster: booster, index: index });
+      }
+    });
+    if (active.length === 0) {
+      countsEl.innerHTML = "<p class='field-hint'>Nenhum booster ativo para simular.</p>";
+      return;
+    }
+    countsEl.innerHTML = active.map(function (entry) {
+      var limit = upgradeSimulationBoosterLimit(entry.booster, cells);
+      var value = upgradeSimulationBoosterCount(entry.booster, entry.index, cells);
+      return "<label class='upgrade-sim-count'><span>B" + (entry.index + 1) + " · " +
+        esc(entry.booster.modifier || "output") + " · " + esc(entry.booster.mode || "additive") +
+        "</span><input type='number' min='0' max='" + limit + "' step='1' value='" + value +
+        "' data-sim-booster-index='" + entry.index + "' aria-label='Blocos do booster " +
+        (entry.index + 1) + "'><small>blocos (0–" + limit + ")</small></label>";
+    }).join("");
+  }
+
+  function renderUpgradeSimulationResults() {
+    var resultsEl = $("upgradeSimulationResults");
+    if (!resultsEl) {
+      return;
+    }
+    var recipe = upgradeSimulationState.recipe;
+    if (!recipe) {
+      resultsEl.innerHTML = "<div class='upgrade-sim-empty'>Importe uma recipe para ver o efeito dos boosters.</div>";
+      return;
+    }
+    var time = upgradeSimRecipeTime(recipe);
+    var energy = upgradeSimRecipeEnergy(recipe);
+    var inputs = Array.isArray(recipe.inputRows) ? recipe.inputRows.filter(function (row) {
+      return row && row.kind !== "energy";
+    }) : [];
+    var outputs = Array.isArray(recipe.outputRows) ? recipe.outputRows : [];
+    var speed = upgradeSimBonus("speed");
+    var energyBonus = upgradeSimBonus("energy");
+    var efficiency = upgradeSimBonus("efficiency");
+    var output = upgradeSimBonus("output");
+    var thread = upgradeSimBonus("thread");
+    var damage = upgradeSimBonus("damage");
+    var html = "";
+    var general = "";
+    general += upgradeSimRowHtml("tempo", time + " → " + upgradeSimReduced(time, speed) + " ticks",
+      upgradeSimBonusText(speed, "speed"));
+    general += upgradeSimRowHtml("energia", energy + " → " + upgradeSimReduced(energy, energyBonus) + " FE",
+      upgradeSimBonusText(energyBonus, "energy"));
+    general += upgradeSimRowHtml("threads", "1 → " + upgradeSimThreads(thread),
+      upgradeSimBonusText(thread, "thread"));
+    if (damage.counted) {
+      general += upgradeSimRowHtml("dano das motions", "1 → " + upgradeSimFormat(upgradeSimDamage(1, damage)),
+        upgradeSimBonusText(damage, "damage"));
+    }
+    html += "<div class='upgrade-sim-section'><strong>resultado</strong>" + general + "</div>";
+    if (outputs.length > 0) {
+      html += "<div class='upgrade-sim-section'><strong>outputs</strong>" + outputs.map(function (row) {
+        var base = upgradeSimRowAmount(row);
+        var scaled = upgradeSimScaledAmount(base, output);
+        var detail = upgradeSimBonusText(output, "output");
+        var chance = upgradeSimChanceText(row);
+        if (chance) {
+          detail += " · " + chance;
+        }
+        if (scaled.fraction > UPGRADE_SIM_EPSILON) {
+          detail += " · +1 com " + upgradeSimPercent(scaled.fraction);
+        }
+        return upgradeSimRowHtml(upgradeSimRowLabel(row), base + " → " + scaled.whole, detail);
+      }).join("") + "</div>";
+    }
+    if (inputs.length > 0) {
+      html += "<div class='upgrade-sim-section'><strong>inputs</strong>" + inputs.map(function (row) {
+        var base = upgradeSimRowAmount(row);
+        return upgradeSimRowHtml(upgradeSimRowLabel(row), base + " → " + upgradeSimReduced(base, efficiency),
+          upgradeSimBonusText(efficiency, "efficiency"));
+      }).join("") + "</div>";
+    }
+    var notes = Array.isArray(upgradeSimulationState.notes) ? upgradeSimulationState.notes : [];
+    if (notes.length > 0) {
+      html += "<div class='upgrade-sim-section'><strong>avisos da importação</strong>" +
+        notes.map(function (note) {
+          return upgradeSimRowHtml(note.message || "Aviso", "", "", true);
+        }).join("") + "</div>";
+    }
+    resultsEl.innerHTML = html;
+  }
+
+  function renderUpgradeSimulation() {
+    var panel = $("upgradeSimulationPanel");
+    if (panel) {
+      panel.hidden = state.type !== "recipe";
+    }
+    var summaryEl = $("upgradeRecipeSummary");
+    var recipe = upgradeSimulationState.recipe;
+    if (summaryEl) {
+      if (!recipe) {
+        summaryEl.textContent = "Nenhuma recipe importada.";
+      } else {
+        var time = upgradeSimRecipeTime(recipe);
+        var energy = upgradeSimRecipeEnergy(recipe);
+        var inputs = Array.isArray(recipe.inputRows) ? recipe.inputRows.filter(function (row) {
+          return row && row.kind !== "energy";
+        }) : [];
+        var outputs = Array.isArray(recipe.outputRows) ? recipe.outputRows : [];
+        summaryEl.textContent = "time " + time + " ticks · energia " + energy + " FE · " +
+          inputs.length + (inputs.length === 1 ? " input" : " inputs") + " · " +
+          outputs.length + (outputs.length === 1 ? " output" : " outputs");
+      }
+    }
+    renderUpgradeSimulationCounts();
+    renderUpgradeSimulationResults();
+  }
+
+  function setUpgradeRecipeError(message) {
+    var error = document.querySelector("[data-error-for='upgradeRecipeJson']");
+    if (error) {
+      error.textContent = message || "";
+    }
+    var textarea = $("upgradeRecipeJson");
+    if (textarea) {
+      textarea.classList.toggle("is-invalid", Boolean(message));
+    }
+  }
+
+  function simulateUpgradeRecipe() {
+    var textarea = $("upgradeRecipeJson");
+    if (!textarea) {
+      return;
+    }
+    var text = textarea.value.trim();
+    if (!text) {
+      upgradeSimulationState.recipe = null;
+      upgradeSimulationState.notes = [];
+      setUpgradeRecipeError("");
+      renderUpgradeSimulation();
+      return;
+    }
+    var raw;
+    try {
+      raw = JSON.parse(text);
+    } catch (error) {
+      setUpgradeRecipeError("JSON inválido: " + error.message);
+      renderUpgradeSimulation();
+      return;
+    }
+    var notes = [];
+    var recipe = V.parseRecipe(raw, notes);
+    upgradeSimulationState.recipe = recipe;
+    upgradeSimulationState.notes = notes;
+    setUpgradeRecipeError("");
+    renderUpgradeSimulation();
+  }
+
+  function clearUpgradeRecipe() {
+    if ($("upgradeRecipeJson")) {
+      $("upgradeRecipeJson").value = "";
+    }
+    upgradeSimulationState.recipe = null;
+    upgradeSimulationState.notes = [];
+    upgradeSimulationState.counts = {};
+    setUpgradeRecipeError("");
+    renderUpgradeSimulation();
+  }
+
+  function onUpgradeRecipeFile(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    if (!file) {
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var textarea = $("upgradeRecipeJson");
+      if (textarea) {
+        textarea.value = String(reader.result || "");
+      }
+      input.value = "";
+      simulateUpgradeRecipe();
+    };
+    reader.onerror = function () {
+      input.value = "";
+      setUpgradeRecipeError("Não foi possível ler o arquivo.");
+    };
+    reader.readAsText(file);
+  }
+
+  function onUpgradeSimulationCountInput(event) {
+    var target = event.target;
+    if (!target || target.tagName !== "INPUT") {
+      return;
+    }
+    var index = parseInt(target.getAttribute("data-sim-booster-index"), 10);
+    if (!Number.isFinite(index)) {
+      return;
+    }
+    upgradeSimulationState.counts[index] = target.value;
+    renderUpgradeSimulationResults();
+  }
+
+  function renderUpgradeMode() {
+    var enabled = isPlainObject(state.upgrades);
+    $$("#upgradeModeOptions input[name='upgradeMode']").forEach(function (input) {
+      input.checked = input.value === (enabled ? "custom" : "none");
+    });
+    if ($("upgradeEditorArea")) {
+      $("upgradeEditorArea").hidden = !enabled;
+    }
+    updateUpgradeSummary();
+  }
+
+  function setUpgradeMode(mode) {
+    if (mode === "custom") {
+      if (!isPlainObject(state.upgrades)) {
+        state.upgrades = V.createUpgrades();
+      }
+      upgradeMode = "custom";
+    } else {
+      if (isPlainObject(state.upgrades) && Array.isArray(state.upgrades.boosters)
+          && state.upgrades.boosters.length > 0
+          && !window.confirm("Desativar os boosters? O campo upgrades será removido do JSON. As células da key no pattern não serão apagadas.")) {
+        renderUpgradeMode();
+        return;
+      }
+      state.upgrades = null;
+      upgradeMode = "none";
+    }
+    refresh();
+  }
+
+  function onUpgradeModeChange(event) {
+    var target = event.target;
+    if (!target || target.name !== "upgradeMode" || !target.checked) {
+      return;
+    }
+    setUpgradeMode(target.value);
+  }
+
+  function upgradeBoosterKindOptions(selected) {
+    var options = [
+      { value: "block", label: "Bloco" },
+      { value: "tag", label: "Tag" },
+      { value: "state", label: "Bloco + state" }
+    ];
+    return options.map(function (option) {
+      return "<option value='" + option.value + "'" + (option.value === selected ? " selected" : "") +
+        ">" + option.label + "</option>";
+    }).join("");
+  }
+
+  function upgradeBoosterMatcherFieldHtml(booster, index) {
+    var matcher = isPlainObject(booster.matcher) ? booster.matcher : null;
+    var kind = matcher && matcher.kind ? matcher.kind : "block";
+    if (kind === "invalid") {
+      kind = "block";
+    }
+    if (kind === "tag") {
+      return "<input type='text' data-booster-index='" + index + "' data-upgrade-field='tag' value='" +
+        esc(matcher.tag || "") + "' placeholder='c:storage_blocks/gold' spellcheck='false' " +
+        "autocomplete='off' aria-label='Tag do booster " + (index + 1) + "'>";
+    }
+    return "<input type='text' data-booster-index='" + index + "' data-upgrade-field='block' value='" +
+      esc(matcher && matcher.block ? matcher.block : "") + "' placeholder='minecraft:gold_block' " +
+      "title='Aceita o ID do bloco ou o JSON do /inmb look' spellcheck='false' " +
+      "autocomplete='off' aria-label='Bloco do booster " + (index + 1) + "'>";
+  }
+
+  function upgradeBoosterStateHtml(booster, index) {
+    var matcher = isPlainObject(booster.matcher) ? booster.matcher : null;
+    if (!matcher || (matcher.kind !== "state" && matcher.kind !== "tag")) {
+      return "";
+    }
+    var rows = Array.isArray(matcher.state) ? matcher.state : [];
+    var html = "<div class='state-list'>";
+    rows.forEach(function (row, rowIndex) {
+      html += "<div class='state-row'><input type='text' data-booster-index='" + index +
+        "' data-upgrade-field='state-key' data-index='" + rowIndex + "' value='" + esc(row.key || "") +
+        "' placeholder='age' spellcheck='false' autocomplete='off' aria-label='Propriedade " +
+        (rowIndex + 1) + " do booster " + (index + 1) + "'><input type='text' data-booster-index='" +
+        index + "' data-upgrade-field='state-value' data-index='" + rowIndex + "' value='" +
+        esc(row.value || "") + "' placeholder='7' spellcheck='false' autocomplete='off' aria-label='Valor " +
+        (rowIndex + 1) + " do booster " + (index + 1) + "'><button type='button' class='icon-btn' " +
+        "data-upgrade-action='remove-state' data-booster-index='" + index + "' data-index='" + rowIndex +
+        "' title='Remover propriedade'>×</button></div>";
+    });
+    return html + "</div><button type='button' class='btn btn-tiny' data-upgrade-action='add-state' " +
+      "data-booster-index='" + index + "'>+ propriedade</button>";
+  }
+
+  function upgradeBoosterCardHtml(booster, index) {
+    if (!isPlainObject(booster)) {
+      return "";
+    }
+    var info = upgradeModifierInfo(booster.modifier);
+    var problem = V.upgradeBoosterProblem(booster);
+    var enabled = boosterEnabled(booster);
+    var matcher = isPlainObject(booster.matcher) ? booster.matcher : null;
+    var kind = matcher && matcher.kind ? matcher.kind : "block";
+    if (kind === "invalid") {
+      kind = "block";
+    }
+    var allowedModifiers = (V.upgradeModifiersForType ? V.upgradeModifiersForType(state.type) : (V.UPGRADE_MODIFIERS || [])).slice();
+    if (info && !allowedModifiers.some(function (entry) { return entry.id === info.id; })) {
+      allowedModifiers.push(info);
+    }
+    var modifierOptions = allowedModifiers.map(function (entry) {
+      return "<option value='" + entry.id + "'" + (entry.id === booster.modifier ? " selected" : "") +
+        ">" + entry.label + " · " + entry.hint + "</option>";
+    }).join("");
+    var modeOptions = (V.UPGRADE_MODES || []).map(function (mode) {
+      return "<option value='" + mode + "'" + (mode === booster.mode ? " selected" : "") +
+        ">" + mode + "</option>";
+    }).join("");
+    var serialized = enabled
+      ? JSON.stringify(V.buildUpgrades({ key: upgradeKey(), boosters: [booster] }).boosters[0])
+      : null;
+    return "<div class='matcher-card upgrade-card" + (enabled ? "" : " is-disabled") +
+      (problem ? " is-problem" : "") +
+      "' data-booster-index='" + index + "'><div class='matcher-head'><span class='swatch' style='--c:" +
+      COLORS[3] + "'>B" + (index + 1) + "</span><div class='matcher-title'><strong>Booster " +
+      (index + 1) + " · " + esc(booster.modifier || "output") + "</strong><small>" +
+      esc((booster.mode || "additive") + " · max " + (booster.maxBlocks || "?") +
+        (enabled ? "" : " · desativado")) + "</small></div>" +
+      "<button type='button' class='btn btn-tiny' data-upgrade-action='toggle' data-booster-index='" + index +
+      "' aria-pressed='" + (enabled ? "false" : "true") + "' title='" +
+      (enabled ? "Desativar este booster" : "Ativar este booster") + "'>" +
+      (enabled ? "desativar" : "ativar") + "</button>" +
+      "<button type='button' class='btn btn-tiny btn-danger matcher-remove' data-upgrade-action='remove' " +
+      "data-booster-index='" + index + "'>remover</button></div><div class='upgrade-form'>" +
+      "<div class='field'><span class='field-label'>Matcher</span><select data-booster-index='" + index +
+      "' data-upgrade-field='matcherKind' aria-label='Tipo do matcher do booster " + (index + 1) + "'>" +
+      upgradeBoosterKindOptions(kind) + "</select></div>" +
+      "<div class='field'><span class='field-label'>Bloco/Tag</span>" +
+      upgradeBoosterMatcherFieldHtml(booster, index) + "</div>" +
+      "<div class='field field-wide'><label>modifier</label><select data-booster-index='" + index +
+      "' data-upgrade-field='modifier' aria-label='Modifier do booster " + (index + 1) + "'>" +
+      modifierOptions + "</select></div>" +
+      "<div class='field'><label>mode</label><select data-booster-index='" + index +
+      "' data-upgrade-field='mode' aria-label='Mode do booster " + (index + 1) + "'>" +
+      modeOptions + "</select></div>" +
+      "<div class='field'><label for='upgradeValue" + index + "'>valor" + (info ? " (" + esc(info.field) + ")" : "") +
+      "</label><input id='upgradeValue" + index + "' type='number' min='0.0001' step='any' value='" +
+      esc(booster.value) + "' data-booster-index='" + index + "' data-upgrade-field='value'></div>" +
+      "<div class='field'><label for='upgradeMax" + index + "'>max_blocks</label><input id='upgradeMax" + index +
+      "' type='number' min='1' step='1' value='" + esc(booster.maxBlocks) + "' data-booster-index='" + index +
+      "' data-upgrade-field='maxBlocks'></div></div>" +
+      "<p class='matcher-feedback" + (problem ? " is-error" : "") + "'" + (problem ? "" : " hidden") +
+      ">" + (problem ? esc(problem) : "") + "</p><details class='card-advanced'><summary>Estado e JSON" +
+      "<span class='card-advanced-hint'>" + (kind === "state" || kind === "tag" ? "blockstate e exportação" : "exportação") +
+      "</span></summary><div class='card-advanced-body'>" + upgradeBoosterStateHtml(booster, index) +
+      "<code class='matcher-json'>" + esc(enabled ? (serialized === undefined ? "null" : serialized) : "Desativado: não entra no JSON.") +
+      "</code></div></details></div>";
+  }
+
+  function renderUpgrades() {
+    var upgrades = upgradesState();
+    renderUpgradeMode();
+    renderUpgradeSimulation();
+    if (!upgrades) {
+      if ($("upgradeKey")) {
+        $("upgradeKey").value = "";
+      }
+      if ($("upgradeBoosterList")) {
+        $("upgradeBoosterList").innerHTML = "";
+      }
+      return;
+    }
+    var key = trim(upgrades.key) || "";
+    if ($("upgradeKey")) {
+      $("upgradeKey").value = key;
+      var keyInvalid = report.issues.some(function (entry) {
+        return entry.severity === "error" && entry.field === "upgradeKey";
+      });
+      $("upgradeKey").classList.toggle("is-invalid", keyInvalid);
+    }
+    var boosters = Array.isArray(upgrades.boosters) ? upgrades.boosters : [];
+    if ($("upgradeBoosterList")) {
+      $("upgradeBoosterList").innerHTML = boosters.map(upgradeBoosterCardHtml).join("");
+    }
+    updateUpgradeSummary();
+  }
+
+  function updateUpgradeCard(index) {
+    var upgrades = upgradesState();
+    var booster = upgrades && Array.isArray(upgrades.boosters) ? upgrades.boosters[index] : null;
+    var card = document.querySelector(".upgrade-card[data-booster-index='" + index + "']");
+    if (!booster || !card) {
+      return;
+    }
+    var problem = V.upgradeBoosterProblem(booster);
+    card.classList.toggle("is-problem", Boolean(problem));
+    var title = card.querySelector(".matcher-title strong");
+    if (title) {
+      title.textContent = "Booster " + (index + 1) + " · " + (booster.modifier || "output");
+    }
+    var subtitle = card.querySelector(".matcher-title small");
+    if (subtitle) {
+      subtitle.textContent = (booster.mode || "additive") + " · max " + (booster.maxBlocks || "?");
+    }
+    var code = card.querySelector(".matcher-json");
+    if (code) {
+      var built = V.buildUpgrades({ key: upgradeKey(), boosters: [booster] });
+      code.textContent = built ? JSON.stringify(built.boosters[0]) : "";
+    }
+    var feedback = card.querySelector(".matcher-feedback");
+    if (feedback) {
+      feedback.textContent = problem || "";
+      feedback.classList.toggle("is-error", Boolean(problem));
+      feedback.hidden = !problem;
+    }
+  }
+
+  function onUpgradeInput(event) {
+    var target = event.target;
+    if (!target || target.tagName !== "INPUT") {
+      return;
+    }
+    var field = target.getAttribute("data-upgrade-field");
+    if (field === "key") {
+      var upgrades = upgradesState();
+      if (!upgrades) {
+        return;
+      }
+      upgrades.key = target.value;
+      updateUpgradeSummary();
+      refresh({ skipPattern: true, skipMatchers: true, skipUpgrades: true });
+      return;
+    }
+    var index = parseInt(target.getAttribute("data-booster-index"), 10);
+    var source = upgradesState();
+    var booster = source && Array.isArray(source.boosters) ? source.boosters[index] : null;
+    if (!booster || !isPlainObject(booster.matcher)) {
+      return;
+    }
+    if (field === "block") {
+      var rawBlock = target.value.trim();
+      if (rawBlock.charAt(0) === "{") {
+        var pastedMatcher = V.parseMatcherInput(rawBlock);
+        if (pastedMatcher.kind !== "invalid") {
+          booster.matcher = pastedMatcher;
+          refresh();
+          return;
+        }
+      }
+      if (booster.matcher.kind !== "state") {
+        booster.matcher.kind = "block";
+      }
+      booster.matcher.block = target.value;
+    } else if (field === "tag") {
+      booster.matcher.tag = target.value;
+    } else if (field === "state-key" || field === "state-value") {
+      var rowIndex = parseInt(target.getAttribute("data-index"), 10);
+      var row = Array.isArray(booster.matcher.state) ? booster.matcher.state[rowIndex] : null;
+      if (!row) {
+        return;
+      }
+      if (field === "state-key") {
+        row.key = target.value;
+      } else {
+        row.value = target.value;
+      }
+    } else if (field === "value") {
+      booster.value = target.value;
+    } else if (field === "maxBlocks") {
+      booster.maxBlocks = target.value;
+    } else {
+      return;
+    }
+    updateUpgradeCard(index);
+    updateUpgradeSummary();
+    refresh({ skipPattern: true, skipMatchers: true, skipUpgrades: true });
+  }
+
+  function onUpgradeChange(event) {
+    var target = event.target;
+    if (!target || target.tagName !== "SELECT") {
+      return;
+    }
+    var field = target.getAttribute("data-upgrade-field");
+    var index = parseInt(target.getAttribute("data-booster-index"), 10);
+    var source = upgradesState();
+    var booster = source && Array.isArray(source.boosters) ? source.boosters[index] : null;
+    if (!booster) {
+      return;
+    }
+    if (field === "matcherKind") {
+      booster.matcher.kind = target.value;
+      if (target.value === "state" || target.value === "tag") {
+        if (!Array.isArray(booster.matcher.state)) {
+          booster.matcher.state = [];
+        }
+      }
+    } else if (field === "modifier") {
+      booster.modifier = target.value;
+    } else if (field === "mode") {
+      booster.mode = target.value;
+    } else {
+      return;
+    }
+    refresh();
+    var card = document.querySelector(".upgrade-card[data-booster-index='" + index + "']");
+    var next = card ? card.querySelector("[data-upgrade-field='block'], [data-upgrade-field='tag']") : null;
+    if (next) {
+      next.focus();
+    }
+  }
+
+  function onUpgradeClick(event) {
+    var action = closest(event.target, "[data-upgrade-action]");
+    if (!action) {
+      return;
+    }
+    var name = action.getAttribute("data-upgrade-action");
+    var index = parseInt(action.getAttribute("data-booster-index"), 10);
+    var source = upgradesState();
+    if (!source || !Array.isArray(source.boosters)) {
+      return;
+    }
+    var booster = source.boosters[index];
+    if (!booster) {
+      return;
+    }
+    if (name === "remove") {
+      if (!window.confirm("Remover o booster " + (index + 1) + "?")) {
+        return;
+      }
+      source.boosters.splice(index, 1);
+      upgradeSimulationState.counts = {};
+      refresh();
+      return;
+    }
+    if (name === "toggle") {
+      booster.enabled = booster.enabled === false;
+      refresh();
+      var toggle = document.querySelector(".upgrade-card[data-booster-index='" + index +
+        "'] [data-upgrade-action='toggle']");
+      if (toggle) {
+        toggle.focus();
+      }
+      return;
+    }
+    if (name === "add-state") {
+      if (!Array.isArray(booster.matcher.state)) {
+        booster.matcher.state = [];
+      }
+      booster.matcher.state.push({ key: "", value: "" });
+      refresh();
+      var refreshed = document.querySelector(".upgrade-card[data-booster-index='" + index + "']");
+      var details = refreshed ? refreshed.querySelector("details.card-advanced") : null;
+      if (details) {
+        details.open = true;
+      }
+      var keys = refreshed ? refreshed.querySelectorAll("[data-upgrade-field='state-key']") : [];
+      if (keys.length > 0) {
+        keys[keys.length - 1].focus();
+      }
+      return;
+    }
+    if (name === "remove-state") {
+      var rowIndex = parseInt(action.getAttribute("data-index"), 10);
+      if (Array.isArray(booster.matcher.state) && rowIndex >= 0 && rowIndex < booster.matcher.state.length) {
+        booster.matcher.state.splice(rowIndex, 1);
+        refresh();
+        var updated = document.querySelector(".upgrade-card[data-booster-index='" + index + "']");
+        var stateDetails = updated ? updated.querySelector("details.card-advanced") : null;
+        if (stateDetails) {
+          stateDetails.open = true;
+        }
+      }
+    }
+  }
+
+  function addUpgradeBooster() {
+    var upgrades = upgradesState();
+    if (!upgrades) {
+      return;
+    }
+    if (!Array.isArray(upgrades.boosters)) {
+      upgrades.boosters = [];
+    }
+    upgrades.boosters.push(V.createUpgradeBooster(state.type));
+    upgradeSimulationState.counts = {};
+    refresh();
+    var cards = $("upgradeBoosterList").querySelectorAll(".upgrade-card");
+    var last = cards[cards.length - 1];
+    if (last) {
+      focusElement(last.querySelector("[data-upgrade-field='block']") || last, false);
+    }
+  }
+
+  function paintUpgradeKey() {
+    var key = upgradeKey();
+    if (!V.isSingleSymbol(key) || key === " ") {
+      showToast("Defina uma key de upgrade válida antes de pintar.", "error");
+      return;
+    }
+    activeSymbol = key;
+    setStep("pattern");
+    showToast("Pinte as células \"" + key + "\" no pattern.");
+  }
+
+  function motionInt(value, fallback) {
+    var number = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(number) ? Math.trunc(number) : fallback;
+  }
+
+  function motionNumber(value, fallback) {
+    var number = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function motionsState() {
+    if (!Array.isArray(state.motions)) {
+      state.motions = [];
+    }
+    return state.motions;
+  }
+
+  function resetMotionPreviewSelection() {
+    motionPreviewState.selectedMotionIndex = 0;
+    motionPreviewState.selectedMotionId = "";
+    motionPreviewState.selectedKeyframe = 0;
+    motionPreviewState.time = 0;
+    motionPreviewState.lastFrame = 0;
+    motionPreviewState.hiddenKeys = {};
+  }
+
+  function deriveMotionMode() {
+    return motionsState().length > 0 ? "custom" : "none";
+  }
+
+  function renderMotionMode() {
+    $$("input[name='motionMode']").forEach(function (input) {
+      input.checked = input.value === motionMode;
+    });
+    var summary = $("motionModeSummary");
+    if (summary) {
+      summary.textContent = motionMode === "custom"
+        ? (state.type === "storage"
+          ? "Motions sempre ativas no storage. Use fill_speed para acelerar conforme o armazenamento enche."
+          : "Motions ativas durante receitas. Configure keys, pivot, keyframes, dano e NBT.")
+        : "Sem motions. A máquina fica estática e o JSON não inclui animações.";
+    }
+    var area = $("motionEditorArea");
+    if (area) {
+      area.hidden = motionMode !== "custom";
+    }
+  }
+
+  function setMotionMode(mode) {
+    if (mode !== "none" && mode !== "custom") {
+      return;
+    }
+    if (mode === motionMode) {
+      renderMotionMode();
+      return;
+    }
+    if (mode === "none" && motionsState().length > 0) {
+      if (!window.confirm("Desativar as animações? As motions configuradas serão removidas.")) {
+        renderMotionMode();
+        return;
+      }
+      state.motions = [];
+      resetMotionPreviewSelection();
+    }
+    motionMode = mode;
+    if (mode === "none") {
+      setMotionFullscreen(false);
+      setMotionPlaying(false);
+    }
+    refresh();
+  }
+
+  function onMotionModeChange(event) {
+    var input = closest(event.target, "input[name='motionMode']");
+    if (!input) {
+      return;
+    }
+    setMotionMode(input.value);
+  }
+
+  function selectedMotion() {
+    var motions = motionsState();
+    if (motions.length === 0) {
+      motionPreviewState.selectedMotionIndex = 0;
+      motionPreviewState.selectedMotionId = "";
+      return null;
+    }
+    var index = clamp(motionPreviewState.selectedMotionIndex || 0, 0, motions.length - 1);
+    motionPreviewState.selectedMotionIndex = index;
+    var motion = motions[index] || null;
+    motionPreviewState.selectedMotionId = motion ? motion.id : "";
+    return motion;
+  }
+
+  function motionIndexById(id) {
+    var motions = motionsState();
+    for (var index = 0; index < motions.length; index += 1) {
+      if (motions[index] && motions[index].id === id) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  function nextMotionId() {
+    var motions = motionsState();
+    var index = 1;
+    while (motions.some(function (motion) {
+      return motion && motion.id === "motion_" + index;
+    })) {
+      index += 1;
+    }
+    return "motion_" + index;
+  }
+
+  function motionDuration(motion) {
+    if (!motion || !isPlainObject(motion.animation)) {
+      return 0;
+    }
+    return Math.max(0, motionInt(motion.animation.duration, 0));
+  }
+
+  function motionBounds(motion) {
+    if (!motion || !Array.isArray(motion.keys)) {
+      return null;
+    }
+    var keys = motion.keys;
+    var bounds = {
+      minX: Infinity,
+      minY: Infinity,
+      minZ: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity,
+      maxZ: -Infinity
+    };
+    var layers = Array.isArray(state.layers) ? state.layers : [];
+    layers.forEach(function (layer, y) {
+      if (!Array.isArray(layer)) {
+        return;
+      }
+      layer.forEach(function (row, z) {
+        if (typeof row !== "string") {
+          return;
+        }
+        for (var x = 0; x < row.length; x += 1) {
+          if (keys.indexOf(row.charAt(x)) === -1) {
+            continue;
+          }
+          bounds.minX = Math.min(bounds.minX, x);
+          bounds.minY = Math.min(bounds.minY, y);
+          bounds.minZ = Math.min(bounds.minZ, z);
+          bounds.maxX = Math.max(bounds.maxX, x);
+          bounds.maxY = Math.max(bounds.maxY, y);
+          bounds.maxZ = Math.max(bounds.maxZ, z);
+        }
+      });
+    });
+    if (!Number.isFinite(bounds.minX)) {
+      return null;
+    }
+    bounds.sx = bounds.maxX - bounds.minX + 1;
+    bounds.sy = bounds.maxY - bounds.minY + 1;
+    bounds.sz = bounds.maxZ - bounds.minZ + 1;
+    return bounds;
+  }
+
+  function motionDefaultPivot(motion) {
+    var bounds = motionBounds(motion);
+    if (!bounds) {
+      return { x: 0, y: 0, z: 0 };
+    }
+    return {
+      x: bounds.sx / 2,
+      y: bounds.sy / 2,
+      z: bounds.sz / 2
+    };
+  }
+
+  function motionPivotForUi(motion) {
+    var animation = isPlainObject(motion.animation) ? motion.animation : {};
+    if (isPlainObject(animation.pivot)) {
+      return {
+        value: {
+          x: motionNumber(animation.pivot.x, 0),
+          y: motionNumber(animation.pivot.y, 0),
+          z: motionNumber(animation.pivot.z, 0)
+        },
+        automatic: false
+      };
+    }
+    return {
+      value: motionDefaultPivot(motion),
+      automatic: true
+    };
+  }
+
+  function collectMotionSymbols() {
+    var set = {};
+    Object.keys(currentUsage).forEach(function (symbol) {
+      if (symbol !== " " && symbol !== state.anchor && currentUsage[symbol] > 0) {
+        set[symbol] = true;
+      }
+    });
+    return Object.keys(set).sort(compareSymbols);
+  }
+
+  function motionKeyOwner(symbol, motion) {
+    var motions = motionsState();
+    for (var index = 0; index < motions.length; index += 1) {
+      var other = motions[index];
+      if (!other || other === motion || !Array.isArray(other.keys)) {
+        continue;
+      }
+      if (other.keys.indexOf(symbol) !== -1) {
+        return other.id || "motion " + (index + 1);
+      }
+    }
+    return "";
+  }
+
+  function motionFeedback(motion, index) {
+    if (!report || !Array.isArray(report.issues)) {
+      return null;
+    }
+    var prefix = "motion:" + index;
+    var issues = report.issues.filter(function (entry) {
+      return entry.step === "motions" && entry.field &&
+        (entry.field === prefix || entry.field.indexOf(prefix + ".") === 0);
+    });
+    if (issues.length === 0) {
+      return null;
+    }
+    var entry = issues.find(function (candidate) {
+      return candidate.severity === "error";
+    }) || issues[0];
+    return {
+      tone: entry.severity === "error" ? "is-error" : entry.severity === "warning" ? "is-warning" : "",
+      text: entry.message
+    };
+  }
+
+  function motionGlobalFeedback() {
+    if (!report || !Array.isArray(report.issues)) {
+      return null;
+    }
+    return report.issues.find(function (entry) {
+      return entry.step === "motions" && entry.field === "motions";
+    }) || null;
+  }
+
+  function updateMotionBadge() {
+    var badge = $("motionsBadge");
+    if (!badge) {
+      return;
+    }
+    var check = report && Array.isArray(report.checks) ? report.checks.find(function (entry) {
+      return entry.id === "motions";
+    }) : null;
+    var count = motionsState().length;
+    if (check && !check.ok) {
+      badge.textContent = "Erro";
+      badge.setAttribute("data-tone", "error");
+      badge.className = "badge badge-neutral";
+    } else if (count > 0) {
+      badge.textContent = count + (count === 1 ? " motion" : " motions");
+      badge.setAttribute("data-tone", "ok");
+      badge.className = "badge";
+    } else {
+      badge.textContent = "Opcional";
+      badge.setAttribute("data-tone", "warn");
+      badge.className = "badge badge-neutral";
+    }
+  }
+
+  function updateMotionListOnly() {
+    var list = $("motionList");
+    if (list) {
+      list.innerHTML = motionListHtml();
+    }
+    updateMotionBadge();
+  }
+
+  function updateMotionStageMeta() {
+    var meta = $("motionStageMeta");
+    if (!meta) {
+      return;
+    }
+    var motion = selectedMotion();
+    if (!motion) {
+      meta.textContent = "Nenhuma motion. Use editar para montar a primeira.";
+      return;
+    }
+    var keys = Array.isArray(motion.keys) && motion.keys.length > 0 ? motion.keys.join(", ") : "sem keys";
+    var bounds = motionBounds(motion);
+    var size = bounds ? bounds.sx + "×" + bounds.sy + "×" + bounds.sz : "sem blocos";
+    var pivot = motionPivotForUi(motion);
+    var pivotText = pivot.value.x + ", " + pivot.value.y + ", " + pivot.value.z +
+      (pivot.automatic ? " (centro automático)" : "");
+    meta.textContent = (trim(motion.id) || "sem id") + " · keys " + keys + " · " +
+      motionDuration(motion) + " ticks · parte " + size + " · pivot " + pivotText;
+  }
+
+  function updateMotionSummary() {
+    var summary = $("motionSummary");
+    if (!summary) {
+      return;
+    }
+    var motion = selectedMotion();
+    var animation = motion && isPlainObject(motion.animation) ? motion.animation : null;
+    var frames = animation && Array.isArray(animation.keyframes) ? animation.keyframes : [];
+    if (!motion || frames.length === 0) {
+      summary.hidden = true;
+      summary.textContent = "";
+      return;
+    }
+    var parts = frames.map(function (frame, index) {
+      var offset = isPlainObject(frame.offset) ? frame.offset : {};
+      var rotation = isPlainObject(frame.rotation) ? frame.rotation : {};
+      var easing = trim(frame.easing);
+      return "#" + index + " t=" + motionInt(frame.time, 0) +
+        " off(" + motionNumber(offset.x, 0) + "," + motionNumber(offset.y, 0) + "," +
+        motionNumber(offset.z, 0) + ")" +
+        " rot(" + motionNumber(rotation.x, 0) + "," + motionNumber(rotation.y, 0) + "," +
+        motionNumber(rotation.z, 0) + ")" +
+        (easing ? " " + easing : "");
+    });
+    summary.innerHTML = "<strong>Keyframes:</strong> " + esc(parts.join(" | "));
+    summary.hidden = false;
+  }
+
+  function motionEasingOptions(selected, allowInherit) {
+    var parts = [];
+    if (allowInherit) {
+      parts.push("<option value=''" + (!selected ? " selected" : "") + ">herdar</option>");
+    }
+    V.EASING_VALUES.forEach(function (value) {
+      parts.push("<option value='" + value + "'" + (selected === value ? " selected" : "") + ">" +
+        value + "</option>");
+    });
+    return parts.join("");
+  }
+
+  function motionDamageSourceOptions(selected) {
+    return MOTION_DAMAGE_SOURCES.map(function (id) {
+      return "<option value='" + id + "'" + (id === selected ? " selected" : "") + ">" +
+        esc(id) + "</option>";
+    }).join("");
+  }
+
+  function motionKeysHtml(motion) {
+    var symbols = collectMotionSymbols();
+    var keys = Array.isArray(motion.keys) ? motion.keys : [];
+    keys.forEach(function (key) {
+      if (symbols.indexOf(key) === -1) {
+        symbols.push(key);
+      }
+    });
+    symbols.sort(compareSymbols);
+    if (symbols.length === 0) {
+      return "<p class='field-hint'>O pattern ainda não tem símbolos além da âncora. Pinte o pattern primeiro.</p>";
+    }
+    return "<div class='motion-key-list'>" + symbols.map(function (symbol) {
+      var active = keys.indexOf(symbol) !== -1;
+      var owner = motionKeyOwner(symbol, motion);
+      var count = currentUsage[symbol] || 0;
+      var hidden = motionPreviewState.hiddenKeys[symbol] === true;
+      var classes = "motion-key-chip" + (active ? " is-active" : "") +
+        (owner ? " is-taken" : "") + (count === 0 ? " is-missing" : "") +
+        (hidden ? " is-hidden" : "");
+      var title = symbolHover(symbol) + " · " + count + " bloco(s)" +
+        (owner ? " · já usado por " + owner : "");
+      return "<span class='" + classes + "'>" +
+        "<button type='button' class='motion-key-main' data-motion-key='" + esc(symbol) +
+        "' title='" + esc(title) + "' aria-pressed='" + (active ? "true" : "false") + "'>" +
+        "<span class='motion-key-symbol' style='--c:" + getColor(symbol) + "'>" + esc(symbol) +
+        "</span><small>" + count + "×" + (owner ? " · " + esc(owner) : "") + "</small></button>" +
+        "<button type='button' class='motion-key-eye" + (hidden ? " is-off" : "") +
+        "' data-motion-key-visibility='" + esc(symbol) + "' title='" +
+        (hidden ? "Mostrar " : "Ocultar ") + esc(symbol) + " no preview' aria-pressed='" +
+        (hidden ? "true" : "false") + "'>" + (hidden ? "off" : "on") + "</button></span>";
+    }).join("") + "</div>";
+  }
+
+  function motionKeyframeRowsHtml(motion) {
+    var animation = isPlainObject(motion.animation) ? motion.animation : {};
+    var frames = Array.isArray(animation.keyframes) ? animation.keyframes : [];
+    if (frames.length === 0) {
+      return "<p class='field-hint'>Nenhum keyframe. A parte fica parada até você adicionar um.</p>";
+    }
+    return frames.map(function (frame, index) {
+      var active = index === motionPreviewState.selectedKeyframe;
+      var offset = isPlainObject(frame.offset) ? frame.offset : { x: 0, y: 0, z: 0 };
+      var rotation = isPlainObject(frame.rotation) ? frame.rotation : { x: 0, y: 0, z: 0 };
+      return "<div class='motion-keyframe-row" + (active ? " is-active" : "") +
+        "' data-keyframe-row='" + index + "'>" +
+        "<div class='motion-keyframe-head'><strong>#" + index + "</strong>" +
+        "<button type='button' class='btn btn-tiny btn-danger' data-remove-keyframe='" + index +
+        "' title='Remover keyframe'>remover</button></div>" +
+        "<div class='motion-keyframe-grid'>" +
+        "<label>time<input type='number' min='0' step='1' data-keyframe-field='time' data-keyframe-index='" +
+        index + "' value='" + esc(motionInt(frame.time, 0)) + "'></label>" +
+        ["x", "y", "z"].map(function (axis) {
+          return "<label>offset " + axis + "<input type='number' step='0.1' data-keyframe-field='offset' data-keyframe-axis='" +
+            axis + "' data-keyframe-index='" + index + "' value='" + esc(motionNumber(offset[axis], 0)) + "'></label>";
+        }).join("") +
+        ["x", "y", "z"].map(function (axis) {
+          return "<label>rotação " + axis + "<input type='number' step='1' data-keyframe-field='rotation' data-keyframe-axis='" +
+            axis + "' data-keyframe-index='" + index + "' value='" + esc(motionNumber(rotation[axis], 0)) + "'></label>";
+        }).join("") +
+        "<label>easing<select data-keyframe-field='easing' data-keyframe-index='" + index + "'>" +
+        motionEasingOptions(trim(frame.easing), true) + "</select></label>" +
+        "</div></div>";
+    }).join("");
+  }
+
+  function motionRecipeScaleOptions() {
+    var recipes = Array.isArray(state.recipes) ? state.recipes : [];
+    var options = ["<option value=''>escalar para receita…</option>"];
+    recipes.forEach(function (recipe, index) {
+      if (!isPlainObject(recipe)) {
+        return;
+      }
+      var time = motionInt(recipe.time, 0);
+      if (time <= 0) {
+        return;
+      }
+      var label = trim(recipe.file) || ("receita " + (index + 1));
+      options.push("<option value='" + time + "'>" + esc(label) + " · " + time + " ticks</option>");
+    });
+    return options.join("");
+  }
+
+  function motionDetailHtml(motion) {
+    if (!motion) {
+      return "<div class='missing-empty'>Nenhuma motion ainda. Clique em <strong>+ motion</strong> para criar a primeira parte móvel.</div>";
+    }
+    var index = motionPreviewState.selectedMotionIndex;
+    var feedback = motionFeedback(motion, index);
+    var animation = isPlainObject(motion.animation) ? motion.animation : {};
+    var pivot = motionPivotForUi(motion);
+    var serialized = JSON.stringify(V.buildMotions([motion])[0], null, 2);
+    var hasRecipeTime = (Array.isArray(state.recipes) ? state.recipes : []).some(function (recipe) {
+      return isPlainObject(recipe) && motionInt(recipe.time, 0) > 0;
+    });
+    var damageSource = trim(motion.damageSource) || "minecraft:generic";
+    var customDamageSource = MOTION_DAMAGE_SOURCES.indexOf(damageSource) === -1;
+    return "<div class='motion-detail'>" +
+      "<div class='motion-detail-actions'>" +
+      "<button type='button' class='btn btn-tiny' data-motion-action='duplicate-motion'>duplicar</button>" +
+      "<button type='button' class='btn btn-tiny btn-danger' data-motion-action='remove-motion'>remover motion</button>" +
+      "</div>" +
+      "<div class='form-grid motion-form-grid'>" +
+      "<div class='field'><label for='motionIdInput'>id</label><input id='motionIdInput' type='text' data-motion-field='id' value='" +
+      esc(trim(motion.id)) + "' spellcheck='false' autocomplete='off' placeholder='core_spin'></div>" +
+      "<div class='field'><label>duração (ticks)</label><input type='number' min='0' step='1' data-motion-field='duration' value='" +
+      esc(motionInt(animation.duration, 0)) + "'></div>" +
+      "<div class='field field-wide'><label>tempo da receita</label><select data-motion-field='scale_recipe'" +
+      (hasRecipeTime ? "" : " disabled") + ">" + motionRecipeScaleOptions() + "</select>" +
+      "<p class='field-hint'>" + (hasRecipeTime
+        ? "Reduz ou expande a duração total e recalcula o time de cada keyframe."
+        : "Nenhuma receita com time definido para escalar.") + "</p></div>" +
+      "<div class='field'><label>easing da animação</label><select data-motion-field='easing'>" +
+      motionEasingOptions(trim(animation.easing) || "linear", false) + "</select></div>" +
+      "<div class='field'><label>loop</label><label class='motion-check'><input type='checkbox' data-motion-field='loop'" +
+      (animation.loop !== false ? " checked" : "") + "> repetir ao chegar em duration</label></div>" +
+      (state.type === "storage"
+        ? "<div class='field field-wide'><label>fill_speed</label><label class='motion-check'><input type='checkbox' data-motion-field='fill_speed'" +
+          (animation.fillSpeed === true ? " checked" : "") +
+          "> acelerar a animação conforme o inventário/tanques enchem (até 2x)</label></div>"
+        : "") +
+      "<div class='field'><label>damage</label><input type='number' min='0' step='0.1' data-motion-field='damage' value='" +
+      esc(motionNumber(motion.damage, 4)) + "'></div>" +
+      "<div class='field'><label>damage_interval</label><input type='number' min='1' step='1' data-motion-field='damage_interval' value='" +
+      esc(motionInt(motion.damageInterval, 10)) + "'></div>" +
+      "<div class='field field-wide'><label>damage_source</label>" +
+      "<select data-motion-damage-select>" +
+      motionDamageSourceOptions(customDamageSource ? "" : damageSource) +
+      "<option value='__custom'" + (customDamageSource ? " selected" : "") + ">Personalizado...</option>" +
+      "</select>" +
+      "<input type='text' class='motion-damage-custom' data-motion-field='damage_source' value='" +
+      esc(customDamageSource ? damageSource : "") + "' placeholder='minecraft:generic' spellcheck='false' autocomplete='off'" +
+      (customDamageSource ? "" : " hidden") + ">" +
+      "<p class='field-hint'>Damage type usado no dano das entidades. Se o ID não existir, cai para player_attack quando houver jogador perto; senão generic.</p></div>" +
+      "<div class='field field-wide'><label>preserve_nbt</label><label class='motion-check'><input type='checkbox' data-motion-field='preserve_nbt'" +
+      (motion.preserveNbt ? " checked" : "") + "> salvar e restaurar NBT dos blocos da parte</label></div>" +
+      "<div class='field field-wide'><label>damage_entities</label><label class='motion-check'><input type='checkbox' data-motion-field='damage_entities'" +
+      (motion.damageEntities ? " checked" : "") + "> causar dano em entidades dentro da parte</label></div>" +
+      "</div>" +
+      "<div class='motion-section'><div class='motion-section-head'><div><h3>Keys da parte</h3>" +
+      "<p class='field-hint'>Cada símbolo pertence a no máximo uma motion. A âncora não pode se mover. Use on/off para esconder no preview.</p></div>" +
+      "<div class='button-row'><button type='button' class='btn btn-tiny' data-motion-action='show-all-keys'>ver todas</button>" +
+      "<button type='button' class='btn btn-tiny' data-motion-action='hide-all-keys'>ocultar todas</button></div></div>" +
+      motionKeysHtml(motion) + "</div>" +
+      "<div class='motion-section'><div class='motion-section-head'><div><h3>Pivot</h3>" +
+      "<p class='field-hint'>Em blocos a partir do canto mínimo da parte. " +
+      (pivot.automatic ? "Agora usa o centro automático da caixa." : "Pivot explícito.") + "</p></div>" +
+      "<div class='button-row'><button type='button' class='btn btn-tiny' data-motion-action='center-pivot'>usar centro</button>" +
+      "<button type='button' class='btn btn-tiny' data-motion-action='clear-pivot'>automático</button></div></div>" +
+      "<div class='motion-pivot-grid'>" +
+      ["x", "y", "z"].map(function (axis) {
+        return "<label>" + axis + "<input type='number' step='0.5' data-motion-field='pivot_" + axis + "' value='" +
+          esc(pivot.value[axis]) + "'></label>";
+      }).join("") + "</div></div>" +
+      "<div class='motion-section'><div class='motion-section-head'><div><h3>Keyframes</h3>" +
+      "<p class='field-hint'>Ordenados por time (0..duration). offset em blocos, rotação em graus.</p></div>" +
+      "<div class='button-row'><button type='button' class='btn btn-tiny' data-add-keyframe='true'>+ keyframe</button></div></div>" +
+      "<div class='motion-keyframe-list'>" + motionKeyframeRowsHtml(motion) + "</div></div>" +
+      "<p class='matcher-feedback motion-feedback " + (feedback ? feedback.tone : "") + "'" +
+      (feedback ? "" : " hidden") + ">" + (feedback ? esc(feedback.text) : "") + "</p>" +
+      "<details class='card-advanced'><summary>JSON da motion<span class='card-advanced-hint'>" +
+      esc(trim(motion.id) || "sem id") + "</span></summary><div class='card-advanced-body'>" +
+      "<code class='matcher-json motion-json'>" + esc(serialized) + "</code></div></details>" +
+      "</div>";
+  }
+
+  function motionListHtml() {
+    var motions = motionsState();
+    if (motions.length === 0) {
+      return "<div class='missing-empty'>Nenhuma motion. O multibloco fica parado; adicione uma para animar keys do pattern.</div>";
+    }
+    return motions.map(function (motion, index) {
+      if (!isPlainObject(motion)) {
+        return "";
+      }
+      var active = index === motionPreviewState.selectedMotionIndex;
+      var feedback = motionFeedback(motion, index);
+      var keys = Array.isArray(motion.keys) && motion.keys.length > 0 ? motion.keys.join(" ") : "sem keys";
+      var frames = isPlainObject(motion.animation) && Array.isArray(motion.animation.keyframes)
+        ? motion.animation.keyframes.length
+        : 0;
+      return "<button type='button' class='motion-card" + (active ? " is-active" : "") +
+        (feedback ? " is-problem" : "") + "' data-motion-index='" + index + "'>" +
+        "<span class='motion-card-id'>" + esc(trim(motion.id) || "sem id") + "</span>" +
+        "<span class='motion-card-keys'>" + esc(keys) + "</span>" +
+        "<span class='motion-card-meta'>" + motionDuration(motion) + " ticks · " +
+        frames + (frames === 1 ? " keyframe" : " keyframes") +
+        (isPlainObject(motion.animation) && motion.animation.fillSpeed === true ? " · fill" : "") + "</span>" +
+        "</button>";
+    }).join("");
+  }
+
+  function motionTimelineHtml(motion) {
+    if (!motion) {
+      return "<div class='motion-timeline-empty'>Selecione uma motion para ver a linha do tempo.</div>";
+    }
+    var duration = motionDuration(motion);
+    var animation = isPlainObject(motion.animation) ? motion.animation : {};
+    var frames = Array.isArray(animation.keyframes) ? animation.keyframes : [];
+    var markers = frames.map(function (frame, index) {
+      var time = motionNumber(frame.time, 0);
+      var percent = duration > 0 ? clamp((time / duration) * 100, 0, 100) : 0;
+      return "<button type='button' class='motion-marker' data-keyframe-jump='" + index +
+        "' style='left:" + percent + "%' title='Keyframe #" + index + " · time " + time + "'>" +
+        "<span>" + time + "</span></button>";
+    }).join("");
+    return "<div class='motion-timeline-track'>" +
+      "<div class='motion-timeline-fill'></div>" + markers +
+      "<div class='motion-playhead' id='motionPlayhead'></div></div>" +
+      "<div class='motion-timeline-scale'><span>0</span><span>" + duration + " ticks</span></div>";
+  }
+
+  function updateMotionPlayhead() {
+    var motion = selectedMotion();
+    var duration = motionDuration(motion);
+    var time = clamp(motionPreviewState.time, 0, duration);
+    var range = $("motionTimeRange");
+    if (range) {
+      range.max = String(duration);
+      if (document.activeElement !== range) {
+        range.value = String(time);
+      }
+    }
+    var label = $("motionTimeLabel");
+    if (label) {
+      label.textContent = Math.round(time) + " / " + duration + " ticks";
+    }
+    var playhead = $("motionPlayhead");
+    if (playhead) {
+      var percent = duration > 0 ? clamp((time / duration) * 100, 0, 100) : 0;
+      playhead.style.left = percent + "%";
+    }
+  }
+
+  function updateMotionTimeline() {
+    var timeline = $("motionTimeline");
+    if (timeline) {
+      timeline.innerHTML = motionTimelineHtml(selectedMotion());
+    }
+    updateMotionPlayhead();
+  }
+
+  function canUseMotionPreviewWebGL() {
+    if (motionPreviewWebGLAvailable === null) {
+      motionPreviewWebGLAvailable = Boolean(
+        MotionPreviewWebGL &&
+        typeof MotionPreviewWebGL.supported === "function" &&
+        MotionPreviewWebGL.supported()
+      );
+    }
+    return motionPreviewWebGLAvailable && !motionPreviewWebGLFailed;
+  }
+
+  function replaceMotionPreviewCanvas() {
+    var old = $("motionPreviewCanvas");
+    if (!old || !old.parentNode) {
+      return;
+    }
+    var fresh = document.createElement("canvas");
+    fresh.id = "motionPreviewCanvas";
+    fresh.setAttribute("aria-label", old.getAttribute("aria-label") || "Preview 3D das animações");
+    old.parentNode.replaceChild(fresh, old);
+  }
+
+  function motionPreviewScene(time, options) {
+    var settings = options || {};
+    var motion = selectedMotion();
+    var hiddenSymbols = settings.hiddenSymbols || motionPreviewState.hiddenKeys;
+    var hiddenCount = Object.keys(hiddenSymbols).length;
+    return {
+      layers: state.layers,
+      colors: currentColors,
+      anchor: state.anchor,
+      motions: motionsState(),
+      time: time,
+      view: settings.view || motionPreviewState.view,
+      selectedMotionId: settings.selectedMotionId !== undefined
+        ? settings.selectedMotionId
+        : (motion ? motion.id : ""),
+      hiddenSymbols: hiddenSymbols,
+      opacity: settings.opacity !== undefined ? settings.opacity : motionPreviewState.opacity,
+      emptyText: hiddenCount > 0 ? "Todas as keys visíveis estão ocultas. Use 'ver todas'." : "",
+      fallback: COLORS[1],
+      revision: motionPreviewState.revision
+    };
+  }
+
+  function drawMotionPreview() {
+    if (!state) {
+      return;
+    }
+    var scene = motionPreviewScene(motionPreviewState.time);
+    var canvas = $("motionPreviewCanvas");
+    var drew = false;
+    if (canvas && canUseMotionPreviewWebGL()) {
+      try {
+        drew = MotionPreviewWebGL.draw(canvas, scene) !== false;
+      } catch (error) {
+        if (window.console && window.console.error) {
+          window.console.error("Falha no preview WebGL; usando Canvas 2D.", error);
+        }
+        drew = false;
+      }
+      if (!drew) {
+        motionPreviewWebGLFailed = true;
+        replaceMotionPreviewCanvas();
+        canvas = $("motionPreviewCanvas");
+      }
+    }
+    if (!drew && MotionPreview) {
+      MotionPreview.draw(canvas, scene);
+    }
+  }
+
+  function motionTick(timestamp) {
+    if (!motionPreviewState.playing || activeStep !== "motions") {
+      motionPreviewState.raf = null;
+      return;
+    }
+    var last = motionPreviewState.lastFrame || timestamp;
+    var delta = Math.min(100, Math.max(0, timestamp - last));
+    motionPreviewState.lastFrame = timestamp;
+    try {
+      motionPreviewState.time += (delta / 1000) * 20 * motionPreviewState.speed;
+      var motion = selectedMotion();
+      var duration = motionDuration(motion);
+      if (duration <= 0) {
+        motionPreviewState.time = 0;
+      } else if (motion && isPlainObject(motion.animation) && motion.animation.loop !== false) {
+        motionPreviewState.time = ((motionPreviewState.time % duration) + duration) % duration;
+      }
+      drawMotionPreview();
+      updateMotionPlayhead();
+    } catch (error) {
+      if (window.console && window.console.error) {
+        window.console.error("Falha ao desenhar o preview de animação.", error);
+      }
+    }
+    if (motionPreviewState.playing) {
+      motionPreviewState.raf = window.requestAnimationFrame(motionTick);
+    } else {
+      motionPreviewState.raf = null;
+    }
+  }
+
+  function railPreviewTick(timestamp) {
+    if (activeStep === "motions") {
+      railPreviewState.raf = null;
+      return;
+    }
+    var last = railPreviewState.lastFrame || timestamp;
+    var delta = Math.min(100, Math.max(0, timestamp - last));
+    if (railPreviewState.lastFrame && delta < 50) {
+      railPreviewState.raf = window.requestAnimationFrame(railPreviewTick);
+      return;
+    }
+    railPreviewState.lastFrame = timestamp;
+    railPreviewState.time += (delta / 1000) * 20;
+    var motion = selectedMotion();
+    var duration = motionDuration(motion);
+    if (duration <= 0) {
+      railPreviewState.time = 0;
+    } else if (motion && isPlainObject(motion.animation) && motion.animation.loop !== false) {
+      railPreviewState.time = ((railPreviewState.time % duration) + duration) % duration;
+    } else {
+      railPreviewState.time = Math.min(railPreviewState.time, duration);
+    }
+    drawPreview();
+    railPreviewState.raf = window.requestAnimationFrame(railPreviewTick);
+  }
+
+  function startRailPreviewLoop() {
+    if (railPreviewState.raf || activeStep === "motions") {
+      return;
+    }
+    railPreviewState.lastFrame = 0;
+    railPreviewState.raf = window.requestAnimationFrame(railPreviewTick);
+  }
+
+  function stopRailPreviewLoop() {
+    if (railPreviewState.raf) {
+      window.cancelAnimationFrame(railPreviewState.raf);
+      railPreviewState.raf = null;
+    }
+  }
+
+  function startMotionLoop() {
+    if (motionPreviewState.raf || !motionPreviewState.playing) {
+      return;
+    }
+    motionPreviewState.lastFrame = 0;
+    motionPreviewState.raf = window.requestAnimationFrame(motionTick);
+  }
+
+  function stopMotionLoop() {
+    if (motionPreviewState.raf) {
+      window.cancelAnimationFrame(motionPreviewState.raf);
+      motionPreviewState.raf = null;
+    }
+  }
+
+  function setMotionPlaying(playing) {
+    motionPreviewState.playing = Boolean(playing);
+    var button = $("motionPlayBtn");
+    if (button) {
+      button.textContent = motionPreviewState.playing ? "pausar" : "play";
+      button.setAttribute("aria-pressed", motionPreviewState.playing ? "true" : "false");
+    }
+    if (motionPreviewState.playing) {
+      startMotionLoop();
+    } else {
+      stopMotionLoop();
+    }
+  }
+
+  function setMotionTime(value, options) {
+    var motion = selectedMotion();
+    var duration = motionDuration(motion);
+    motionPreviewState.time = clamp(motionNumber(value, 0), 0, duration);
+    if (!options || !options.keepPlaying) {
+      setMotionPlaying(false);
+    }
+    drawMotionPreview();
+    updateMotionPlayhead();
+  }
+
+  function renderMotions() {
+    motionPreviewState.revision += 1;
+    var motion = selectedMotion();
+    motionPreviewState.time = clamp(motionPreviewState.time, 0, motionDuration(motion));
+    $("motionList").innerHTML = motionListHtml();
+    $("motionDetail").innerHTML = motionDetailHtml(motion);
+    $("motionTimeline").innerHTML = motionTimelineHtml(motion);
+    updateMotionStageMeta();
+    updateMotionSummary();
+    updateMotionBadge();
+    updateMotionPlayhead();
+    var globalFeedback = motionGlobalFeedback();
+    var globalElement = $("motionGlobalFeedback");
+    if (globalElement) {
+      globalElement.hidden = !globalFeedback;
+      globalElement.className = "callout " + (globalFeedback && globalFeedback.severity === "error"
+        ? "callout-warning" : "callout-info");
+      globalElement.textContent = globalFeedback ? globalFeedback.message : "";
+    }
+    var playButton = $("motionPlayBtn");
+    if (playButton) {
+      playButton.textContent = motionPreviewState.playing ? "pausar" : "play";
+      playButton.setAttribute("aria-pressed", motionPreviewState.playing ? "true" : "false");
+    }
+    var speed = $("motionSpeed");
+    if (speed) {
+      speed.value = String(motionPreviewState.speed);
+    }
+    syncMotionCameraSelect();
+    var opacity = $("motionOpacity");
+    if (opacity) {
+      opacity.value = String(motionPreviewState.opacity);
+    }
+    var opacityLabel = $("motionOpacityLabel");
+    if (opacityLabel) {
+      opacityLabel.textContent = Math.round(motionPreviewState.opacity * 100) + "%";
+    }
+    var fullscreenButton = $("motionFullscreenBtn");
+    if (fullscreenButton) {
+      fullscreenButton.textContent = isMotionFullscreen() ? "fechar editor" : "editar";
+    }
+    drawMotionPreview();
+    if (motionPreviewState.playing) {
+      startMotionLoop();
+    }
+  }
+
+  function selectMotion(index) {
+    var motions = motionsState();
+    if (index < 0 || index >= motions.length) {
+      return;
+    }
+    motionPreviewState.selectedMotionIndex = index;
+    motionPreviewState.selectedMotionId = motions[index] ? motions[index].id : "";
+    motionPreviewState.selectedKeyframe = 0;
+    motionPreviewState.time = 0;
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function addMotion() {
+    var motion = V.createMotion();
+    motion.id = nextMotionId();
+    var available = collectMotionSymbols().filter(function (symbol) {
+      return !motionKeyOwner(symbol, null) && (currentUsage[symbol] || 0) > 0;
+    });
+    if (available.length > 0) {
+      motion.keys = [available[0]];
+    }
+    motion.animation.duration = 200;
+    motion.animation.keyframes = [
+      V.createMotionKeyframe(0),
+      Object.assign(V.createMotionKeyframe(200), {
+        rotation: { x: 0, y: 360, z: 0 }
+      })
+    ];
+    motionsState().push(motion);
+    motionPreviewState.selectedMotionIndex = motionsState().length - 1;
+    motionPreviewState.selectedMotionId = motion.id;
+    motionPreviewState.selectedKeyframe = 0;
+    motionPreviewState.time = 0;
+    renderMotions();
+    refresh({ skipMotions: true });
+    showToast("Motion " + motion.id + " criada.");
+  }
+
+  function removeMotion() {
+    var motions = motionsState();
+    var index = motionPreviewState.selectedMotionIndex;
+    var motion = motions[index];
+    if (!motion) {
+      return;
+    }
+    if (!window.confirm("Remover a motion \"" + (trim(motion.id) || "sem id") + "\"?")) {
+      return;
+    }
+    motions.splice(index, 1);
+    motionPreviewState.selectedMotionIndex = clamp(index, 0, Math.max(0, motions.length - 1));
+    motionPreviewState.selectedMotionId = motions[motionPreviewState.selectedMotionIndex]
+      ? motions[motionPreviewState.selectedMotionIndex].id
+      : "";
+    motionPreviewState.selectedKeyframe = 0;
+    motionPreviewState.time = 0;
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function duplicateMotion() {
+    var motions = motionsState();
+    var motion = motions[motionPreviewState.selectedMotionIndex];
+    if (!motion) {
+      return;
+    }
+    var copy = JSON.parse(JSON.stringify(motion));
+    copy.id = nextMotionId();
+    copy.keys = [];
+    motions.push(copy);
+    motionPreviewState.selectedMotionIndex = motions.length - 1;
+    motionPreviewState.selectedMotionId = copy.id;
+    motionPreviewState.selectedKeyframe = 0;
+    motionPreviewState.time = 0;
+    renderMotions();
+    refresh({ skipMotions: true });
+    showToast("Motion duplicada como " + copy.id + " (keys limpas para evitar conflito).");
+  }
+
+  function toggleMotionKey(symbol) {
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    if (!Array.isArray(motion.keys)) {
+      motion.keys = [];
+    }
+    var index = motion.keys.indexOf(symbol);
+    if (index === -1) {
+      var owner = motionKeyOwner(symbol, motion);
+      if (owner) {
+        showToast("A key " + symbol + " já pertence à motion " + owner + ".", "error");
+        return;
+      }
+      motion.keys.push(symbol);
+    } else {
+      motion.keys.splice(index, 1);
+    }
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function toggleKeyVisibility(symbol) {
+    if (motionPreviewState.hiddenKeys[symbol] === true) {
+      delete motionPreviewState.hiddenKeys[symbol];
+    } else {
+      motionPreviewState.hiddenKeys[symbol] = true;
+    }
+    renderMotions();
+  }
+
+  function showAllKeys() {
+    motionPreviewState.hiddenKeys = {};
+    renderMotions();
+  }
+
+  function hideAllKeys() {
+    collectMotionSymbols().forEach(function (symbol) {
+      motionPreviewState.hiddenKeys[symbol] = true;
+    });
+    renderMotions();
+  }
+
+  function scaleMotionToDuration(motion, target) {
+    if (!motion) {
+      return;
+    }
+    var previous = motionDuration(motion);
+    V.scaleMotionDuration(motion, target);
+    motionPreviewState.time = previous > 0
+      ? clamp(motionPreviewState.time * (motionDuration(motion) / previous), 0, motionDuration(motion))
+      : 0;
+    renderMotions();
+    refresh({ skipMotions: true });
+    showToast("Duração ajustada para " + motionDuration(motion) + " ticks; keyframes recalculados.");
+  }
+
+  function addMotionKeyframe() {
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    if (!isPlainObject(motion.animation)) {
+      motion.animation = V.createMotion().animation;
+    }
+    if (!Array.isArray(motion.animation.keyframes)) {
+      motion.animation.keyframes = [];
+    }
+    var duration = motionDuration(motion);
+    var time = clamp(Math.round(motionPreviewState.time), 0, duration);
+    var frame = V.createMotionKeyframe(time);
+    motion.animation.keyframes.push(frame);
+    motion.animation.keyframes.sort(function (left, right) {
+      return motionNumber(left.time, 0) - motionNumber(right.time, 0);
+    });
+    motionPreviewState.selectedKeyframe = motion.animation.keyframes.indexOf(frame);
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function removeMotionKeyframe(index) {
+    var motion = selectedMotion();
+    if (!motion || !isPlainObject(motion.animation) || !Array.isArray(motion.animation.keyframes)) {
+      return;
+    }
+    motion.animation.keyframes.splice(index, 1);
+    motionPreviewState.selectedKeyframe = clamp(index, 0, Math.max(0, motion.animation.keyframes.length - 1));
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function centerMotionPivot() {
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    if (!isPlainObject(motion.animation)) {
+      motion.animation = V.createMotion().animation;
+    }
+    motion.animation.pivot = motionDefaultPivot(motion);
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function clearMotionPivot() {
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    if (isPlainObject(motion.animation)) {
+      motion.animation.pivot = null;
+    }
+    renderMotions();
+    refresh({ skipMotions: true });
+  }
+
+  function onMotionListClick(event) {
+    var card = closest(event.target, "[data-motion-index]");
+    if (!card) {
+      return;
+    }
+    var index = parseInt(card.getAttribute("data-motion-index"), 10);
+    if (Number.isInteger(index)) {
+      selectMotion(index);
+    }
+  }
+
+  function onMotionDetailInput(event) {
+    var target = event.target;
+    if (!target || (target.tagName !== "INPUT" && target.tagName !== "SELECT")) {
+      return;
+    }
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    var field = target.getAttribute("data-motion-field");
+    var keyframeField = target.getAttribute("data-keyframe-field");
+    if (field === "scale_recipe") {
+      return;
+    }
+    if (field) {
+      if (field === "id") {
+        motion.id = target.value;
+        motionPreviewState.selectedMotionId = motion.id;
+        updateMotionListOnly();
+      } else if (field === "duration") {
+        if (!isPlainObject(motion.animation)) {
+          motion.animation = V.createMotion().animation;
+        }
+        motion.animation.duration = target.value;
+        updateMotionTimeline();
+      } else if (field === "easing") {
+        if (!isPlainObject(motion.animation)) {
+          motion.animation = V.createMotion().animation;
+        }
+        motion.animation.easing = target.value;
+      } else if (field === "damage") {
+        motion.damage = target.value;
+      } else if (field === "damage_interval") {
+        motion.damageInterval = target.value;
+      } else if (field === "damage_source") {
+        motion.damageSource = target.value;
+      } else if (field === "pivot_x" || field === "pivot_y" || field === "pivot_z") {
+        if (!isPlainObject(motion.animation)) {
+          motion.animation = V.createMotion().animation;
+        }
+        var pivot = motionPivotForUi(motion).value;
+        pivot[field.slice(-1)] = target.value;
+        motion.animation.pivot = pivot;
+      }
+    } else if (keyframeField) {
+      var frameIndex = parseInt(target.getAttribute("data-keyframe-index"), 10);
+      var frames = isPlainObject(motion.animation) && Array.isArray(motion.animation.keyframes)
+        ? motion.animation.keyframes
+        : [];
+      var frame = frames[frameIndex];
+      if (!frame) {
+        return;
+      }
+      if (keyframeField === "time") {
+        frame.time = target.value;
+        updateMotionTimeline();
+      } else if (keyframeField === "offset" || keyframeField === "rotation") {
+        var axis = target.getAttribute("data-keyframe-axis");
+        if (axis) {
+          if (!isPlainObject(frame[keyframeField])) {
+            frame[keyframeField] = { x: 0, y: 0, z: 0 };
+          }
+          frame[keyframeField][axis] = target.value;
+        }
+      } else if (keyframeField === "easing") {
+        frame.easing = target.value;
+      }
+    } else {
+      return;
+    }
+    updateMotionStageMeta();
+    updateMotionSummary();
+    updateMotionBadge();
+    drawMotionPreview();
+    if (motionPreviewState.playing) {
+      startMotionLoop();
+    }
+    refresh({ skipMotions: true });
+  }
+
+  function onMotionDetailChange(event) {
+    var target = event.target;
+    if (!target) {
+      return;
+    }
+    var motion = selectedMotion();
+    if (!motion) {
+      return;
+    }
+    if (target.hasAttribute("data-motion-damage-select")) {
+      var damageSource = target.value;
+      var damageInput = $("motionDetail").querySelector(".motion-damage-custom");
+      if (damageSource === "__custom") {
+        if (damageInput) {
+          damageInput.value = trim(motion.damageSource) || "minecraft:generic";
+          damageInput.hidden = false;
+          damageInput.focus();
+          damageInput.select();
+        }
+      } else {
+        motion.damageSource = damageSource;
+        if (damageInput) {
+          damageInput.value = damageSource;
+          damageInput.hidden = true;
+        }
+      }
+      updateMotionStageMeta();
+      updateMotionSummary();
+      updateMotionBadge();
+      drawMotionPreview();
+      refresh({ skipMotions: true });
+      return;
+    }
+    var field = target.getAttribute("data-motion-field");
+    if (!field) {
+      return;
+    }
+    if (field === "loop") {
+      if (!isPlainObject(motion.animation)) {
+        motion.animation = V.createMotion().animation;
+      }
+      motion.animation.loop = target.checked;
+    } else if (field === "fill_speed") {
+      if (!isPlainObject(motion.animation)) {
+        motion.animation = V.createMotion().animation;
+      }
+      motion.animation.fillSpeed = target.checked;
+    } else if (field === "preserve_nbt") {
+      motion.preserveNbt = target.checked;
+    } else if (field === "damage_entities") {
+      motion.damageEntities = target.checked;
+    } else if (field === "easing") {
+      if (!isPlainObject(motion.animation)) {
+        motion.animation = V.createMotion().animation;
+      }
+      motion.animation.easing = target.value;
+    } else if (field === "duration") {
+      if (!isPlainObject(motion.animation)) {
+        motion.animation = V.createMotion().animation;
+      }
+      motion.animation.duration = target.value;
+      updateMotionTimeline();
+    } else if (field === "scale_recipe") {
+      var targetDuration = motionInt(target.value, 0);
+      if (targetDuration > 0) {
+        scaleMotionToDuration(motion, targetDuration);
+      }
+      return;
+    } else {
+      return;
+    }
+    updateMotionStageMeta();
+    updateMotionSummary();
+    updateMotionBadge();
+    drawMotionPreview();
+    if (motionPreviewState.playing) {
+      startMotionLoop();
+    }
+    refresh({ skipMotions: true });
+  }
+
+  function onMotionDetailClick(event) {
+    var visibilityButton = closest(event.target, "[data-motion-key-visibility]");
+    if (visibilityButton) {
+      toggleKeyVisibility(visibilityButton.getAttribute("data-motion-key-visibility"));
+      return;
+    }
+    var keyButton = closest(event.target, "[data-motion-key]");
+    if (keyButton) {
+      toggleMotionKey(keyButton.getAttribute("data-motion-key"));
+      return;
+    }
+    var addFrame = closest(event.target, "[data-add-keyframe]");
+    if (addFrame) {
+      addMotionKeyframe();
+      return;
+    }
+    var removeFrame = closest(event.target, "[data-remove-keyframe]");
+    if (removeFrame) {
+      removeMotionKeyframe(parseInt(removeFrame.getAttribute("data-remove-keyframe"), 10));
+      return;
+    }
+    var action = closest(event.target, "[data-motion-action]");
+    if (!action) {
+      return;
+    }
+    var name = action.getAttribute("data-motion-action");
+    if (name === "center-pivot") {
+      centerMotionPivot();
+    } else if (name === "clear-pivot") {
+      clearMotionPivot();
+    } else if (name === "remove-motion") {
+      removeMotion();
+    } else if (name === "duplicate-motion") {
+      duplicateMotion();
+    } else if (name === "show-all-keys") {
+      showAllKeys();
+    } else if (name === "hide-all-keys") {
+      hideAllKeys();
+    }
+  }
+
+  function onMotionTimelineClick(event) {
+    var marker = closest(event.target, "[data-keyframe-jump]");
+    if (!marker) {
+      return;
+    }
+    var motion = selectedMotion();
+    if (!motion || !isPlainObject(motion.animation) || !Array.isArray(motion.animation.keyframes)) {
+      return;
+    }
+    var index = parseInt(marker.getAttribute("data-keyframe-jump"), 10);
+    var frame = motion.animation.keyframes[index];
+    if (!frame) {
+      return;
+    }
+    motionPreviewState.selectedKeyframe = index;
+    setMotionTime(motionNumber(frame.time, 0));
+    renderMotions();
+  }
+
+  function toggleMotionPlay() {
+    setMotionPlaying(!motionPreviewState.playing);
+    updateMotionPlayhead();
+  }
+
+  function resetMotionTime() {
+    setMotionTime(0);
+  }
+
+  function onMotionTimeRangeInput(event) {
+    setMotionTime(event.target.value);
+  }
+
+  function onMotionSpeedChange(event) {
+    motionPreviewState.speed = clamp(motionNumber(event.target.value, 1), 0.1, 8);
+    drawMotionPreview();
+  }
+
+  function motionSection() {
+    return document.querySelector(".view[data-view='motions']");
+  }
+
+  function isMotionFullscreen() {
+    var section = motionSection();
+    return Boolean(section && section.classList.contains("is-motion-fullscreen"));
+  }
+
+  function closeMotionPanel() {
+    var section = motionSection();
+    if (section) {
+      section.classList.remove("is-panel-open");
+    }
+    var button = $("motionPanelBtn");
+    if (button) {
+      button.setAttribute("aria-pressed", "false");
+    }
+  }
+
+  function setMotionFullscreen(enabled) {
+    var section = motionSection();
+    if (!section) {
+      return;
+    }
+    var active = Boolean(enabled);
+    section.classList.toggle("is-motion-fullscreen", active);
+    if (!active) {
+      closeMotionPanel();
+    }
+    document.body.classList.toggle("motion-fullscreen-open", active);
+    var fullscreenButton = $("motionFullscreenBtn");
+    if (fullscreenButton) {
+      fullscreenButton.textContent = active ? "fechar editor" : "editar";
+      fullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+    window.setTimeout(drawMotionPreview, 50);
+  }
+
+  function toggleMotionFullscreen() {
+    setMotionFullscreen(!isMotionFullscreen());
+  }
+
+  function toggleMotionPanel() {
+    var section = motionSection();
+    if (!section || !section.classList.contains("is-motion-fullscreen")) {
+      return;
+    }
+    var open = section.classList.toggle("is-panel-open");
+    var button = $("motionPanelBtn");
+    if (button) {
+      button.setAttribute("aria-pressed", open ? "true" : "false");
+    }
+  }
+
+  function onMotionOpacityInput(event) {
+    motionPreviewState.opacity = clamp(motionNumber(event.target.value, 0.65), 0.15, 1);
+    var label = $("motionOpacityLabel");
+    if (label) {
+      label.textContent = Math.round(motionPreviewState.opacity * 100) + "%";
+    }
+    drawMotionPreview();
+  }
+
+  function syncMotionCameraSelect() {
+    var select = $("motionCamera");
+    if (select) {
+      select.value = motionPreviewState.camera;
+    }
+  }
+
+  function applyMotionCamera(name) {
+    if (name === "free") {
+      motionPreviewState.camera = "free";
+      syncMotionCameraSelect();
+      return;
+    }
+    var preset = MOTION_CAMERA_VIEWS[name];
+    if (!preset) {
+      return;
+    }
+    motionPreviewState.camera = name;
+    motionPreviewState.view = {
+      yaw: preset.yaw,
+      pitch: preset.pitch,
+      zoom: preset.zoom
+    };
+    syncMotionCameraSelect();
+    drawMotionPreview();
+  }
+
+  function onMotionCameraChange(event) {
+    applyMotionCamera(event.target.value);
+  }
+
+  function resetMotionPreviewView() {
+    applyMotionCamera("isometric");
+  }
+
+  function beginMotionPreviewDrag(event) {
+    var surface = $("motionCanvasWrap");
+    if (!surface) {
+      return;
+    }
+    if (surface.setPointerCapture) {
+      surface.setPointerCapture(event.pointerId);
+    }
+    surface.classList.add("is-dragging");
+    motionPreviewState.dragging = true;
+    motionPreviewState.lastX = event.clientX;
+    motionPreviewState.lastY = event.clientY;
+  }
+
+  function moveMotionPreviewDrag(event) {
+    if (!motionPreviewState.dragging) {
+      return;
+    }
+    var dx = event.clientX - motionPreviewState.lastX;
+    var dy = event.clientY - motionPreviewState.lastY;
+    motionPreviewState.lastX = event.clientX;
+    motionPreviewState.lastY = event.clientY;
+    motionPreviewState.view.yaw += dx * 0.01;
+    motionPreviewState.view.pitch = clamp(motionPreviewState.view.pitch + dy * 0.01, -1.45, 1.45);
+    motionPreviewState.camera = "free";
+    syncMotionCameraSelect();
+    drawMotionPreview();
+  }
+
+  function endMotionPreviewDrag(event) {
+    var surface = $("motionCanvasWrap");
+    if (!surface) {
+      return;
+    }
+    if (surface.hasPointerCapture && surface.hasPointerCapture(event.pointerId)) {
+      surface.releasePointerCapture(event.pointerId);
+    }
+    surface.classList.remove("is-dragging");
+    motionPreviewState.dragging = false;
+  }
+
+  function onMotionPreviewWheel(event) {
+    event.preventDefault();
+    motionPreviewState.view.zoom = clamp(
+      motionPreviewState.view.zoom * Math.exp(-event.deltaY * 0.0015), 0.35, 4);
+    drawMotionPreview();
   }
 
   function updateMatcherCard(symbol) {
@@ -1405,7 +3855,7 @@
     var customElements = isPlainObject(state.gui) && Array.isArray(state.gui.elements)
       ? state.gui.elements.filter(isPlainObject)
       : [];
-    var customGui = customElements.length > 0;
+    var customGui = isPlainObject(state.gui);
     var dimensions = customGui ? guiCanvasSize(state.gui) : {
       width: V.GUI_DEFAULT_WIDTH,
       height: V.GUI_DEFAULT_HEIGHT
@@ -1414,9 +3864,14 @@
       return trim(element.type) === "slot";
     });
     layoutSlotGuiPreview(content, dimensions);
+    applyGuiPreviewBackground(content, customGui ? state.gui : null);
+    frame.classList.add("has-gui-texture");
 
     if (customGui) {
-      items.push(customElements.map(guiCanvasElementMarkup).join(""));
+      var hasInventoryLabelText = customElements.some(isInventoryLabelText);
+      items.push(customElements.map(function (element, index) {
+        return guiCanvasElementMarkup(element, index, hasInventoryLabelText);
+      }).join(""));
       if (!hasSlotElements) {
         var customSlots = slotGuiPreviewMarkup(source, dimensions.width, dimensions.height, hidden);
         items.push(customSlots.html);
@@ -1431,16 +3886,6 @@
 
       items.push("<span class='gui-preview-title'>" + esc(trim(state.path) || "Título") + "</span>");
       items.push("<span class='gui-preview-caption'>Inventário</span>");
-      for (var row = 0; row < 3; row++) {
-        for (var column = 0; column < 9; column++) {
-          items.push("<i class='gui-preview-ghost' style='left:" + (7 + column * 18) +
-            "px;top:" + (83 + row * 18) + "px'></i>");
-        }
-      }
-      for (var hotbar = 0; hotbar < 9; hotbar++) {
-        items.push("<i class='gui-preview-ghost' style='left:" + (7 + hotbar * 18) +
-          "px;top:141px'></i>");
-      }
 
       var barIndex = 0;
       if (energy) {
@@ -1498,6 +3943,38 @@
           : "Sem item_slots; a prévia mostra só o layout fallback.";
       }
     }
+  }
+
+  var SLOT_PREVIEW_ZOOM = 1.9;
+
+  function slotPreviewZoomNode() {
+    return $("slotGuiPreviewZoom");
+  }
+
+  function onSlotPreviewMouseMove(event) {
+    var frame = $("slotGuiPreview");
+    var zoom = slotPreviewZoomNode();
+    if (!frame || !zoom) {
+      return;
+    }
+    var rect = frame.getBoundingClientRect();
+    var width = frame.clientWidth || 176;
+    var height = frame.clientHeight || 166;
+    var x = event.clientX - rect.left - frame.clientLeft;
+    var y = event.clientY - rect.top - frame.clientTop;
+    var originX = Math.max(0, Math.min(100, (x / width) * 100));
+    var originY = Math.max(0, Math.min(100, (y / height) * 100));
+    zoom.style.transformOrigin = originX.toFixed(2) + "% " + originY.toFixed(2) + "%";
+    zoom.style.transform = "scale(" + SLOT_PREVIEW_ZOOM + ")";
+  }
+
+  function resetSlotPreviewZoom() {
+    var zoom = slotPreviewZoomNode();
+    if (!zoom) {
+      return;
+    }
+    zoom.style.transform = "scale(1)";
+    zoom.style.transformOrigin = "50% 50%";
   }
 
   function renderSlots() {
@@ -1889,6 +4366,7 @@
   function renderCapabilityPorts() {
     var ports = isPlainObject(state.capabilityPorts) ? state.capabilityPorts : null;
     var availability = V.capabilityPortAvailability(state.capabilities);
+    var available = V.recipePatternSymbols(state);
     ["item", "energy", "fluid", "chemical", "mana", "essentia"].forEach(function (key) {
       var input = document.querySelector("[data-capability-port='" + key + "']");
       if (!input) {
@@ -1899,15 +4377,69 @@
       if (input !== document.activeElement) {
         input.value = ports ? V.capabilityPortText(ports[key]) : "";
       }
+      var picks = document.querySelector("[data-port-picks='" + key + "']");
+      if (!picks) {
+        return;
+      }
+      if (!availability[key] || available.length === 0) {
+        picks.innerHTML = "";
+        return;
+      }
+      var selected = ports && Array.isArray(ports[key]) ? ports[key] : [];
+      picks.innerHTML = available.map(function (symbol) {
+        var isSelected = selected.indexOf(symbol) !== -1;
+        return "<button type='button' class='port-pick" + (isSelected ? " is-active" : "") +
+          "' data-port-pick='" + esc(key) + "' data-port-symbol='" + esc(symbol) +
+          "' aria-pressed='" + (isSelected ? "true" : "false") + "' title='" +
+          esc(symbolHover(symbol)) + (isSelected ? " · remover da porta" : " · adicionar à porta") +
+          "'><span class='swatch' style='--c:" + getColor(symbol) + "'>" + esc(symbol) + "</span></button>";
+      }).join("");
     });
     updateCapabilityPortAvailability(availability);
     updateCapabilityPortsSummary();
     var symbols = $("capabilityPortSymbols");
     if (symbols) {
-      var available = V.recipePatternSymbols(state);
-      symbols.textContent = available.length > 0
-        ? "Símbolos disponíveis no pattern: " + available.join(", ") + "."
-        : "Sem símbolos no pattern; use IDs de bloco ou tags.";
+      if (available.length > 0) {
+        symbols.innerHTML = "Símbolos disponíveis no pattern: " + available.map(function (symbol) {
+          return "<span class='symbol-hover' title='" + esc(symbolHover(symbol)) + "'>" + esc(symbol) + "</span>";
+        }).join(", ") + ".";
+      } else {
+        symbols.textContent = "Sem símbolos no pattern; use IDs de bloco ou tags.";
+      }
+    }
+  }
+
+  function onCapabilityPortsClick(event) {
+    var button = closest(event.target, "[data-port-pick]");
+    if (!button || button.disabled) {
+      return;
+    }
+    var key = button.getAttribute("data-port-pick");
+    var symbol = button.getAttribute("data-port-symbol");
+    if (!key || !symbol) {
+      return;
+    }
+    var ports = ensureCapabilityPorts();
+    var list = Array.isArray(ports[key]) ? ports[key].slice() : [];
+    var index = list.indexOf(symbol);
+    if (index === -1) {
+      list.push(symbol);
+    } else {
+      list.splice(index, 1);
+    }
+    ports[key] = list;
+    renderCapabilityPorts();
+    refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
+    var nextButton = null;
+    var buttons = document.querySelectorAll("[data-port-pick='" + key + "']");
+    for (var buttonIndex = 0; buttonIndex < buttons.length; buttonIndex += 1) {
+      if (buttons[buttonIndex].getAttribute("data-port-symbol") === symbol) {
+        nextButton = buttons[buttonIndex];
+        break;
+      }
+    }
+    if (nextButton) {
+      nextButton.focus();
     }
   }
 
@@ -1922,7 +4454,7 @@
     }
     var ports = ensureCapabilityPorts();
     ports[key] = V.parseCapabilityPortText(target.value);
-    updateCapabilityPortsSummary();
+    renderCapabilityPorts();
     refresh({ skipPattern: true, skipMatchers: true, skipSlots: true, skipCapabilities: true });
   }
 
@@ -3261,18 +5793,19 @@
   }
 
   var GUI_ELEMENT_LABELS = {
-    title: "title",
-    text: "texto",
-    player_inventory: "inventário do jogador",
-    slot: "slot",
-    energy_bar: "barra de energia",
-    fluid_bar: "barra de fluido",
-    chemical_bar: "barra de chemical",
-    mana_bar: "barra de mana",
-    resource_list: "lista de essentia",
-    progress_bar: "barra de progresso",
-    arrow: "seta",
-    entity: "entidade"
+    title: "Machine Name",
+    text: "Inventory Label",
+    player_inventory: "Inventário do jogador",
+    slot: "Slot",
+    energy_bar: "Barra de Energia",
+    fluid_bar: "Barra de Fluido",
+    chemical_bar: "Barra de Gás (Mekanism)",
+    mana_bar: "Barra de Mana (Botania)",
+    resource_list: "Lista de Essentias (Thaumaturge)",
+    progress_bar: "Barra de Progresso",
+    arrow: "Seta",
+    entity: "Entidade(s)",
+    booster_button: "Botão de Boosters"
   };
 
   function guiLabel(type) {
@@ -3280,11 +5813,11 @@
   }
 
   function guiElementUsesSize(type) {
-    return ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity"].indexOf(type) !== -1;
+    return ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "resource_list", "progress_bar", "arrow", "entity", "booster_button"].indexOf(type) !== -1;
   }
 
   function guiElementUsesText(type) {
-    return ["title", "text", "player_inventory"].indexOf(type) !== -1;
+    return ["title", "text", "player_inventory", "booster_button"].indexOf(type) !== -1;
   }
 
   function guiElementUsesDirection(type) {
@@ -3312,6 +5845,9 @@
     var slots = Array.isArray(state.itemSlots) ? state.itemSlots : [];
     var hasSlotCoordinates = slots.some(guiSlotHasCoordinate);
     var hasRecipe = state.type === "recipe";
+    var upgrades = upgradesState();
+    var hasBoosters = Boolean(upgrades && Array.isArray(upgrades.boosters) &&
+      upgrades.boosters.filter(boosterEnabled).length > 0);
     return {
       title: true,
       text: true,
@@ -3324,7 +5860,8 @@
       resource_list: Boolean(capabilities && isPlainObject(capabilities.essentia)),
       progress_bar: hasRecipe,
       arrow: hasRecipe,
-      entity: hasRecipe
+      entity: hasRecipe,
+      booster_button: hasBoosters
     };
   }
 
@@ -3349,6 +5886,9 @@
     }
     if (type === "slot") {
       return "slot exige item_slots sem x/y (formato antigo).";
+    }
+    if (type === "booster_button") {
+      return "Adicione ao menos um booster ativo na etapa 04 para liberar booster_button.";
     }
     return "Elemento indisponível para a configuração atual.";
   }
@@ -3376,6 +5916,9 @@
     if (!availability.slot) {
       missing.push("slot (item_slots sem x/y)");
     }
+    if (!availability.booster_button) {
+      missing.push("booster_button (upgrades)");
+    }
     return missing.length > 0 ? "Indisponível: " + missing.join(" · ") + "." : "";
   }
 
@@ -3389,7 +5932,9 @@
       var allowed = availability[option.value] !== false;
       option.hidden = !allowed;
       option.disabled = !allowed;
-      option.title = allowed ? "" : guiElementUnavailableReason(option.value);
+      option.title = allowed
+        ? (GUI_ELEMENT_HELP[option.value] || "")
+        : guiElementUnavailableReason(option.value);
     });
     var selected = select.options[select.selectedIndex];
     if (selected && selected.disabled) {
@@ -3450,7 +5995,7 @@
       return "Sem GUI customizada; o loader usa o layout fallback 176x166.";
     }
     var elements = Array.isArray(gui.elements) ? gui.elements : [];
-    var texture = trim(gui.texture) ? "textura própria" : "sem textura";
+    var texture = gui.customTexture ? "textura custom" : trim(gui.texture) ? "textura própria" : "sem textura";
     return guiBaseValue(gui.width, V.GUI_DEFAULT_WIDTH) + "x" +
       guiBaseValue(gui.height, V.GUI_DEFAULT_HEIGHT) + " - " +
       elements.length + (elements.length === 1 ? " elemento - " : " elementos - ") + texture;
@@ -3464,11 +6009,28 @@
     return document.querySelector("[data-gui-field='" + field + "']");
   }
 
+  var GUI_ELEMENT_HELP = {
+    title: "Nome da máquina exibido no topo da GUI.",
+    text: "Texto livre; por padrão é o rótulo do inventário em 8,71.",
+    player_inventory: "Área dos slots do jogador; o rótulo padrão é o elemento text.",
+    slot: "Slot de item ligado a um item_slots (formato antigo).",
+    energy_bar: "Barra de energia (FE) da máquina.",
+    fluid_bar: "Barra de um tanque de fluido existente.",
+    chemical_bar: "Barra de um tanque chemical.",
+    mana_bar: "Barra de mana.",
+    resource_list: "Grade de recursos (essentia) em células 18x18.",
+    progress_bar: "Barra de progresso da receita.",
+    arrow: "Seta de progresso da receita, com fundo e overlay animado.",
+    entity: "Renderiza entidades de input/output da receita.",
+    booster_button: "Botão B que destaca os boosters no mundo."
+  };
+
   function guiTypeOptions(selected) {
     var availability = guiElementAvailability();
     return V.GUI_ELEMENT_TYPES.map(function (type) {
       var allowed = type === selected || availability[type] !== false;
       return "<option value='" + esc(type) + "'" + (type === selected ? " selected" : "") +
+        " title='" + esc(GUI_ELEMENT_HELP[type] || "") + "'" +
         (allowed ? "" : " hidden disabled") + ">" + esc(type) + "</option>";
     }).join("");
   }
@@ -3524,7 +6086,7 @@
       hasFields = true;
     }
     if (type === "title" || type === "text" || type === "player_inventory" ||
-        type === "energy_bar" || type === "progress_bar") {
+        type === "energy_bar" || type === "progress_bar" || type === "booster_button") {
       html += guiInputField("color", "color", element.color, "text", undefined, "vazio = default");
       hasFields = true;
     }
@@ -3567,14 +6129,43 @@
         "</div>"
       : "";
     var advanced = guiElementAdvancedForm(element);
-    return "<div class='gui-element-card' data-gui-element-index='" + index + "'>" +
-      "<div class='gui-element-head'><div><strong>" + (index + 1) + ". " + esc(guiLabel(type)) +
-      "</strong><small>" + esc(meta.join(" - ") || type) + "</small></div>" + moveControls +
-      "<button type='button' class='btn btn-tiny btn-danger' data-action='remove-gui-element'>remover</button></div>" +
-      guiElementPrimaryForm(element) +
+    return "<details class='gui-element-card' data-gui-element-index='" + index + "'>" +
+      "<summary class='gui-element-summary'>" +
+      "<span class='gui-element-title'>" + (index + 1) + ". " + esc(guiLabel(type)) + "</span>" +
+      "<span class='gui-element-type'>" + esc(type) + "</span>" +
+      "<span class='gui-element-meta'>" + esc(meta.join(" - ")) + "</span>" +
+      moveControls +
+      "<button type='button' class='btn btn-tiny btn-danger' data-action='remove-gui-element'>remover</button>" +
+      "</summary>" +
+      "<div class='gui-element-body'>" + guiElementPrimaryForm(element) +
       (advanced ? "<details class='card-advanced'><summary>Propriedades avançadas" +
         "<span class='card-advanced-hint'>tamanho, cor e textura</span></summary>" +
-        "<div class='card-advanced-body'>" + advanced + "</div></details>" : "") + "</div>";
+        "<div class='card-advanced-body'>" + advanced + "</div></details>" : "") +
+      "</div></details>";
+  }
+
+  var GUI_PREVIEW_ASSET_BASE = "assets/gui/";
+  var GUI_PREVIEW_DEFAULT_TEXTURE = GUI_PREVIEW_ASSET_BASE + "gui.png";
+  var GUI_PREVIEW_SLOT_TEXTURE = GUI_PREVIEW_ASSET_BASE + "slot.png";
+  var GUI_PREVIEW_ARROW_BASE = GUI_PREVIEW_ASSET_BASE + "seta_fundo.png";
+  var GUI_PREVIEW_ARROW_OVERLAY = GUI_PREVIEW_ASSET_BASE + "seta_overlay.png";
+
+  function guiPreviewTexture(gui) {
+    return isPlainObject(gui) && trim(gui.previewTexture)
+      ? trim(gui.previewTexture)
+      : GUI_PREVIEW_DEFAULT_TEXTURE;
+  }
+
+  function applyGuiPreviewBackground(node, gui) {
+    if (!node) {
+      return;
+    }
+    var texture = guiPreviewTexture(gui);
+    node.style.backgroundImage = "url('" + texture + "')";
+    node.style.backgroundSize = "100% 100%";
+    node.style.backgroundPosition = "top left";
+    node.style.backgroundRepeat = "no-repeat";
+    node.classList.add("has-gui-texture");
   }
 
   function guiCanvasSize(gui) {
@@ -3590,7 +6181,7 @@
     var safeWidth = width !== null && width > 0 ? width : null;
     var safeHeight = height !== null && height > 0 ? height : null;
     if (type === "player_inventory") {
-      return { width: 162, height: 76 };
+      return { width: 160, height: 74 };
     }
     if (type === "title" || type === "text") {
       return { width: safeWidth || 80, height: safeHeight || 10 };
@@ -3613,7 +6204,17 @@
     if (type === "entity") {
       return { width: safeWidth || 36, height: safeHeight || 36 };
     }
+    if (type === "booster_button") {
+      return { width: safeWidth || 8, height: safeHeight || 8 };
+    }
     return { width: safeWidth || 16, height: safeHeight || 16 };
+  }
+
+  function guiCanvasDragSize(type, width, height) {
+    if (type === "player_inventory") {
+      return { width: 162, height: 76 };
+    }
+    return guiCanvasDisplaySize(type, width, height);
   }
 
   function guiCanvasLabel(element, type) {
@@ -3621,7 +6222,7 @@
       return trim(element.text) || guiLabel(type);
     }
     if (type === "player_inventory") {
-      return "inventário";
+      return trim(element.text) || "inventário";
     }
     if (type === "slot") {
       return trim(element.slot) || "slot";
@@ -3650,18 +6251,30 @@
     if (type === "entity") {
       return "entidade";
     }
+    if (type === "booster_button") {
+      return trim(element.text) || "B";
+    }
     return guiLabel(type);
   }
 
-  function guiCanvasElementMarkup(element, index) {
+  function isInventoryLabelText(element) {
+    if (!isPlainObject(element) || trim(element.type) !== "text" || !trim(element.text)) {
+      return false;
+    }
+    var x = parseIntStrict(element.x);
+    var y = parseIntStrict(element.y);
+    return x !== null && y !== null && Math.abs(x - 8) <= 2 && Math.abs(y - 71) <= 4;
+  }
+
+  function guiCanvasElementMarkup(element, index, hasInventoryLabelText) {
     var type = trim(element.type) || "text";
     var x = parseIntStrict(element.x);
     var y = parseIntStrict(element.y);
     var width = parseIntStrict(element.width);
     var height = parseIntStrict(element.height);
     var size = guiCanvasDisplaySize(type, width, height);
-    var offsetX = type === "slot" || type === "player_inventory" ? -1 : 0;
-    var offsetY = type === "player_inventory" ? -1 : 0;
+    var offsetX = type === "slot" || type === "title" || type === "text" ? -1 : 0;
+    var offsetY = 0;
     var style = "left:" + (x === null ? 0 : x + offsetX) + "px;top:" + (y === null ? 0 : y + offsetY) +
       "px;width:" + size.width + "px;height:" + size.height + "px;";
     var isBar = ["energy_bar", "fluid_bar", "chemical_bar", "mana_bar", "progress_bar"].indexOf(type) !== -1;
@@ -3687,12 +6300,15 @@
     var classes = "gui-canvas-element";
     if (isBar) {
       classes += " gui-canvas-bar";
+    } else if (type === "booster_button") {
+      classes += " gui-canvas-button";
     }
     var title = guiLabel(type) + " • x=" + (x === null ? 0 : x) + " y=" + (y === null ? 0 : y);
     if (trim(element.capability)) {
       title += " • " + trim(element.capability);
     }
-    var showLabel = !isBar || (size.width >= 18 && size.height >= 14);
+    var showLabel = !(type === "player_inventory" && hasInventoryLabelText) &&
+      (!isBar || (size.width >= 18 && size.height >= 14));
     return "<div class='" + classes + "' data-gui-preview-index='" + index +
       "' data-gui-preview-type='" + esc(type) + "' data-direction='" + esc(trim(element.direction) || "up") +
       "' data-shadow='" + (element.shadow === false ? "false" : "true") +
@@ -3723,10 +6339,14 @@
     canvas.style.width = dimensions.width + "px";
     canvas.style.height = dimensions.height + "px";
     canvas.style.transform = "scale(" + scale + ")";
+    applyGuiPreviewBackground(canvas, gui);
     canvas.setAttribute("data-scale", String(scale));
     canvas.setAttribute("data-gui-width", String(dimensions.width));
     canvas.setAttribute("data-gui-height", String(dimensions.height));
-    var parts = elements.map(guiCanvasElementMarkup);
+    var hasInventoryLabelText = elements.some(isInventoryLabelText);
+    var parts = elements.map(function (element, index) {
+      return guiCanvasElementMarkup(element, index, hasInventoryLabelText);
+    });
     var hasSlotElements = elements.some(function (element) {
       return trim(element.type) === "slot";
     });
@@ -3857,6 +6477,24 @@
     if (textureHeightInput) {
       textureHeightInput.value = guiBaseValue(gui.textureHeight, V.GUI_DEFAULT_TEXTURE_SIZE);
     }
+    var customTexture = Boolean(gui.customTexture);
+    [widthInput, heightInput, textureWidthInput, textureHeightInput].forEach(function (input) {
+      if (input) {
+        input.disabled = customTexture;
+      }
+    });
+    var resetButton = $("guiTextureResetBtn");
+    if (resetButton) {
+      resetButton.hidden = !customTexture;
+    }
+    var textureHint = $("guiTextureHint");
+    if (textureHint) {
+      textureHint.textContent = customTexture
+        ? "Textura custom " + guiBaseValue(gui.textureWidth, V.GUI_DEFAULT_TEXTURE_SIZE) + "x" +
+          guiBaseValue(gui.textureHeight, V.GUI_DEFAULT_TEXTURE_SIZE) +
+          ": width/height e texture_width/texture_height bloqueados. Ajuste o campo texture para o caminho no resource pack."
+        : "Sem textura custom: a prévia usa gui.png 176x166 como fundo.";
+    }
     [["guiTexture", textureInput], ["guiWidth", widthInput], ["guiHeight", heightInput],
       ["guiTextureWidth", textureWidthInput], ["guiTextureHeight", textureHeightInput]].forEach(function (pair) {
       if (!pair[1]) {
@@ -3974,20 +6612,13 @@
     if (finishInput) {
       finishInput.value = trim(sounds.finish);
     }
+    syncSoundUploadsWithState();
     renderMinecraftSoundOptions();
     updateSoundsCard();
+    renderSoundUploadControls();
   }
 
-  function onSoundInput(event) {
-    var target = event.target;
-    var field = target ? target.getAttribute("data-sound-field") : "";
-    if (!field) {
-      return;
-    }
-    if (!isPlainObject(state.sounds)) {
-      state.sounds = V.createSounds();
-    }
-    state.sounds[field] = target.value;
+  function refreshSoundsOnly() {
     refresh({
       skipPattern: true,
       skipMatchers: true,
@@ -4002,12 +6633,289 @@
     updateSoundsCard();
   }
 
+  function onSoundInput(event) {
+    var target = event.target;
+    var field = target ? target.getAttribute("data-sound-field") : "";
+    if (!field) {
+      return;
+    }
+    if (!isPlainObject(state.sounds)) {
+      state.sounds = V.createSounds();
+    }
+    state.sounds[field] = target.value;
+    refreshSoundsOnly();
+    var upload = soundUploadState[field];
+    if (upload && trim(target.value) !== upload.id) {
+      clearSoundUpload(field, true);
+    }
+    renderSoundUploadControls();
+  }
+
+  function soundInputId(field) {
+    return field === "processing" ? "soundProcessing" : "soundFinish";
+  }
+
+  function soundPathFromFile(file) {
+    return V.soundPathFromName(file && file.name);
+  }
+
+  function soundIdFromFile(file) {
+    return currentNamespace() + ":" + soundPathFromFile(file);
+  }
+
+  function soundAssetPath(upload) {
+    if (!upload) {
+      return "";
+    }
+    var namespace = upload.namespace || currentNamespace();
+    return "assets/" + namespace + "/sounds/" + upload.path + ".ogg";
+  }
+
+  function soundJsonEntry(upload) {
+    if (!upload) {
+      return "";
+    }
+    var entry = {};
+    entry[upload.path] = { sounds: [upload.path] };
+    return JSON.stringify(entry, null, 2);
+  }
+
+  function stopSoundAudio(field) {
+    var entry = soundAudioState[field];
+    if (!entry) {
+      return;
+    }
+    if (entry.audio) {
+      try {
+        entry.audio.pause();
+        entry.audio.currentTime = 0;
+      } catch (error) {
+        // ignore
+      }
+    }
+    soundAudioState[field] = null;
+  }
+
+  function stopOtherSoundAudio(field) {
+    SOUND_FIELDS.forEach(function (other) {
+      if (other !== field) {
+        stopSoundAudio(other);
+      }
+    });
+  }
+
+  function clearSoundUpload(field, silent) {
+    var upload = soundUploadState[field];
+    if (!upload) {
+      return;
+    }
+    stopSoundAudio(field);
+    if (upload.url) {
+      URL.revokeObjectURL(upload.url);
+    }
+    soundUploadState[field] = null;
+    if (!silent) {
+      renderSoundUploadControls();
+    }
+  }
+
+  function syncSoundUploadsWithState() {
+    SOUND_FIELDS.forEach(function (field) {
+      var upload = soundUploadState[field];
+      if (!upload) {
+        return;
+      }
+      var current = isPlainObject(state.sounds) ? trim(state.sounds[field]) : "";
+      if (current !== upload.id) {
+        clearSoundUpload(field, true);
+      }
+    });
+  }
+
+  function renderSoundUploadControls() {
+    SOUND_FIELDS.forEach(function (field) {
+      var upload = soundUploadState[field];
+      var row = document.querySelector("[data-sound-upload-row='" + field + "']");
+      var label = document.querySelector("[data-sound-file-label='" + field + "']");
+      var playButton = document.querySelector("[data-sound-play='" + field + "']");
+      var copyButton = document.querySelector("[data-sound-copy='" + field + "']");
+      var clearButton = document.querySelector("[data-sound-clear='" + field + "']");
+      if (row) {
+        row.hidden = !upload;
+      }
+      if (label) {
+        label.textContent = upload
+          ? upload.name + " · " + soundAssetPath(upload)
+          : "";
+      }
+      var audio = soundAudioState[field] && soundAudioState[field].audio;
+      var playing = Boolean(audio && !audio.paused);
+      if (playButton) {
+        playButton.disabled = !upload;
+        playButton.textContent = playing ? "parar" : "play";
+        playButton.setAttribute("aria-pressed", playing ? "true" : "false");
+      }
+      if (copyButton) {
+        copyButton.disabled = !upload;
+      }
+      if (clearButton) {
+        clearButton.disabled = !upload;
+      }
+    });
+  }
+
+  function onSoundUploadClick(event) {
+    var button = closest(event.target, "[data-sound-upload]");
+    if (!button) {
+      return;
+    }
+    soundUploadTarget = button.getAttribute("data-sound-upload");
+    var input = $("soundUploadInput");
+    if (!input) {
+      return;
+    }
+    input.value = "";
+    input.click();
+  }
+
+  function onSoundUploadChange(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    var field = soundUploadTarget;
+    soundUploadTarget = "";
+    input.value = "";
+    if (!file || !field) {
+      return;
+    }
+    if (!/\.ogg$/i.test(file.name) && !/audio\/ogg/i.test(file.type)) {
+      showToast("Selecione um arquivo .ogg.", "error");
+      return;
+    }
+    var url;
+    try {
+      url = URL.createObjectURL(file);
+    } catch (error) {
+      showToast("Não foi possível preparar o áudio.", "error");
+      return;
+    }
+    clearSoundUpload(field, true);
+    var upload = {
+      name: file.name,
+      id: soundIdFromFile(file),
+      path: soundPathFromFile(file),
+      namespace: currentNamespace(),
+      url: url
+    };
+    soundUploadState[field] = upload;
+    if (!isPlainObject(state.sounds)) {
+      state.sounds = V.createSounds();
+    }
+    state.sounds[field] = upload.id;
+    var textInput = $(soundInputId(field));
+    if (textInput) {
+      textInput.value = upload.id;
+    }
+    refreshSoundsOnly();
+    renderSoundUploadControls();
+    showToast("Som carregado: " + upload.id + ". Arquivo esperado: " + soundAssetPath(upload));
+  }
+
+  function onSoundPlayClick(event) {
+    var button = closest(event.target, "[data-sound-play]");
+    if (!button) {
+      return;
+    }
+    var field = button.getAttribute("data-sound-play");
+    var upload = soundUploadState[field];
+    if (!upload) {
+      return;
+    }
+    var current = soundAudioState[field];
+    if (current && current.audio && !current.audio.paused) {
+      stopSoundAudio(field);
+      renderSoundUploadControls();
+      return;
+    }
+    stopOtherSoundAudio(field);
+    stopSoundAudio(field);
+    var audio;
+    try {
+      audio = new Audio(upload.url);
+    } catch (error) {
+      showToast("Este navegador não conseguiu abrir o .ogg.", "error");
+      return;
+    }
+    soundAudioState[field] = { audio: audio };
+    audio.addEventListener("ended", function () {
+      if (soundAudioState[field] && soundAudioState[field].audio === audio) {
+        soundAudioState[field] = null;
+        renderSoundUploadControls();
+      }
+    });
+    audio.addEventListener("error", function () {
+      if (soundAudioState[field] && soundAudioState[field].audio === audio) {
+        soundAudioState[field] = null;
+        renderSoundUploadControls();
+      }
+      showToast("Não foi possível tocar o .ogg.", "error");
+    });
+    var playResult = audio.play();
+    if (playResult && typeof playResult.catch === "function") {
+      playResult.catch(function () {
+        if (soundAudioState[field] && soundAudioState[field].audio === audio) {
+          soundAudioState[field] = null;
+          renderSoundUploadControls();
+        }
+        showToast("O navegador bloqueou o play; clique em play novamente.", "error");
+      });
+    }
+    renderSoundUploadControls();
+  }
+
+  function onSoundCopyClick(event) {
+    var button = closest(event.target, "[data-sound-copy]");
+    if (!button) {
+      return;
+    }
+    var upload = soundUploadState[button.getAttribute("data-sound-copy")];
+    if (!upload) {
+      return;
+    }
+    copyText(soundJsonEntry(upload)).then(function () {
+      showToast("Entrada sounds.json copiada.");
+    }, function () {
+      showToast("Não foi possível copiar.", "error");
+    });
+  }
+
+  function onSoundClearClick(event) {
+    var button = closest(event.target, "[data-sound-clear]");
+    if (!button) {
+      return;
+    }
+    clearSoundUpload(button.getAttribute("data-sound-clear"), false);
+  }
+
+  function onSoundsPanelClick(event) {
+    if (closest(event.target, "[data-sound-upload]")) {
+      onSoundUploadClick(event);
+    } else if (closest(event.target, "[data-sound-play]")) {
+      onSoundPlayClick(event);
+    } else if (closest(event.target, "[data-sound-copy]")) {
+      onSoundCopyClick(event);
+    } else if (closest(event.target, "[data-sound-clear]")) {
+      onSoundClearClick(event);
+    }
+  }
+
   function ensureGui() {
     if (!isPlainObject(state.gui)) {
       state.gui = V.createGui();
-      if (Array.isArray(state.itemSlots) && state.itemSlots.length > 0) {
-        state.gui.elements.push(V.createGuiElement("player_inventory"));
-      }
+      state.gui.elements.push(V.createGuiElement("title"));
+      var inventoryLabel = V.createGuiElement("text");
+      inventoryLabel.text = "Inventário";
+      state.gui.elements.push(inventoryLabel);
+      state.gui.elements.push(V.createGuiElement("player_inventory"));
     }
     return state.gui;
   }
@@ -4015,7 +6923,7 @@
   function addGui() {
     ensureGui();
     refresh();
-    focusElement(guiElementField("texture") || $("guiPanel"), false);
+    focusElement($("guiPanel"), false);
   }
 
   function removeGui() {
@@ -4118,6 +7026,62 @@
     updateGuiCard();
   }
 
+  function onGuiTextureUpload(event) {
+    var input = event.target;
+    var file = input && input.files ? input.files[0] : null;
+    if (!file) {
+      return;
+    }
+    if (!/^image\/png$/i.test(file.type) && !/\.png$/i.test(file.name)) {
+      showToast("Escolha um arquivo PNG.", "error");
+      input.value = "";
+      return;
+    }
+    var gui = ensureGui();
+    var reader = new FileReader();
+    reader.onload = function () {
+      var dataUrl = String(reader.result || "");
+      var image = new Image();
+      image.onload = function () {
+        gui.previewTexture = dataUrl;
+        gui.customTexture = true;
+        gui.width = image.naturalWidth;
+        gui.height = image.naturalHeight;
+        gui.textureWidth = image.naturalWidth;
+        gui.textureHeight = image.naturalHeight;
+        refresh();
+        updateGuiCard();
+        showToast("Textura importada: " + image.naturalWidth + "x" + image.naturalHeight + ".");
+      };
+      image.onerror = function () {
+        showToast("Não foi possível ler o PNG.", "error");
+      };
+      image.src = dataUrl;
+    };
+    reader.onerror = function () {
+      showToast("Não foi possível abrir o arquivo.", "error");
+    };
+    reader.readAsDataURL(file);
+    input.value = "";
+  }
+
+  function resetGuiTexture() {
+    var gui = isPlainObject(state.gui) ? state.gui : null;
+    if (!gui) {
+      return;
+    }
+    delete gui.previewTexture;
+    delete gui.customTexture;
+    gui.texture = "";
+    gui.width = V.GUI_DEFAULT_WIDTH;
+    gui.height = V.GUI_DEFAULT_HEIGHT;
+    gui.textureWidth = V.GUI_DEFAULT_TEXTURE_SIZE;
+    gui.textureHeight = V.GUI_DEFAULT_TEXTURE_SIZE;
+    refresh();
+    updateGuiCard();
+    showToast("Textura custom removida; tamanho padrão restaurado.");
+  }
+
   function onGuiElementInput(event) {
     var target = event.target;
     if (!target || target.tagName === "SELECT" || target.type === "checkbox") {
@@ -4175,6 +7139,8 @@
   function onGuiElementClick(event) {
     var move = closest(event.target, "[data-action='move-gui-element']");
     if (move) {
+      event.preventDefault();
+      event.stopPropagation();
       var moveCard = closest(move, ".gui-element-card[data-gui-element-index]");
       var moveIndex = moveCard ? parseInt(moveCard.getAttribute("data-gui-element-index"), 10) : -1;
       if (moveIndex >= 0) {
@@ -4187,6 +7153,8 @@
     if (!action) {
       return;
     }
+    event.preventDefault();
+    event.stopPropagation();
     var card = closest(action, ".gui-element-card[data-gui-element-index]");
     var index = card ? parseInt(card.getAttribute("data-gui-element-index"), 10) : -1;
     removeGuiElement(index);
@@ -4207,7 +7175,7 @@
       return;
     }
     var dimensions = guiCanvasSize(gui);
-    var size = guiCanvasDisplaySize(trim(element.type), parseIntStrict(element.width), parseIntStrict(element.height));
+    var size = guiCanvasDragSize(trim(element.type), parseIntStrict(element.width), parseIntStrict(element.height));
     var x = parseIntStrict(element.x);
     var y = parseIntStrict(element.y);
     var scale = parseFloat(canvas.getAttribute("data-scale"));
@@ -4223,8 +7191,9 @@
       height: size.height,
       guiWidth: dimensions.width,
       guiHeight: dimensions.height,
-      offsetX: trim(element.type) === "slot" || trim(element.type) === "player_inventory" ? -1 : 0,
-      offsetY: trim(element.type) === "player_inventory" ? -1 : 0,
+      offsetX: trim(element.type) === "slot" || trim(element.type) === "title" ||
+        trim(element.type) === "text" ? -1 : 0,
+      offsetY: 0,
       target: preview,
       moved: false
     };
@@ -5154,15 +8123,37 @@
     return "assets/" + namespace + "/textures/" + path;
   }
 
+  function soundAssetPathFromId(id) {
+    var text = trim(id);
+    if (!text) {
+      return "";
+    }
+    var separator = text.indexOf(":");
+    var namespace = separator === -1 ? (trim(state.namespace) || "namespace") : text.slice(0, separator);
+    var path = separator === -1 ? text : text.slice(separator + 1);
+    return "assets/" + namespace + "/sounds/" + path + ".ogg";
+  }
+
   function assetRows() {
     var rows = [];
     function add(label, path) {
       rows.push({ label: label, path: path });
     }
+    function addSound(label, id) {
+      var text = trim(id);
+      if (!text || text.indexOf("minecraft:") === 0) {
+        return;
+      }
+      add(label, soundAssetPathFromId(text));
+    }
     add("definição", filePath());
     (Array.isArray(state.recipes) ? state.recipes : []).forEach(function (recipe, index) {
       add("receita " + pad2(index + 1), recipePath(recipe));
     });
+    if (isPlainObject(state.sounds)) {
+      addSound("som processing", state.sounds.processing);
+      addSound("som finish", state.sounds.finish);
+    }
     rows.push({
       note: "Controller compartilhado: infinity_nexus_multiblock:multiblock_controller. Nenhum blockstate ou textura por definição."
     });
@@ -5205,8 +8196,14 @@
     var dimensions = getDimensions();
     var matcherCount = Object.keys(state.matchers || {}).length;
     var usedCount = Object.keys(currentUsage).filter(function (symbol) {
-      return symbol !== " " && symbol !== state.anchor;
+      return symbol !== " " && symbol !== state.anchor && symbol !== upgradeKey();
     }).length;
+    var upgrades = upgradesState();
+    var boosterCount = upgrades && Array.isArray(upgrades.boosters) ? upgrades.boosters.length : 0;
+    var upgradesValue = upgrades ? String(boosterCount) : "nenhum";
+    var upgradesTitle = upgrades
+      ? "key " + (upgradeKey() || "?") + " · " + boosterCount + (boosterCount === 1 ? " booster" : " boosters")
+      : "sem upgrades";
     function card(label, value, title) {
       return "<div class='summary-card'><span>" + esc(label) + "</span><strong title='" +
         esc(title || value) + "'>" + esc(value) + "</strong></div>";
@@ -5258,6 +8255,7 @@
       card("Tipo", state.type, typeTitle),
       card("Pattern", dimensions.width + " × " + dimensions.rows + " × " + dimensions.height, "X × Z × Y"),
       card("Matchers", String(matcherCount), matcherCount + " matcher(s) para " + usedCount + " símbolo(s) de bloco"),
+      card("Boosters", upgradesValue, upgradesTitle),
       card("Slots", slotValue, slotTitle + (slots === null ? "" : " · " + inputs + " input, " + outputs + " output")),
       card("Capabilities", capabilityValue, capabilityTitle),
       card("Controller", controllerValue, controllerTitle),
@@ -5697,6 +8695,259 @@
     }
   }
 
+  function modelPreviewAnimationNow() {
+    return window.performance && window.performance.now
+      ? window.performance.now()
+      : Date.now();
+  }
+
+  function previewTextureTargetIdentifier(slot, targetId, targetKey) {
+    if (controllerMode === "custom") {
+      var custom = trim(targetId);
+      if (custom) {
+        return custom;
+      }
+      var key = trim(targetKey);
+      return key ? trim(currentPreviewTextureKeys()[key]) : "";
+    }
+    var setName = modelPreviewState.previewState;
+    if (isPlainObject(state.textures) && isPlainObject(state.textures[setName])) {
+      return trim(state.textures[setName][slot]);
+    }
+    return "";
+  }
+
+  function stopModelPreviewAnimation() {
+    if (modelPreviewState.animationRaf) {
+      window.cancelAnimationFrame(modelPreviewState.animationRaf);
+      modelPreviewState.animationRaf = 0;
+    }
+  }
+
+  function clearPreviewTextureAnimation(identifier) {
+    var entry = modelPreviewState.animatedTextures[identifier];
+    if (!entry) {
+      return;
+    }
+    delete modelPreviewState.animatedTextures[identifier];
+    if (modelPreviewState.textureImages[identifier] === entry.canvas) {
+      modelPreviewState.textureImages[identifier] = entry.source;
+    }
+    if (Object.keys(modelPreviewState.animatedTextures).length === 0) {
+      stopModelPreviewAnimation();
+    }
+  }
+
+  function resetPreviewTextureAnimations() {
+    stopModelPreviewAnimation();
+    Object.keys(modelPreviewState.animatedTextures).forEach(function (identifier) {
+      var entry = modelPreviewState.animatedTextures[identifier];
+      if (entry && modelPreviewState.textureImages[identifier] === entry.canvas) {
+        modelPreviewState.textureImages[identifier] = entry.source;
+      }
+    });
+    modelPreviewState.animatedTextures = {};
+  }
+
+  function drawPreviewAnimationFrame(entry, now, force) {
+    var animation = entry.animation;
+    var totalTicks = 0;
+    var index;
+    for (index = 0; index < animation.frames.length; index += 1) {
+      totalTicks += animation.frames[index].time;
+    }
+    if (totalTicks <= 0) {
+      return false;
+    }
+    var elapsed = ((now - entry.startedAt) / 50) % totalTicks;
+    var frame = animation.frames[0];
+    var next = null;
+    var progress = 0;
+    var cursor = 0;
+    for (index = 0; index < animation.frames.length; index += 1) {
+      var item = animation.frames[index];
+      if (elapsed < cursor + item.time || index === animation.frames.length - 1) {
+        frame = item;
+        next = animation.frames[(index + 1) % animation.frames.length];
+        progress = item.time > 0 ? (elapsed - cursor) / item.time : 0;
+        if (index === animation.frames.length - 1 && elapsed >= cursor + item.time) {
+          progress = 1;
+        }
+        break;
+      }
+      cursor += item.time;
+    }
+    var changed = force || entry.frameIndex !== frame.index ||
+      (animation.interpolate && entry.frameProgress !== progress);
+    if (!changed) {
+      return false;
+    }
+    entry.frameIndex = frame.index;
+    entry.frameProgress = progress;
+    var context = entry.context;
+    context.clearRect(0, 0, animation.width, animation.height);
+    context.globalAlpha = 1;
+    context.drawImage(
+      entry.source,
+      0,
+      frame.index * animation.height,
+      animation.width,
+      animation.height,
+      0,
+      0,
+      animation.width,
+      animation.height
+    );
+    if (animation.interpolate && next && next.index !== frame.index && progress > 0 && progress < 1) {
+      context.globalAlpha = progress;
+      context.drawImage(
+        entry.source,
+        0,
+        next.index * animation.height,
+        animation.width,
+        animation.height,
+        0,
+        0,
+        animation.width,
+        animation.height
+      );
+      context.globalAlpha = 1;
+    }
+    return true;
+  }
+
+  function startModelPreviewAnimation() {
+    if (modelPreviewState.animationRaf || Object.keys(modelPreviewState.animatedTextures).length === 0) {
+      return;
+    }
+    function tick(now) {
+      if (Object.keys(modelPreviewState.animatedTextures).length === 0) {
+        modelPreviewState.animationRaf = 0;
+        return;
+      }
+      var stage = $("modelPreviewStage");
+      if (!stage || stage.offsetParent === null) {
+        modelPreviewState.animationRaf = 0;
+        return;
+      }
+      var changed = false;
+      Object.keys(modelPreviewState.animatedTextures).forEach(function (identifier) {
+        var entry = modelPreviewState.animatedTextures[identifier];
+        if (entry && drawPreviewAnimationFrame(entry, now, false)) {
+          changed = true;
+        }
+      });
+      if (changed) {
+        drawModelPreview();
+      }
+      modelPreviewState.animationRaf = window.requestAnimationFrame(tick);
+    }
+    modelPreviewState.animationRaf = window.requestAnimationFrame(tick);
+  }
+
+  function applyPreviewTextureAnimation(identifier, source, animation) {
+    clearPreviewTextureAnimation(identifier);
+    var canvas = document.createElement("canvas");
+    canvas.width = animation.width;
+    canvas.height = animation.height;
+    var context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = false;
+    var entry = {
+      source: source,
+      canvas: canvas,
+      context: context,
+      animation: animation,
+      startedAt: modelPreviewAnimationNow(),
+      frameIndex: -1,
+      frameProgress: -1
+    };
+    modelPreviewState.animatedTextures[identifier] = entry;
+    modelPreviewState.textureImages[identifier] = canvas;
+    drawPreviewAnimationFrame(entry, entry.startedAt, true);
+    startModelPreviewAnimation();
+    renderModelPreviewTextures();
+    drawModelPreview();
+  }
+
+  function onModelPreviewMcmetaClick(event) {
+    var button = closest(event.target, "[data-preview-texture-mcmeta]");
+    if (!button) {
+      return;
+    }
+    var slot = button.getAttribute("data-preview-texture-slot");
+    if (!slot && controllerMode !== "custom") {
+      return;
+    }
+    modelPreviewState.textureTarget = slot;
+    modelPreviewState.textureTargetId = button.getAttribute("data-preview-texture-id") || "";
+    modelPreviewState.textureTargetRow = button.getAttribute("data-preview-texture-mcmeta") || "";
+    modelPreviewState.textureTargetKey = button.getAttribute("data-preview-texture-key") || "";
+    modelPreviewState.textureLabel = button.getAttribute("data-preview-texture-mcmeta") || slot;
+    var input = $("modelPreviewMcmetaInput");
+    if (input) {
+      input.value = "";
+      input.click();
+    }
+  }
+
+  function onModelPreviewMcmetaInputChange(event) {
+    var input = event.target;
+    var file = input.files && input.files[0];
+    var slot = modelPreviewState.textureTarget;
+    var targetId = trim(modelPreviewState.textureTargetId);
+    var targetKey = trim(modelPreviewState.textureTargetKey);
+    var label = modelPreviewState.textureLabel || slot || targetId;
+    input.value = "";
+    modelPreviewState.textureTarget = "";
+    modelPreviewState.textureTargetId = "";
+    modelPreviewState.textureTargetRow = "";
+    modelPreviewState.textureTargetKey = "";
+    modelPreviewState.textureLabel = "";
+    if (!file) {
+      return;
+    }
+    if (!/\.mcmeta$/i.test(file.name) && !/json/i.test(file.type)) {
+      showToast("Selecione um arquivo .png.mcmeta ou JSON.", "error");
+      return;
+    }
+    if (!ModelPreview || typeof ModelPreview.parseTextureAnimation !== "function") {
+      showToast("O preview 3D não carregou; não é possível ler o .mcmeta.", "error");
+      return;
+    }
+    var identifier = previewTextureTargetIdentifier(slot, targetId, targetKey);
+    if (!identifier) {
+      showToast("Importe o .png antes do .mcmeta.", "error");
+      return;
+    }
+    var current = modelPreviewState.animatedTextures[identifier];
+    var source = current ? current.source : modelPreviewState.textureImages[identifier];
+    if (!source || !source.width || !source.height) {
+      showToast("Importe o .png antes do .mcmeta.", "error");
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var meta;
+      try {
+        meta = JSON.parse(String(reader.result || "").replace(/^\uFEFF/, ""));
+      } catch (error) {
+        showToast("Não foi possível ler o .mcmeta: JSON inválido.", "error");
+        return;
+      }
+      var animation = ModelPreview.parseTextureAnimation(meta, source.width, source.height);
+      if (!animation) {
+        showToast("O .mcmeta não contém uma seção animation válida.", "error");
+        return;
+      }
+      applyPreviewTextureAnimation(identifier, source, animation);
+      showToast("Textura " + label + " animada no preview (" + animation.frames.length + " frames).");
+    };
+    reader.onerror = function () {
+      showToast("Falha ao ler o .mcmeta.", "error");
+    };
+    reader.readAsText(file);
+  }
+
   function onModelPreviewTextureInputChange(event) {
     var input = event.target;
     var file = input.files && input.files[0];
@@ -5727,6 +8978,7 @@
         var identifier = custom
           ? (targetId || previewTextureIdentifier(label, file, "minecraft"))
           : previewTextureIdentifier(label, file);
+        clearPreviewTextureAnimation(identifier);
         var setName = modelPreviewState.previewState;
         if (custom) {
           if (!targetId && targetKey) {
@@ -5786,6 +9038,7 @@
     if (!identifier) {
       return;
     }
+    clearPreviewTextureAnimation(identifier);
     modelPreviewState.images = modelPreviewState.images.filter(function (entry) {
       if (!entry.manual || entry.identifier !== identifier) {
         return true;
@@ -5833,6 +9086,7 @@
       var previewState = modelPreviewState.previewState;
       var keys = currentPreviewTextureKeys();
       if (identifier) {
+        clearPreviewTextureAnimation(identifier);
         Object.keys(keys).forEach(function (key) {
           if (trim(keys[key]) === identifier) {
             delete keys[key];
@@ -5852,6 +9106,7 @@
       return;
     }
     var identifier = trim(state.textures[setName][slot]);
+    clearPreviewTextureAnimation(identifier);
     state.textures[setName][slot] = "";
     restoreManualPreviewImage(identifier);
     refresh({ skipControllerRecipe: true, skipModelPreview: true });
@@ -6109,6 +9364,7 @@
     if (empty) {
       empty.hidden = Boolean(modelPreviewState.parsed);
     }
+    startModelPreviewAnimation();
   }
 
   function renderModelPreviewTextures() {
@@ -6145,10 +9401,13 @@
     }
     list.innerHTML = rows.map(function (row) {
       var image = row.identifier ? modelPreviewState.textureImages[row.identifier] : null;
+      var animationEntry = row.identifier ? modelPreviewState.animatedTextures[row.identifier] : null;
+      var animated = Boolean(animationEntry);
+      var sourceImage = animationEntry ? animationEntry.source : image;
       var imageEntry = null;
-      if (image) {
+      if (sourceImage) {
         for (var index = 0; index < modelPreviewState.images.length; index += 1) {
-          if (modelPreviewState.images[index].image === image) {
+          if (modelPreviewState.images[index].image === sourceImage) {
             imageEntry = modelPreviewState.images[index];
             break;
           }
@@ -6157,7 +9416,7 @@
       var matched = Boolean(image);
       var tone = row.vanilla ? "ok" : matched ? "ok" : "error";
       var toneAttribute = tone ? " data-tone='" + tone + "'" : "";
-      var label = row.vanilla ? "vanilla" : matched ? "resolvida" : "sem png";
+      var label = animated ? "animada" : row.vanilla ? "vanilla" : matched ? "resolvida" : "sem png";
       var thumbnail = imageEntry && imageEntry.dataUrl
         ? "<img class='model-preview-thumb' alt='' src='" + esc(imageEntry.dataUrl) + "'>"
         : "<span class='model-preview-thumb is-empty'></span>";
@@ -6173,7 +9432,11 @@
           "<button type='button' class='btn btn-tiny' data-preview-texture-import='" +
           esc(row.key) + "' data-preview-texture-slot='" + esc(slot) +
           "' data-preview-texture-id='" + esc(row.identifier || "") +
-          "' data-preview-texture-key='" + esc(textureKey) + "'>importar</button>" +
+          "' data-preview-texture-key='" + esc(textureKey) + "'>importar .png</button>" +
+          "<button type='button' class='btn btn-tiny' data-preview-texture-mcmeta='" +
+          esc(row.key) + "' data-preview-texture-slot='" + esc(slot) +
+          "' data-preview-texture-id='" + esc(row.identifier || "") +
+          "' data-preview-texture-key='" + esc(textureKey) + "'>.mcmeta</button>" +
           (override
             ? "<button type='button' class='btn btn-tiny btn-danger' data-preview-texture-clear='" +
               esc(row.key) + "' data-preview-texture-slot='" + esc(slot) +
@@ -6301,6 +9564,7 @@
   }
 
   function resetPreviewTextureOverrides() {
+    resetPreviewTextureAnimations();
     var identifiers = {};
     modelPreviewState.images.forEach(function (entry) {
       if (entry.manual && entry.previewOnly) {
@@ -6360,7 +9624,7 @@
   }
 
   function resetModelPreviewView() {
-    modelPreviewState.view = { yaw: 2.95, pitch: 0.42, zoom: 1 };
+    modelPreviewState.view = { yaw: Math.PI * 5 / 4, pitch: 0.5, zoom: 1 };
     drawModelPreview();
   }
 
@@ -6419,10 +9683,15 @@
   }
 
   function drawPreview() {
-    if (!Preview || !state) {
+    if (!MotionPreview || !state) {
       return;
     }
-    Preview.draw($("preview3d"), state.layers, state.anchor, activeLayer, currentColors, COLORS[1]);
+    MotionPreview.draw($("patternPreview3d"), motionPreviewScene(railPreviewState.time, {
+      view: RAIL_PREVIEW_VIEW,
+      selectedMotionId: "",
+      hiddenSymbols: {},
+      opacity: 1
+    }));
   }
 
   function refresh(options) {
@@ -6448,6 +9717,13 @@
     }
     if (activeStep === "matchers" && !settings.skipMatchers) {
       renderMatchers();
+    }
+    if (activeStep === "upgrades" && !settings.skipUpgrades) {
+      renderUpgrades();
+    }
+    if (activeStep === "motions" && !settings.skipMotions) {
+      renderMotionMode();
+      renderMotions();
     }
     if (activeStep === "slots" && !settings.skipSlots) {
       renderSlots();
@@ -6505,8 +9781,18 @@
     if (stepId !== "pattern" && isPatternFullscreen()) {
       setPatternFullscreen(false);
     }
+    if (activeStep === "motions" && stepId !== "motions") {
+      setMotionFullscreen(false);
+    }
     activeStep = stepId;
     refresh();
+    if (stepId === "motions") {
+      stopRailPreviewLoop();
+      startMotionLoop();
+    } else {
+      stopMotionLoop();
+      startRailPreviewLoop();
+    }
     if (stepId === "controller" && modelPreviewState.source === "none") {
       scheduleModelPreviewFieldLoad();
     }
@@ -6554,6 +9840,22 @@
     }
     if (field === "itemSlots") {
       focusElement($("slotsPanel"), false);
+      return;
+    }
+    if (field === "upgrades") {
+      focusElement($("upgradeModePanel"), false);
+      return;
+    }
+    if (field === "upgradeKey") {
+      focusElement($("upgradeKey"), true);
+      return;
+    }
+    if (field.indexOf("upgradeBooster:") === 0) {
+      var boosterIndex = parseInt(field.slice("upgradeBooster:".length), 10);
+      var boosterCard = document.querySelector(".upgrade-card[data-booster-index='" + boosterIndex + "']");
+      if (boosterCard) {
+        focusElement(boosterCard.querySelector("input, select") || boosterCard, false);
+      }
       return;
     }
     if (field.indexOf("recipe:") === 0) {
@@ -7111,8 +10413,7 @@
     if (!chip) {
       return;
     }
-    activeSymbol = chip.getAttribute("data-symbol");
-    renderPalette();
+    selectPaletteSymbol(chip.getAttribute("data-symbol"));
   }
 
   function onLayerTabsClick(event) {
@@ -7128,6 +10429,218 @@
     }
   }
 
+  function updatePaletteForm() {
+    var button = $("addSymbolSubmitBtn");
+    var hint = $("paletteFormHint");
+    if (paletteRenameSymbol) {
+      if (button) {
+        button.textContent = "Renomear";
+        button.title = "Renomear o símbolo " + paletteRenameSymbol;
+      }
+      if (hint) {
+        hint.innerHTML = "Renomeando <code>" + esc(paletteRenameSymbol) +
+          "</code>. Edite o caractere e confirme; pattern, matchers, boosters, motions e portas acompanham.";
+      }
+    } else {
+      if (button) {
+        button.textContent = "Adicionar";
+        button.title = "Adicionar símbolo à paleta";
+      }
+      if (hint) {
+        hint.innerHTML = "A âncora <code>" + esc(state ? state.anchor : "C") +
+          "</code> é única. Selecione um símbolo para renomeá-lo. Símbolos usados sem matcher ficam marcados em vermelho.";
+      }
+    }
+  }
+
+  function resetPaletteForm() {
+    paletteRenameSymbol = null;
+    var input = $("newSymbolInput");
+    if (input) {
+      input.value = "";
+    }
+    updatePaletteForm();
+  }
+
+  function selectPaletteSymbol(symbol) {
+    activeSymbol = symbol;
+    if (symbol === ERASER || !symbol) {
+      resetPaletteForm();
+    } else {
+      paletteRenameSymbol = symbol;
+      var input = $("newSymbolInput");
+      if (input) {
+        input.value = symbol;
+      }
+      updatePaletteForm();
+    }
+    renderPalette();
+  }
+
+  function eachPortList(callback) {
+    var ports = state.capabilityPorts;
+    if (!isPlainObject(ports)) {
+      return;
+    }
+    Object.keys(ports).forEach(function (key) {
+      if (key === "extras") {
+        return;
+      }
+      if (Array.isArray(ports[key])) {
+        callback(ports[key], key, ports);
+      }
+    });
+    if (isPlainObject(ports.extras)) {
+      Object.keys(ports.extras).forEach(function (key) {
+        if (Array.isArray(ports.extras[key])) {
+          callback(ports.extras[key], key, ports.extras);
+        }
+      });
+    }
+  }
+
+  function portSymbolUsed(symbol) {
+    var found = false;
+    eachPortList(function (list) {
+      if (list.indexOf(symbol) !== -1) {
+        found = true;
+      }
+    });
+    return found;
+  }
+
+  function renamePortSymbols(oldSymbol, next) {
+    eachPortList(function (list, key, owner) {
+      owner[key] = list.map(function (entry) {
+        return entry === oldSymbol ? next : entry;
+      });
+    });
+  }
+
+  function capabilityPortFieldUses(symbol) {
+    var caps = state.capabilities;
+    if (!isPlainObject(caps)) {
+      return false;
+    }
+    if (Array.isArray(caps.fluids)) {
+      for (var fluidIndex = 0; fluidIndex < caps.fluids.length; fluidIndex += 1) {
+        var fluid = caps.fluids[fluidIndex];
+        if (isPlainObject(fluid) && trim(fluid.port) === symbol) {
+          return true;
+        }
+      }
+    }
+    if (isPlainObject(caps.mana) && trim(caps.mana.port) === symbol) {
+      return true;
+    }
+    if (isPlainObject(caps.chemical) && Array.isArray(caps.chemical.tanks)) {
+      for (var tankIndex = 0; tankIndex < caps.chemical.tanks.length; tankIndex += 1) {
+        var tank = caps.chemical.tanks[tankIndex];
+        if (isPlainObject(tank) && trim(tank.port) === symbol) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function renameCapabilityPortFields(oldSymbol, next) {
+    var caps = state.capabilities;
+    if (!isPlainObject(caps)) {
+      return;
+    }
+    if (Array.isArray(caps.fluids)) {
+      caps.fluids.forEach(function (fluid) {
+        if (isPlainObject(fluid) && trim(fluid.port) === oldSymbol) {
+          fluid.port = next;
+        }
+      });
+    }
+    if (isPlainObject(caps.mana) && trim(caps.mana.port) === oldSymbol) {
+      caps.mana.port = next;
+    }
+    if (isPlainObject(caps.chemical) && Array.isArray(caps.chemical.tanks)) {
+      caps.chemical.tanks.forEach(function (tank) {
+        if (isPlainObject(tank) && trim(tank.port) === oldSymbol) {
+          tank.port = next;
+        }
+      });
+    }
+  }
+
+  function symbolExistsInState(symbol) {
+    return symbol === state.anchor ||
+      symbol === upgradeKey() ||
+      hasMatcher(symbol) ||
+      (currentUsage[symbol] || 0) > 0 ||
+      portSymbolUsed(symbol) ||
+      capabilityPortFieldUses(symbol);
+  }
+
+  function renamePaletteSymbol(oldSymbol, value) {
+    var next = String(value === undefined || value === null ? "" : value);
+    if (next.length !== 1 || next === " ") {
+      showToast("Informe um único caractere diferente de espaço.", "error");
+      return false;
+    }
+    if (next === oldSymbol) {
+      resetPaletteForm();
+      showToast("O símbolo continua " + oldSymbol + ".");
+      return false;
+    }
+    if (!symbolExistsInState(oldSymbol)) {
+      resetPaletteForm();
+      showToast("O símbolo " + oldSymbol + " não existe mais na paleta.", "error");
+      return false;
+    }
+    if (next === state.anchor && oldSymbol !== state.anchor) {
+      showToast(next + " já é a âncora.", "error");
+      return false;
+    }
+    var key = upgradeKey();
+    if (key && next === key && oldSymbol !== key) {
+      showToast(next + " já é a key de upgrade.", "error");
+      return false;
+    }
+    if (symbolExistsInState(next) && next !== oldSymbol) {
+      showToast("Símbolo " + next + " já está em uso.", "error");
+      return false;
+    }
+    state.layers = state.layers.map(function (layer) {
+      if (!Array.isArray(layer)) {
+        return layer;
+      }
+      return layer.map(function (row) {
+        return typeof row === "string" ? row.split(oldSymbol).join(next) : row;
+      });
+    });
+    if (state.anchor === oldSymbol) {
+      state.anchor = next;
+    }
+    var upgrades = upgradesState();
+    if (upgrades && trim(upgrades.key) === oldSymbol) {
+      upgrades.key = next;
+    }
+    if (hasMatcher(oldSymbol)) {
+      state.matchers[next] = state.matchers[oldSymbol];
+      delete state.matchers[oldSymbol];
+    }
+    motionsState().forEach(function (motion) {
+      if (isPlainObject(motion) && Array.isArray(motion.keys)) {
+        motion.keys = motion.keys.map(function (entry) {
+          return entry === oldSymbol ? next : entry;
+        });
+      }
+    });
+    renamePortSymbols(oldSymbol, next);
+    renameCapabilityPortFields(oldSymbol, next);
+    activeSymbol = next;
+    resetPaletteForm();
+    refresh();
+    showToast("Símbolo " + oldSymbol + " renomeado para " + next + ".");
+    return true;
+  }
+
   function addNewSymbol(value) {
     var symbol = String(value === undefined || value === null ? "" : value);
     if (symbol.length !== 1 || symbol === " ") {
@@ -7139,14 +10652,13 @@
       return;
     }
     if (hasMatcher(symbol)) {
-      activeSymbol = symbol;
-      renderPalette();
+      selectPaletteSymbol(symbol);
       showToast("Símbolo " + symbol + " já existe na paleta.");
       return;
     }
     createMatcher(symbol);
     activeSymbol = symbol;
-    $("newSymbolInput").value = "";
+    resetPaletteForm();
     refresh();
     showToast("Símbolo " + symbol + " adicionado. Configure o matcher na etapa 03.");
   }
@@ -7166,6 +10678,9 @@
         setPatternFullscreen(false);
         state = imported.state;
         state.recipes = [];
+        motionMode = deriveMotionMode();
+        upgradeMode = deriveUpgradeMode();
+        resetMotionPreviewSelection();
         modelPreviewState.localModels = {};
         resetPreviewTextureOverrides();
         controllerMode = deriveControllerMode();
@@ -7192,6 +10707,7 @@
         activeStep = "identity";
         activeLayer = 0;
         activeSymbol = null;
+        resetPaletteForm();
         syncInputs();
         renderImportNotes();
         refresh();
@@ -7214,9 +10730,13 @@
     setPatternFullscreen(false);
     state = V.createExampleState();
     importNotes = [];
+    motionMode = deriveMotionMode();
+    upgradeMode = deriveUpgradeMode();
+    resetMotionPreviewSelection();
     activeStep = "identity";
     activeLayer = 0;
     activeSymbol = null;
+    resetPaletteForm();
     syncInputs();
     renderImportNotes();
     refresh();
@@ -7231,9 +10751,13 @@
     setPatternFullscreen(false);
     state = V.createDefaultState();
     importNotes = [];
+    motionMode = deriveMotionMode();
+    upgradeMode = deriveUpgradeMode();
+    resetMotionPreviewSelection();
     activeStep = "identity";
     activeLayer = 0;
     activeSymbol = null;
+    resetPaletteForm();
     syncInputs();
     renderImportNotes();
     refresh();
@@ -7296,13 +10820,19 @@
     $("layerTabs").addEventListener("click", onLayerTabsClick);
     $("palette").addEventListener("click", onPaletteClick);
     $("focusNewSymbolBtn").addEventListener("click", function () {
+      resetPaletteForm();
       var input = $("newSymbolInput");
       input.focus();
       input.select();
     });
     $("addSymbolForm").addEventListener("submit", function (event) {
       event.preventDefault();
-      addNewSymbol($("newSymbolInput").value);
+      var value = $("newSymbolInput").value;
+      if (paletteRenameSymbol) {
+        renamePaletteSymbol(paletteRenameSymbol, value);
+      } else {
+        addNewSymbol(value);
+      }
     });
     $("layerGrid").addEventListener("pointerdown", onGridPointerDown);
     $("layerGrid").addEventListener("pointermove", onGridPointerMove);
@@ -7318,6 +10848,44 @@
     $("matcherList").addEventListener("input", onMatcherListInput);
     $("matcherList").addEventListener("change", onMatcherListChange);
     $("matcherList").addEventListener("click", onMatcherListClick);
+    $("upgradeModeOptions").addEventListener("change", onUpgradeModeChange);
+    $("upgradeEditorArea").addEventListener("input", onUpgradeInput);
+    $("upgradeEditorArea").addEventListener("change", onUpgradeChange);
+    $("upgradeEditorArea").addEventListener("click", onUpgradeClick);
+    $("addUpgradeBoosterBtn").addEventListener("click", addUpgradeBooster);
+    $("upgradePaintKeyBtn").addEventListener("click", paintUpgradeKey);
+    $("upgradeRecipeImportBtn").addEventListener("click", function () {
+      $("upgradeRecipeFile").click();
+    });
+    $("upgradeRecipeFile").addEventListener("change", onUpgradeRecipeFile);
+    $("upgradeRecipeSimulateBtn").addEventListener("click", simulateUpgradeRecipe);
+    $("upgradeRecipeClearBtn").addEventListener("click", clearUpgradeRecipe);
+    $("upgradeRecipeJson").addEventListener("change", simulateUpgradeRecipe);
+    $("upgradeSimulationCounts").addEventListener("input", onUpgradeSimulationCountInput);
+    $("motionModeOptions").addEventListener("change", onMotionModeChange);
+    $("addMotionBtn").addEventListener("click", addMotion);
+    $("motionList").addEventListener("click", onMotionListClick);
+    $("motionDetail").addEventListener("input", onMotionDetailInput);
+    $("motionDetail").addEventListener("change", onMotionDetailChange);
+    $("motionDetail").addEventListener("click", onMotionDetailClick);
+    $("motionPlayBtn").addEventListener("click", toggleMotionPlay);
+    $("motionResetTimeBtn").addEventListener("click", resetMotionTime);
+    $("motionResetViewBtn").addEventListener("click", resetMotionPreviewView);
+    $("motionTimeRange").addEventListener("input", onMotionTimeRangeInput);
+    $("motionSpeed").addEventListener("change", onMotionSpeedChange);
+    $("motionCamera").addEventListener("change", onMotionCameraChange);
+    $("motionOpacity").addEventListener("input", onMotionOpacityInput);
+    $("motionFullscreenBtn").addEventListener("click", toggleMotionFullscreen);
+    $("motionEditorCloseBtn").addEventListener("click", function () {
+      setMotionFullscreen(false);
+    });
+    $("motionPanelBtn").addEventListener("click", toggleMotionPanel);
+    $("motionTimeline").addEventListener("click", onMotionTimelineClick);
+    $("motionCanvasWrap").addEventListener("pointerdown", beginMotionPreviewDrag);
+    $("motionCanvasWrap").addEventListener("pointermove", moveMotionPreviewDrag);
+    $("motionCanvasWrap").addEventListener("pointerup", endMotionPreviewDrag);
+    $("motionCanvasWrap").addEventListener("pointercancel", endMotionPreviewDrag);
+    $("motionCanvasWrap").addEventListener("wheel", onMotionPreviewWheel, { passive: false });
     $("addSlotBtn").addEventListener("click", addSlot);
     $("useInventoryRowsBtn").addEventListener("click", useInventoryRows);
     $("slotList").addEventListener("input", onSlotListInput);
@@ -7332,6 +10900,7 @@
     $("capabilityList").addEventListener("input", onCapabilityListInput);
     $("capabilityList").addEventListener("click", onCapabilityListClick);
     $("capabilityPortsPanel").addEventListener("input", onCapabilityPortsInput);
+    $("capabilityPortsPanel").addEventListener("click", onCapabilityPortsClick);
     $("controllerModeOptions").addEventListener("change", onControllerModeChange);
     $("modelForm").addEventListener("input", onModelInput);
     $("modelForm").addEventListener("click", onModelImportClick);
@@ -7345,7 +10914,9 @@
     $("modelPreviewStateButtons").addEventListener("click", onModelPreviewStateClick);
     $("modelPreviewTextureList").addEventListener("click", onModelPreviewTextureImportClick);
     $("modelPreviewTextureList").addEventListener("click", onModelPreviewTextureClearClick);
+    $("modelPreviewTextureList").addEventListener("click", onModelPreviewMcmetaClick);
     $("modelPreviewTextureInput").addEventListener("change", onModelPreviewTextureInputChange);
+    $("modelPreviewMcmetaInput").addEventListener("change", onModelPreviewMcmetaInputChange);
     $("modelPreviewResetViewBtn").addEventListener("click", resetModelPreviewView);
     $("modelPreviewFloor").addEventListener("change", onModelPreviewOptionChange);
     $("modelPreviewReference").addEventListener("change", onModelPreviewOptionChange);
@@ -7363,6 +10934,14 @@
     $("addGuiBtn").addEventListener("click", addGui);
     $("removeGuiBtn").addEventListener("click", removeGui);
     $("addGuiElementBtn").addEventListener("click", addGuiElement);
+    $("guiTextureUploadBtn").addEventListener("click", function () {
+      var input = $("guiTextureUpload");
+      if (input) {
+        input.click();
+      }
+    });
+    $("guiTextureUpload").addEventListener("change", onGuiTextureUpload);
+    $("guiTextureResetBtn").addEventListener("click", resetGuiTexture);
     $("guiForm").addEventListener("input", onGuiFormInput);
     $("guiElementList").addEventListener("input", onGuiElementInput);
     $("guiElementList").addEventListener("change", onGuiElementChange);
@@ -7371,7 +10950,12 @@
     $("guiCanvas").addEventListener("pointermove", moveGuiCanvasDrag);
     $("guiCanvas").addEventListener("pointerup", endGuiCanvasDrag);
     $("guiCanvas").addEventListener("pointercancel", endGuiCanvasDrag);
+    $("slotGuiPreview").addEventListener("mouseenter", onSlotPreviewMouseMove);
+    $("slotGuiPreview").addEventListener("mousemove", onSlotPreviewMouseMove);
+    $("slotGuiPreview").addEventListener("mouseleave", resetSlotPreviewZoom);
     $("soundsPanel").addEventListener("input", onSoundInput);
+    $("soundsPanel").addEventListener("click", onSoundsPanelClick);
+    $("soundUploadInput").addEventListener("change", onSoundUploadChange);
     $("inheritanceMode").addEventListener("change", onInheritanceChange);
     $("inheritanceTemplate").addEventListener("change", onInheritanceChange);
     $("inheritanceParent").addEventListener("input", onInheritanceInput);
@@ -7399,10 +10983,20 @@
       if (event.key === "Escape" && isPatternFullscreen()) {
         event.preventDefault();
         setPatternFullscreen(false);
+      } else if (event.key === "Escape" && isMotionFullscreen()) {
+        event.preventDefault();
+        var motionView = motionSection();
+        if (motionView && motionView.classList.contains("is-panel-open")) {
+          closeMotionPanel();
+        } else {
+          setMotionFullscreen(false);
+        }
       }
     });
     window.addEventListener("resize", function () {
-      if (activeStep === "pattern") {
+      if (activeStep === "motions") {
+        window.setTimeout(drawMotionPreview, 30);
+      } else {
         window.setTimeout(drawPreview, 30);
       }
       if (activeStep === "controller") {
@@ -7424,10 +11018,16 @@
     }
     activeLayer = 0;
     activeSymbol = null;
+    resetPaletteForm();
     bindEvents();
     syncInputs();
     renderImportNotes();
     refresh();
+    if (activeStep === "motions") {
+      startMotionLoop();
+    } else {
+      startRailPreviewLoop();
+    }
     if (activeStep === "controller" && modelPreviewState.source === "none") {
       scheduleModelPreviewFieldLoad();
     }

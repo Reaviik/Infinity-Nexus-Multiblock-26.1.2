@@ -1,14 +1,5 @@
 package com.Infinity.Nexus.Multiblock.api;
 
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-
 import com.Infinity.Nexus.Multiblock.api.addon.ResourceTankInfo;
 import com.google.gson.JsonElement;
 import net.minecraft.core.BlockPos;
@@ -17,6 +8,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Rotation;
+
+import java.util.*;
 
 public final class MultiblockDefinition {
     public static final int CURRENT_SCHEMA_VERSION = 2;
@@ -27,6 +20,8 @@ public final class MultiblockDefinition {
     private final int priority;
     private final int tier;
     private final MultiblockPattern pattern;
+    private final List<MultiblockUpgrade> upgrades;
+    private final List<MultiblockMotion> motions;
     private final int inventoryRows;
     private final List<ItemSlot> itemSlots;
     private final Optional<EnergyCapability> energy;
@@ -47,6 +42,8 @@ public final class MultiblockDefinition {
             int priority,
             int tier,
             MultiblockPattern pattern,
+            List<MultiblockUpgrade> upgrades,
+            List<MultiblockMotion> motions,
             int inventoryRows,
             List<ItemSlot> itemSlots,
             Optional<EnergyCapability> energy,
@@ -65,6 +62,8 @@ public final class MultiblockDefinition {
         this.priority = priority;
         this.tier = tier;
         this.pattern = pattern;
+        this.upgrades = List.copyOf(upgrades);
+        this.motions = List.copyOf(motions);
         this.inventoryRows = inventoryRows;
         this.itemSlots = itemSlots;
         this.energy = energy;
@@ -126,6 +125,35 @@ public final class MultiblockDefinition {
 
     public MultiblockPattern pattern() {
         return this.pattern;
+    }
+
+    public List<MultiblockUpgrade> upgrades() {
+        return this.upgrades;
+    }
+
+    public List<MultiblockMotion> motions() {
+        return this.motions;
+    }
+
+    /**
+     * Uniao das keys de todas as partes moveis. Enquanto as partes estao fora
+     * do lugar, essas celulas sao ignoradas na validacao da estrutura.
+     */
+    public Set<Character> motionKeys() {
+        if (this.motions.isEmpty()) {
+            return Set.of();
+        }
+        Set<Character> keys = new HashSet<>();
+        for (MultiblockMotion motion : this.motions) {
+            keys.addAll(motion.keys());
+        }
+        return Set.copyOf(keys);
+    }
+
+    public Optional<Character> upgradeKey() {
+        return this.pattern.hasUpgradeKey()
+                ? Optional.of(this.pattern.upgradeKey())
+                : Optional.empty();
     }
 
     public int inventoryRows() {
@@ -196,13 +224,26 @@ public final class MultiblockDefinition {
         return this.pattern.members(controllerPos, rotation);
     }
 
+    public List<BlockPos> upgradeMembers(BlockPos controllerPos, Rotation rotation) {
+        return this.pattern.upgradeMembers(controllerPos, rotation);
+    }
+
     public boolean matches(LevelReader level, BlockPos controllerPos, Rotation rotation, Block anchorBlock) {
+        return matches(level, controllerPos, rotation, anchorBlock, Set.of());
+    }
+
+    public boolean matches(
+            LevelReader level,
+            BlockPos controllerPos,
+            Rotation rotation,
+            Block anchorBlock,
+            Set<Character> ignoredSymbols) {
         BlockPos origin = this.origin(controllerPos, rotation);
         BlockPos anchorPos = this.pattern.anchorPos(controllerPos, rotation);
         if (!level.getBlockState(anchorPos).is(anchorBlock)) {
             return false;
         }
-        return this.pattern.matches(level, origin, rotation);
+        return this.pattern.matches(level, origin, rotation, ignoredSymbols);
     }
 
     public static final class Builder {
@@ -212,6 +253,8 @@ public final class MultiblockDefinition {
         private int priority;
         private int tier = 1;
         private MultiblockPattern pattern;
+        private List<MultiblockUpgrade> upgrades = List.of();
+        private List<MultiblockMotion> motions = List.of();
         private int inventoryRows = 3;
         private List<ItemSlot> itemSlots = List.of();
         private EnergyCapability energy;
@@ -257,6 +300,16 @@ public final class MultiblockDefinition {
 
         public Builder pattern(MultiblockPattern pattern) {
             this.pattern = Objects.requireNonNull(pattern, "pattern");
+            return this;
+        }
+
+        public Builder upgrades(List<MultiblockUpgrade> upgrades) {
+            this.upgrades = List.copyOf(Objects.requireNonNull(upgrades, "upgrades"));
+            return this;
+        }
+
+        public Builder motions(List<MultiblockMotion> motions) {
+            this.motions = List.copyOf(Objects.requireNonNull(motions, "motions"));
             return this;
         }
 
@@ -334,6 +387,13 @@ public final class MultiblockDefinition {
             if (this.pattern == null) {
                 throw new IllegalStateException("A multiblock definition needs a pattern");
             }
+            if (!this.upgrades.isEmpty() && !this.pattern.hasUpgradeKey()) {
+                throw new IllegalStateException("Multiblock upgrades need an upgrade key in the pattern");
+            }
+            if (this.upgrades.isEmpty() && this.pattern.hasUpgradeKey()) {
+                throw new IllegalStateException("Upgrade key '" + this.pattern.upgradeKey()
+                        + "' is present in the pattern but no boosters were defined");
+            }
             Set<String> slotIds = new HashSet<>();
             for (ItemSlot slot : this.itemSlots) {
                 if (!slotIds.add(slot.id())) {
@@ -365,6 +425,7 @@ public final class MultiblockDefinition {
                     throw new IllegalStateException("Missing resource tanks for kind: " + kind);
                 }
             }
+            validateMotions();
             this.capabilityPorts.validate(this.pattern);
             return new MultiblockDefinition(
                     this.id,
@@ -373,6 +434,8 @@ public final class MultiblockDefinition {
                     this.priority,
                     this.tier,
                     this.pattern,
+                    this.upgrades,
+                    this.motions,
                     this.inventoryRows,
                     this.itemSlots,
                     Optional.ofNullable(this.energy),
@@ -385,6 +448,66 @@ public final class MultiblockDefinition {
                     this.capabilityPorts,
                     this.resourceConfigs,
                     this.resourceTanks);
+        }
+
+        private void validateMotions() {
+            Set<String> motionIds = new HashSet<>();
+            Set<Character> usedKeys = new HashSet<>();
+            for (MultiblockMotion motion : this.motions) {
+                if (motion.id().isBlank()) {
+                    throw new IllegalStateException("A multiblock motion needs a non-blank id");
+                }
+                if (!motionIds.add(motion.id())) {
+                    throw new IllegalStateException("Duplicate multiblock motion id: " + motion.id());
+                }
+                if (motion.keys().isEmpty()) {
+                    throw new IllegalStateException("Multiblock motion '" + motion.id() + "' needs at least one key");
+                }
+                if (motion.damage() < 0.0F) {
+                    throw new IllegalStateException("Multiblock motion '" + motion.id() + "' has a negative damage");
+                }
+                if (Identifier.tryParse(motion.damageSource()) == null) {
+                    throw new IllegalStateException(
+                            "Multiblock motion '" + motion.id() + "' has an invalid damage_source");
+                }
+                for (char key : motion.keys()) {
+                    if (key == this.pattern.anchor()) {
+                        throw new IllegalStateException(
+                                "Multiblock motion '" + motion.id() + "' cannot use the anchor key '" + key + "'");
+                    }
+                    if (this.pattern.hasUpgradeKey() && key == this.pattern.upgradeKey()) {
+                        throw new IllegalStateException(
+                                "Multiblock motion '" + motion.id() + "' cannot use the upgrade key '" + key + "'");
+                    }
+                    if (!this.pattern.hasStructuralSymbol(key)) {
+                        throw new IllegalStateException(
+                                "Multiblock motion '" + motion.id() + "' uses key '" + key
+                                        + "' that is not part of the pattern");
+                    }
+                    if (!usedKeys.add(key)) {
+                        throw new IllegalStateException(
+                                "Key '" + key + "' is used by more than one multiblock motion");
+                    }
+                }
+                MultiblockMotion.Animation animation = motion.animation();
+                if (animation.duration() < 0) {
+                    throw new IllegalStateException(
+                            "Multiblock motion '" + motion.id() + "' has a negative animation duration");
+                }
+                int previousTime = -1;
+                for (MultiblockMotion.Keyframe frame : animation.keyframes()) {
+                    if (frame.time() < 0 || frame.time() > animation.duration()) {
+                        throw new IllegalStateException(
+                                "Multiblock motion '" + motion.id() + "' has a keyframe outside 0.."
+                                        + animation.duration() + ": " + frame.time());
+                    }
+                    if (frame.time() < previousTime) {
+                        throw new IllegalStateException(
+                                "Multiblock motion '" + motion.id() + "' keyframes must be sorted by time");
+                    }
+                    previousTime = frame.time();
+                }
+            }
         }
     }
 }

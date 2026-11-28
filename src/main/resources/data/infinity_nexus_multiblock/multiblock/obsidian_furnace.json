@@ -34,6 +34,18 @@
       "y": 34
     }
   ],
+  "upgrades": {
+    "key": "U",
+    "boosters": [
+      {
+        "matcher": "minecraft:gold_block",
+        "modifier": "output",
+        "mode": "additive",
+        "factor": 1,
+        "max_blocks": 2
+      }
+    ]
+  },
   "capabilities": {
     "energy": {
       "id": "energy",
@@ -126,8 +138,8 @@
         "ECE"
       ],
       [
-        "I I",
-        "I I",
+        "IUI",
+        "IUI",
         "IBI"
       ]
     ],

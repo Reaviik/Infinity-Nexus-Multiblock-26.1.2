@@ -1,0 +1,297 @@
+{
+  "schema_version": 2,
+  "id": "infinity_nexus_multiblock:astrolabo",
+  "type": "storage_exemple",
+  "motions": [
+    {
+      "id": "motion_1",
+      "keys": [
+        "B"
+      ],
+      "animation": {
+        "loop": true,
+        "duration": 200,
+        "easing": "linear",
+        "keyframes": [
+          {
+            "time": 0,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "time": 200,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              720,
+              360
+            ]
+          }
+        ],
+        "fill_speed": true
+      },
+      "preserveNbt": false,
+      "damageEntities": false,
+      "damageInterval": 10
+    },
+    {
+      "id": "motion_2",
+      "keys": [
+        "A"
+      ],
+      "animation": {
+        "loop": true,
+        "duration": 200,
+        "easing": "linear",
+        "keyframes": [
+          {
+            "time": 0,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "time": 200,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              360,
+              720
+            ]
+          }
+        ],
+        "fill_speed": true
+      },
+      "preserveNbt": false,
+      "damageEntities": false,
+      "damageInterval": 10
+    },
+    {
+      "id": "motion_3",
+      "keys": [
+        "D"
+      ],
+      "animation": {
+        "loop": true,
+        "duration": 200,
+        "easing": "linear",
+        "keyframes": [
+          {
+            "time": 0,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "time": 200,
+            "offset": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              -720,
+              360
+            ]
+          }
+        ],
+        "fill_speed": true
+      }
+    }
+  ],
+  "upgrades": {
+    "key": "U",
+    "boosters": [
+      {
+        "matcher": "minecraft:gold_block",
+        "modifier": "damage",
+        "damage": 1,
+        "max_blocks": 24
+      }
+    ]
+  },
+  "pattern": {
+    "anchor": "C",
+    "layers": [
+      [
+        "             ",
+        "             ",
+        "             ",
+        "      U      ",
+        "    AAAAA    ",
+        "      U      ",
+        "             ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "             ",
+        "             ",
+        "  AA     AA  ",
+        "             ",
+        "             ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "             ",
+        "      D      ",
+        " A   UDU   A ",
+        "      D      ",
+        "             ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "      D      ",
+        "             ",
+        " A         A ",
+        "             ",
+        "      D      ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "      D      ",
+        "             ",
+        "      U      ",
+        "A    BBB    A",
+        "      U      ",
+        "             ",
+        "      D      ",
+        "             "
+      ],
+      [
+        "      D      ",
+        "             ",
+        "             ",
+        "             ",
+        "A   B   B   A",
+        "             ",
+        "             ",
+        "             ",
+        "      D      "
+      ],
+      [
+        "     UDU     ",
+        "             ",
+        "             ",
+        "U   U   U   U",
+        "A   B C B   A",
+        "U   U   U   U",
+        "             ",
+        "             ",
+        "     UDU     "
+      ],
+      [
+        "      D      ",
+        "             ",
+        "             ",
+        "             ",
+        "A   B   B   A",
+        "             ",
+        "             ",
+        "             ",
+        "      D      "
+      ],
+      [
+        "             ",
+        "      D      ",
+        "             ",
+        "      U      ",
+        "A    BBB    A",
+        "      U      ",
+        "             ",
+        "      D      ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "      D      ",
+        "             ",
+        " A         A ",
+        "             ",
+        "      D      ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "             ",
+        "      D      ",
+        " A   UDU   A ",
+        "      D      ",
+        "             ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "             ",
+        "             ",
+        "  AA     AA  ",
+        "             ",
+        "             ",
+        "             ",
+        "             "
+      ],
+      [
+        "             ",
+        "             ",
+        "             ",
+        "      U      ",
+        "    AAAAA    ",
+        "      U      ",
+        "             ",
+        "             ",
+        "             "
+      ]
+    ],
+    "matchers": {
+      "A": "minecraft:glass",
+      "B": "minecraft:glass",
+      "D": "minecraft:glass"
+    }
+  }
+}

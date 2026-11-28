@@ -1,8 +1,5 @@
 package com.Infinity.Nexus.Multiblock.registry;
 
-import java.util.List;
-import java.util.Set;
-
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlock;
 import com.Infinity.Nexus.Multiblock.block.MultiblockControllerBlockEntity;
@@ -19,6 +16,9 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+
+import java.util.List;
+import java.util.Set;
 
 public final class ModBlocks {
     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(InfinityNexusMultiblock.MOD_ID);
@@ -39,6 +39,7 @@ public final class ModBlocks {
                     .mapColor(MapColor.METAL)
                     .strength(4.0F)
                     .requiresCorrectToolForDrops()
+                    .noOcclusion()
                     .lightLevel(state -> state.getValue(MultiblockControllerBlock.PROCESSING)
                             || state.getValue(MultiblockControllerBlock.BUILDING) ? 15 : 0));
 

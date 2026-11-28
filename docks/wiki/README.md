@@ -3,12 +3,12 @@
 Guia prático para criar máquinas multibloco com o **Infinity Nexus Multiblock**.
 
 - Minecraft: `26.1.2`
-- NeoForge: `26.1.2.121`
+- NeoForge: `26.1.2.124`
 - Java: `25`
 - Idioma dos exemplos: Português
 - Schema atual: `schema_version: 2`
 
-Este guia documenta **tudo o que o JSON aceita hoje** e mostra exemplos completos. O objetivo é que você consiga sair de uma ideia e chegar a uma máquina formável, com inventário, energia, fluidos, GUI e receita.
+Este guia documenta **tudo o que o JSON aceita hoje** e mostra exemplos completos. O objetivo é que você consiga sair de uma ideia e chegar a uma máquina formável, com inventário, energia, fluidos, GUI, receita, boosters e partes móveis.
 
 Para montar e validar a definição visualmente, abra o [Builder de multiblocos](../builder/index.html). Ele exporta o mesmo JSON descrito neste guia.
 
@@ -26,12 +26,14 @@ Para montar e validar a definição visualmente, abra o [Builder de multiblocos]
 10. [Receitas](#10-receitas)
 11. [Herança e templates](#11-herança-e-templates)
 12. [Priority, tier e sobreposição](#12-priority-tier-e-sobreposição)
-13. [Exportar e importar](#13-exportar-e-importar)
-14. [Reload e ciclo de vida](#14-reload-e-ciclo-de-vida)
-15. [Exemplos completos](#15-exemplos-completos)
-16. [Erros comuns](#16-erros-comuns)
-17. [Checklist final](#17-checklist-final)
-18. [Limitações atuais](#18-limitações-atuais)
+13. [Boosters (upgrades)](#13-boosters-upgrades)
+14. [Motions (partes móveis)](#14-motions-partes-móveis)
+15. [Exportar e importar](#15-exportar-e-importar)
+16. [Reload e ciclo de vida](#16-reload-e-ciclo-de-vida)
+17. [Exemplos completos](#17-exemplos-completos)
+18. [Erros comuns](#18-erros-comuns)
+19. [Checklist final](#19-checklist-final)
+20. [Limitações atuais](#20-limitações-atuais)
 
 ## 1. Como uma máquina funciona
 
@@ -41,7 +43,7 @@ Uma máquina é a combinação de três partes:
    O bloco, o block entity e o item são registrados uma única vez como `infinity_nexus_multiblock:multiblock_controller`. Toda definição usa esse mesmo controller; não existe bloco controller por máquina. Texturas por definição são opcionais no campo top-level `textures`.
 
 2. **Uma definição JSON.**
-   Ela diz qual é o pattern, quais blocos formam a estrutura, quais slots existem, qual GUI usar, quais capabilities existem e qual receita processar. O vínculo com o controller é feito pelo componente `infinity_nexus_multiblock:multiblock_definition`, cujo valor é o `id` da definição.
+   Ela diz qual é o pattern, quais blocos formam a estrutura, quais slots existem, qual GUI usar, quais capabilities existem, quais boosters e partes móveis existem e qual receita processar. O vínculo com o controller é feito pelo componente `infinity_nexus_multiblock:multiblock_definition`, cujo valor é o `id` da definição.
 
 3. **Um pattern formado no mundo.**
    O jogador coloca o controller virado para a direção correta e clica nele para montar. Quando todas as células batem, o controller fica `formed=true`, abre a GUI e passa a processar receitas.
@@ -54,7 +56,7 @@ JSON: schema_version 2 + pattern + slots + capabilities + GUI + recipe opcional
 Mundo: controller é colocado com o componente de definição e clicado
 Loader: valida o JSON e cria a definição
 Estrutura: pattern é validado com rotação
-Máquina: inventário, energia, fluidos, GUI e receita funcionam
+Máquina: inventário, energia, fluidos, GUI, receita, boosters e motions funcionam
 ```
 
 Não há mais `controller` nem `recipe_type` na definição. O controller compartilhado exibe o nome da definição via `MultiblockDefinition#displayName()`; a chave de tradução é `multiblock.<namespace>.<path>` e o fallback é o path formatado, como `fabrica_de_voxel_cube` -> `Fabrica De Voxel Cube`. Os campos opcionais `textures` e `model` permitem especializar as texturas e o modelo 3D do controller por definição; veja a seção 9.2.
@@ -136,17 +138,19 @@ Datapacks e KubeJS podem adicionar ou sobrescrever definições e receitas. O co
 |---|---:|---|---|---|
 | `schema_version` | sim | inteiro | — | Hoje só aceita `2`. |
 | `id` | sim | identifier | — | Precisa ser igual ao caminho do arquivo. |
-| `type` | sim | string | — | `recipe` ou `storage`. |
+| `type` | sim | string | — | `recipe` ou `storage`. `recipe_exemple`/`storage_exemple` só carregam com `enable_exemples` ligado. |
 | `priority` | não | inteiro | `0` | Usado para resolver sobreposição entre estruturas. Pode ser negativo. |
 | `tier` | não | inteiro | `1` | Mínimo `1`. Hoje é apenas metadado; não altera comportamento. |
 | `recipe` | não | objeto | ausente | Receita shaped de crafting table do controller, lida do jar do mod e de `kubejs/data`; não é lida de datapacks comuns. Veja a seção 9. |
 | `inventory_rows` | não | inteiro | `3` | De `1` a `6`. Usado só quando `item_slots` está vazio. |
 | `item_slots` | não | lista | `[]` | Define os slots do inventário. Veja a seção 6. |
-| `capabilities` | não | objeto | vazio | Energia e fluidos. Veja a seção 7. |
-| `capability_ports` | não | objeto | ausente | Restringe quais blocos membros expõem item, energia e fluido. Veja a seção 7.3. |
-| `textures` | não | objeto | ausente | Sobrescreve as texturas do controller por definição. Aceita `front`, `back`, `left`, `right`, `top`, `bottom`, `side`, `particle` e `active`. Veja a seção 9.2. |
+| `capabilities` | não | objeto | vazio | Energia, fluidos e recursos de addon (`capabilities.<kind>`). Veja a seção 7. |
+| `capability_ports` | não | objeto | ausente | Restringe quais blocos membros expõem item, energia, fluido e recursos de addon. Veja a seção 7.3. |
+| `textures` | não | objeto | ausente | Sobrescreve as texturas do controller por definição. Aceita `front`, `back`, `left`, `right`, `top`, `bottom`, `side`, `particle`, `all` e os estados `active`/`building`. Veja a seção 9.2. |
 | `model` | não | objeto | ausente | Modelo 3D customizado do controller por estado. Aceita `idle`, `active` e `building`. Veja a seção 9.2. |
 | `shape` | não | lista | ausente | Caixas de colisão e seleção do controller, em pixels (`0`–`16`). Veja a seção 9.2.1. |
+| `upgrades` | não | objeto | ausente | Boosters: uma Key no pattern e a lista de boosters. Veja a seção 13. |
+| `motions` | não | lista | ausente | Partes móveis do pattern, com animação, dano e NBT opcional. Veja a seção 14. |
 | `gui` | não | objeto | ausente | Layout padrão ou customizado. Veja a seção 8. |
 | `sounds` | não | objeto | ausente | Sons de processamento e conclusão de receitas. Veja a seção 10.11. |
 | `pattern` | sim para máquina | objeto | — | Obrigatório para uma definição registrada. Templates podem omitir. |
@@ -228,7 +232,7 @@ Esse JSON já carrega como definição em qualquer namespace. O item controller 
 - Espaços (`" "`) são ignorados como células, mas continuam contando para a largura.
 - `anchor` é opcional e usa `C` por padrão.
 - Deve existir **exatamente um** símbolo de âncora.
-- Cada símbolo usado, exceto a âncora, precisa ter um matcher.
+- Cada símbolo usado precisa ter um matcher, exceto a âncora e a Key de upgrade (seção 13).
 - A célula da âncora é o controller. Ela não entra na lista de membros e não é testada pelo matcher.
 - O matcher da âncora é opcional e, se existir, é ignorado.
 - A orientação canônica é com o controller virado para **SOUTH**.
@@ -300,7 +304,7 @@ O controller fica na face sul da camada do meio. O resto do cubo é `minecraft:i
 
 ### 4.5 Tamanho
 
-O loader não impõe um limite de tamanho para o pattern. O limite configurável em `export.pattern_scan_limit` (padrão 256 blocos) vale para a **exportação** no criativo, não para a definição.
+O loader não impõe um limite de tamanho para o pattern. O limite configurável em `export.pattern_scan_limit` (padrão 256, máximo 40960 blocos) vale para a **exportação** no criativo, não para a definição.
 
 ## 5. Matchers
 
@@ -617,7 +621,9 @@ No layout padrão (sem `gui.elements`), slots com `x`/`y` que caibam em `176x166
 
 O `port` é opcional. Quando definido, o tanque só é exposto nos blocos de fluido que casarem com esse seletor; a key precisa existir no `pattern` e, quando `capability_ports.fluid` existe, também precisa estar selecionada lá. Tanques sem `port` continuam acessíveis por qualquer porta de fluido. Isso permite, por exemplo, um tanque de água acessível só pela key `F` e um de lava só pela key `L`.
 
-As portas respeitam `max_receive`/`max_extract` e `filter` do tanque. O slot `fluid` usa os tanques como origem/destino manual: ele ignora `max_receive` e `max_extract` (limites de automação), mas respeita `capacity` e `filter`. A troca é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.
+A automação pelas portas respeita `max_receive`/`max_extract` e `filter` do tanque. O slot `fluid` e a interação manual com balde/container na porta ou na GUI ignoram `max_receive` e `max_extract` (limites de automação), mas respeitam `capacity` e `filter`. A troca do slot é all-or-nothing por stack: N baldes exigem N*1000 mB livres no tanque.
+
+Na GUI, clique esquerdo na barra de um tanque usa o item que está no cursor (mouse), não o item da hotbar. Com balde/container de fluido, tenta encher o item e depois drenar o item para o tanque, sem respeitar `max_receive`/`max_extract`; um balde vazio é consumido e vira um balde cheio (baldes cheios não empilham, então é 1 por clique). Com esponja seca em um tanque de água, esvazia o tanque e consome 1 esponja do cursor, devolvendo esponja molhada no cursor ou no inventário.
 
 ### 7.3 Portas de capability (`capability_ports`)
 
@@ -653,9 +659,11 @@ Regras:
 - `item` não é uma chave de `capabilities`: todo multiblock tem inventário (`item_slots` ou `inventory_rows`) e expõe item por padrão. Use `capability_ports.item` para limitar as portas ou `[]` para não expor item.
 - `energy` e `fluid` só têm efeito quando a máquina define `capabilities.energy` ou pelo menos um tanque em `capabilities.fluids`. Um tanque somente de fluido é possível com `capabilities.fluids` e, se quiser esconder o inventário, `"capability_ports": {"item": []}`. A GUI customizada pode ter só `fluid_bar` e `player_inventory`, sem `item_slots`.
 
+Além de `item`, `energy` e `fluid`, `capability_ports` aceita uma chave para cada recurso de addon registrado (por exemplo `chemical`, `mana` ou `aura`). O valor usa o mesmo formato de seletores: símbolo do pattern, ID de bloco ou tag. Um `kind` que não está registrado falha o carregamento da definição.
+
 As portas são recalculadas na próxima validação da estrutura (a cada 20 ticks ou quando um vizinho muda). `/reload` atualiza a definição e agenda essa revalidação; não é preciso quebrar e montar de novo.
 
-No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Campo vazio omite a chave e libera a capability em qualquer bloco; `[]` não expõe nenhum bloco; símbolos, IDs e tags podem ser separados por vírgula ou espaço. As portas `energy`/`fluid` ficam desabilitadas enquanto a capability correspondente não existir.
+No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Clique nos símbolos do pattern para alternar vários seletores ou digite símbolos, IDs e tags separados por vírgula ou espaço. Campo vazio omite a chave e libera a capability em qualquer bloco; `[]` não expõe nenhum bloco. As portas `energy`/`fluid` ficam desabilitadas enquanto a capability correspondente não existir.
 
 ### 7.4 Onde as capabilities aparecem
 
@@ -664,6 +672,8 @@ No builder, os campos de `capability_ports` ficam na etapa **Capabilities**. Cam
 - **Itens:** um hopper encostado em qualquer porta de item acessa o mesmo inventário.
 - **Energia e fluidos:** normalmente expostos só no controller, incluindo `C` na lista correspondente.
 - **Tanques com `port`:** só aparecem nas portas de fluido que casarem com a key/bloco/tag configurada; as demais portas veem apenas os tanques sem `port` (e os que casarem com elas).
+- **Balde/container de fluido:** clicar com o item em uma porta de fluido formada move até 1.000 mB entre o item e o tanque (tenta encher o item primeiro e depois drenar o item), ignorando `max_receive`/`max_extract`; o balde é consumido/trocado também no criativo. Sem `capability_ports.fluid`, qualquer bloco membro serve como porta; com `capability_ports.fluid` definido, só as portas selecionadas transferem e clicar com um container de fluido em um bloco membro que não é porta cancela a abertura da GUI. Shift+clique criativo para exportar continua funcionando.
+- **Barra de fluido na GUI:** clique esquerdo na barra do tanque com balde/container no cursor para transferir; com esponja seca no cursor e tanque de água, esvazia o tanque e molha a esponja. O balde não pega recursos de addon (`mana`, `chemical` etc.) porque esses recursos usam `resource_bar`, não `fluid_bar`.
 - O `energy.id` e os `fluids[].id` são usados pela GUI para localizar as barras. Eles não mudam as portas.
 
 ### 7.5 Energia em receitas
@@ -680,6 +690,31 @@ Se a receita tem `inputs` do tipo `fluid`, a maquina precisa ter tanques suficie
 
 `/reload` atualiza a definição, mas **não recria nem reconfigura** capabilities de energia/fluidos já existentes. Se você mudar `capacity`, `max_receive`, `max_extract` ou `filter`, quebre e coloque o controller de novo, ou reinicie o mundo, para criar as capabilities com os novos valores.
 
+### 7.8 Recursos de addon
+
+Além de `energy` e `fluids`, `capabilities` aceita uma chave por recurso de addon registrado. O formato interno de cada `kind` é definido pelo addon:
+
+```json
+"capabilities": {
+  "aura": {
+    "tanks": [
+      { "id": "input", "capacity": 100000, "max_receive": 100, "max_extract": 0 }
+    ]
+  }
+},
+"capability_ports": {
+  "aura": ["A"]
+}
+```
+
+- O base entrega o JSON bruto de `capabilities.<kind>` para o addon; quem valida os campos é o próprio addon.
+- `capability_ports.<kind>` aceita os mesmos seletores de `item`/`energy`/`fluid`.
+- Receitas usam o `kind` como `type` do ingrediente/output, por exemplo `{ "type": "aura", "id": "mymod:ignis", "amount": 100 }`.
+- A GUI usa `resource_bar` (um tanque) ou `resource_list` (grade de recursos).
+- Se o `kind` não estiver registrado, a definição falha com uma mensagem como `Unknown multiblock resource kind 'aura': is the addon installed?`.
+
+O contrato completo para criar um addon está em [`addons.html`](addons.html).
+
 ## 8. GUI
 
 ### 8.1 Layout padrão
@@ -690,6 +725,7 @@ Sem `gui`, ou com `gui.elements` vazio, o layout é automático:
 - título no topo;
 - uma barra de energia, se existir;
 - uma barra para cada tanque de fluido, se existirem;
+- uma barra para cada tanque de recurso de addon, se existirem;
 - uma barra de progresso à direita, se `type=recipe`;
 - inventário do jogador abaixo dos slots;
 - largura fixa em `176` e altura calculada para caber tudo (mínimo `166`).
@@ -709,11 +745,17 @@ Com `gui.elements` não vazio:
 - `fluid_bar.capability` precisa ser igual a um `fluids[].id`;
 - `progress_bar`, `arrow` e `entity` só são aceitos em `type=recipe`;
 - slots, player inventory, barras e `entity` precisam caber em `width`/`height`;
-- `entity.width`/`entity.height` precisam ser múltiplos de `18` e no mínimo `18`;
+- `entity` e `resource_list` precisam de `width`/`height` múltiplos de `18` e no mínimo `18`;
 - `title` e `text` não têm validação de limites; cuidado para não desenhar fora da tela.
-- Em `title`/`text`, `x/y` representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder.
-- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,75`, `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,16` com `8x54`, e `entity` em `82,16` com `54x54`.
+- Em `title`/`text`, `x/y` representam o canto superior esquerdo da linha de texto, não a baseline; a tela compensa 1 px para alinhar o desenho ao referencial do builder. No builder, a prévia compensa mais 2 px no `title` e 3 px no `text` para o texto bater visualmente com o jogo, sem alterar o JSON exportado.
+- No builder, novos elementos começam com o layout do `spawner`: `title` em `8,4`, `text` em `8,71` (rótulo do inventário), `player_inventory` em `8,84`, `energy_bar`/`fluid_bar`/`progress_bar` em `158/148/138,16` com `8x54`, e `entity` em `82,16` com `54x54`.
+- Uma GUI nova no builder já vem com `title`, `text` (Inventário) e `player_inventory`; a marcação do inventário cobre a área interna dos slots, de `8,84` a `167,157`, e as barras são retangulares como no jogo.
+- No builder, o rótulo do inventário vem do elemento `text`; o `player_inventory` só desenha o próprio `text` quando não existe um `text` com conteúdo na posição do rótulo, evitando dois rótulos na prévia.
 - Slots novos começam em `8,16` e avançam `18` px por coluna, com 9 colunas por linha (ou 8 quando há barras de energia/fluido ou barra de progresso) antes de descer para a próxima linha.
+- O builder usa `docks/builder/assets/gui/gui.png` (176x166) como fundo padrão, `slot.png` nos slots e `seta_fundo.png` com `seta_overlay.png` animado na seta.
+- O upload de um PNG custom no builder usa o tamanho natural da imagem e bloqueia `width`, `height`, `texture_width` e `texture_height` até clicar em **usar padrão**.
+- Os elementos da GUI são acordeões; o seletor de tipo mostra uma descrição curta no hover.
+- Na prévia da GUI do rail, passar o mouse aplica zoom de 1.9x centrado na posição do cursor; ao sair, a prévia volta ao tamanho normal.
 
 ### 8.3 Campos de `gui`
 
@@ -733,12 +775,12 @@ Com `gui.elements` não vazio:
 | `type` | sim | string | — | Veja a tabela de tipos abaixo. |
 | `x` | não | inteiro | `0` | Posição horizontal. |
 | `y` | não | inteiro | `0` | Posição vertical. |
-| `width` | não | inteiro | `16` | De `0` a `4096`. Barras precisam de valor positivo; `entity` precisa de múltiplo de `18`, mínimo `18`. |
-| `height` | não | inteiro | `16` | De `0` a `4096`. Barras precisam de valor positivo; `entity` precisa de múltiplo de `18`, mínimo `18`. |
+| `width` | não | inteiro | `16` (`8` em `booster_button`) | De `0` a `4096`. Barras precisam de valor positivo; `entity` e `resource_list` precisam de múltiplos de `18`, mínimo `18`. |
+| `height` | não | inteiro | `16` (`8` em `booster_button`) | De `0` a `4096`. Barras precisam de valor positivo; `entity` e `resource_list` precisam de múltiplos de `18`, mínimo `18`. |
 | `text` | não | string | `""` | Chave de tradução ou texto literal. |
-| `slot` | não | string | `""` | Só para o tipo `slot`; ID de `item_slots[]`. |
-| `capability` | não | string | `""` | ID de energia ou tanque para barras. |
-| `color` | não | inteiro ou string | depende do tipo | ARGB em inteiro decimal ou hexadecimal. Padrões: `0xFF404040` (texto), `0xFFFF0000` (`energy_bar`) e `0xFF00AA00` (`progress_bar`). Alpha `0` vira `0xFF`. |
+| `slot` | não | string | `""` | Para `slot`, ID de `item_slots[]`; para `resource_bar`, ID do tanque do recurso; para `resource_list`, o `kind`. |
+| `capability` | não | string | `""` | ID de energia, tanque de fluido ou `kind` de recurso de addon para barras. |
+| `color` | não | inteiro ou string | depende do tipo | ARGB em inteiro decimal ou hexadecimal. Padrões: `0xFF404040` (texto), `0xFFFF0000` (`energy_bar`), `0xFF00AA00` (`progress_bar`) e `0xFFFFC107` (`booster_button`). Alpha `0` vira `0xFF`. |
 | `shadow` | não | booleano | `true` | Sombra do texto. |
 | `direction` | não | string | `up` | `up`, `down`, `left` ou `right`. |
 | `u` | não | inteiro | `-1` | Origem horizontal do sprite. Se `-1`, usa `x`. |
@@ -756,6 +798,9 @@ O campo `color` é ARGB e aceita inteiro decimal ou string hexadecimal. Exemplos
 | `slot` | Formato antigo para posicionar um slot. Tamanho fixo `18x18`. | `slot`, `x`, `y` |
 | `energy_bar` | Barra de energia. | `capability`, `x`, `y`, `width`, `height`, `direction`, `color` |
 | `fluid_bar` | Barra de fluido. | `capability`, `x`, `y`, `width`, `height` |
+| `resource_bar` | Barra de um tanque de recurso de addon. `chemical_bar` é um alias. | `capability`, `slot`, `x`, `y`, `width`, `height` |
+| `resource_list` | Grade de recursos de addon (por exemplo essentia). | `capability`, `x`, `y`, `width`, `height` (múltiplos de `18`) |
+| `booster_button` | Botão que destaca as células de upgrade no mundo. Só existe com `upgrades`. | `x`, `y`, `text` (padrão `B`), `width`, `height` (padrão `8`), `color` |
 | `progress_bar` | Barra de progresso da receita. | `x`, `y`, `width`, `height`, `direction`, `color`, `u`, `v` |
 | `arrow` | Seta de progresso, como a da fornalha. | `x`, `y`, `width`, `height`, `direction`, `u`, `v` |
 | `entity` | Área que renderiza as entidades de `inputs` e `outputs` da receita, com quantidade no tooltip do JEI, e no controller os mobs vivos da área, com paginação automática. | `x`, `y`, `width`, `height` |
@@ -833,6 +878,28 @@ O campo `color` é ARGB e aceita inteiro decimal ou string hexadecimal. Exemplos
 - O tooltip do JEI identifica entrada/saída, a quantidade e a chance da entidade na página exibida; no controller, mostra o nome e a contagem da entidade.
 - Renderiza no JEI e no controller.
 - Entidades vivas usam o renderer de inventário; entidades não-vivas usam o render state genérico. A escala é ajustada ao tamanho da entidade para caber na célula.
+
+**`resource_bar`**
+
+- `capability` é o `kind` do recurso e `slot` é o ID do tanque retornado pelo addon.
+- `width`/`height` precisam ser positivos.
+- Sempre preenche de baixo para cima; `direction` e `color` são ignorados.
+- A cor e o nome vêm do addon (`color`/`displayName`).
+- `chemical_bar` é redirecionado para `resource_bar`.
+
+**`resource_list`**
+
+- `capability` é o `kind` do recurso; hoje o builder trata como o caso especial de `essentia`.
+- `width`/`height` precisam ser múltiplos de `18` e no mínimo `18`.
+- Desenha uma grade de células de `18x18`, como o elemento `entity`.
+
+**`booster_button`**
+
+- Só é aceito quando `upgrades.boosters` não está vazio.
+- Padrão `8x8`; o builder posiciona no canto superior direito (`x=160`, `y=4` numa GUI `176`).
+- Ao clicar, destaca as células de upgrade no mundo por `10s`.
+
+> **Builder:** hoje ele converte `resource_bar` importado para `chemical_bar` (exceto `capability=mana`) e trata `resource_list` como o caso especial de `essentia`. Para outros `kind`s, edite o JSON manualmente.
 
 ### 8.7 Exemplo de GUI customizada
 
@@ -958,8 +1025,10 @@ Regras de `textures`:
 - Os valores são identifiers completos, como `minecraft:block/stone`, e a textura precisa existir em `assets/<namespace>/textures/block/...` para entrar no atlas de blocos.
 - Faces omitidas usam o modelo/textura padrão do controller.
 - `active` é opcional e é aplicado enquanto o controller está processando. Faces omitidas em `active` herdam a textura idle correspondente.
+- `building` é opcional e é aplicado durante a montagem. Faces omitidas em `building` herdam `active` e depois `idle`.
 - `particle` vazio usa `front`; sem `front`, usa `all`; sem ambos, usa a partícula padrão do modelo.
 - No builder, o controller custom lista as chaves de textura do próprio JSON do modelo (ex.: `#all`, `#side`, `#front`), não as seis faces padrão. Importar um PNG é apenas visual: não grava em `textures` nem altera o JSON. A imagem é aplicada a todas as faces que usam aquela chave; se a chave não tiver identifier resolvido, o builder gera um `minecraft:...` apenas no preview. As imagens ficam salvas por estado (`idle`, `active`, `building`) e voltam ao alternar o preview.
+- Depois do PNG, o botão `.mcmeta` aplica uma animação só no preview. O builder lê `animation.frametime`, `animation.interpolate` e `animation.frames` (números ou `{index, time}`), usando o PNG como tira vertical de frames. O `.mcmeta` não entra no JSON exportado; para o jogo animar, publique o arquivo `<texture>.png.mcmeta` ao lado do PNG em `assets/<namespace>/textures/...`.
 - Como os demais objetos, `textures` é mesclado recursivamente por `extends`, `family` e `overrides`; o objeto `active` é mesclado face a face.
 - Se uma textura não estiver no atlas de blocos do cliente, o controller volta ao modelo padrão e registra um aviso no log; o JSON continua carregando no servidor.
 - A troca idle/active não exige quebrar o bloco; ela acompanha o estado `processing` do controller.
@@ -1083,6 +1152,25 @@ Para integrações em Java, use:
 
 Não é necessário registrar um `MultiblockControllerItem`, bloco ou block entity por máquina.
 
+### 9.6 Montagem incremental e Jade
+
+Clicar no controller não formado (sem agachar) inicia uma montagem incremental que coloca os blocos que faltam. Agachar mostra `not_formed`; no criativo, agachar com a mão vazia continua exportando o JSON.
+
+- O trabalho varre as células em `assembly.blocks_per_tick` (padrão `32`, mínimo `1`, máximo `4096`) por tick.
+- Cada tentativa sem bloco conta para `assembly.max_failed_scans_per_tick` (padrão `10`) e evita travar quando faltam itens.
+- Blocos já corretos não são mexidos; células ocupadas por outro bloco ficam marcadas e são destacadas em vermelho por `assembly.blocked_highlight_seconds` (padrão `300`s).
+- No criativo, os blocos são colocados sem consumir itens.
+- No survival, os itens vêm do inventário do jogador e dos containers adjacentes ao controller; o que foi consumido é descontado no fim do tick.
+- O controller fica com `building=true` enquanto a montagem roda e a validação normal é pausada.
+- Ao terminar, a estrutura é validada; o jogador recebe uma mensagem de montagem completa, parcial, blocos faltando ou células bloqueadas.
+
+O Jade mostra o estado do controller:
+
+- `Formed`/`Unformed` quando a montagem não está ativa;
+- uma barra `||...==` com a porcentagem durante a montagem.
+
+Se a montagem parar no meio (por falta de itens), clicar de novo retoma de onde parou.
+
 ## 10. Receitas
 
 ### 10.1 Arquivo
@@ -1106,9 +1194,9 @@ O tipo `infinity_nexus_multiblock:multiblock` e unico e registrado pelo mod. A r
 |---|---:|---|---|---|
 | `type` | sim | string | - | Sempre `infinity_nexus_multiblock:multiblock`. |
 | `definition` | sim | identifier | - | `id` da definicao que processa esta receita. |
-| `inputs` | sim | lista | `[]` | Lista tipada de itens, fluidos, entidades e energia. |
-| `outputs` | sim | lista | `[]` | Resultados; cada entrada tem `chance` opcional. |
-| `time` | sim | inteiro | `100` | Duracao em ticks, de 1 a 72000. |
+| `inputs` | não | lista | `[]` | Lista tipada de itens, fluidos, entidades, energia e recursos de addon. A receita precisa resolver pelo menos um input. |
+| `outputs` | não | lista | `[]` | Um ou mais resultados; cada entrada tem `chance` opcional. A receita precisa resolver pelo menos um output. |
+| `time` | não | inteiro | `100` | Duracao em ticks, inteiro positivo (de `1` a `2147483647`). |
 
 O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `output`, `energy` e `result` para migracao, mas o builder exporta somente `inputs` e `outputs`. Receitas novas devem usar o schema tipado.
 
@@ -1128,6 +1216,7 @@ O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `outp
 - `fluid`: `ingredient` aceita id ou tag; `amount` e obrigatorio e limitado pela maior capacidade de tanque.
 - `entity`: `id` (entity type) ou `tag` (tag de entity type, com `#`), exatamente um; `count` e opcional (1 a 99, padrao 1) e indica quantas entidades desse tipo precisam existir na area; `spawn` e opcional e aceita simbolo do pattern, bloco ou tag. As entidades precisam estar dentro da area do multibloco ou perto do seletor e sao removidas ao completar.
 - `energy`: `amount` e o custo total em FE, consumido aos poucos durante o progresso.
+- Recurso de addon: o `type` e o `kind` registrado e os campos vem do codec do addon (`id`, `amount`, etc.).
 - Pelo menos um input e obrigatorio; a maquina tambem procura receitas que tenham somente energia ou entidade, sem item/fluido.
 
 ### 10.4 `outputs`
@@ -1150,6 +1239,7 @@ O codec ainda aceita os campos antigos `ingredients`, `fluid_ingredients`, `outp
 - `chance` e um numero de 0 a 1; default 1.0. Cada output rola separadamente ao completar.
 - Chance 0 nunca gera o resultado, mas os inputs ainda sao consumidos.
 - Itens usam `count` de 1 a 99 e podem ter `components`; fluidos usam `amount`; entidades usam `id` ou `tag` (exatamente um), `count` de 1 a 99 (padrão 1) e `spawn` opcional (sem seletor, as entidades de saída surgem dentro da área do multibloco); energia vai para o storage do controller.
+- Recurso de addon: o `type` e o `kind` registrado; os campos vem do codec de output do addon.
 - O runtime valida todos os outputs antes de iniciar o craft, mesmo os que tem chance menor que 1.
 
 ### 10.5 Matching e validacao
@@ -1243,7 +1333,7 @@ O objeto `sounds` e opcional e so tem efeito em maquinas `type=recipe`. Cada val
 
 O som e tocado no bloco do controller, no canal `blocks`, com volume e pitch `1.0`. Nao e preciso registrar o `SoundEvent` em Java: basta declarar o evento no `sounds.json` do resource pack do seu mod. Se apenas um dos campos for declarado, o outro tipo simplesmente nao toca.
 
-No builder, a etapa 08 oferece um seletor com os 1902 sound events vanilla do Minecraft 26.1.2, gerados em `docks/builder/data/minecraft_sounds.json`, e tambem aceita qualquer identifier custom digitado manualmente.
+No builder, a etapa 10 oferece um seletor com os 1902 sound events vanilla do Minecraft 26.1.2, gerados em `docks/builder/data/minecraft_sounds.json`, e tambem aceita qualquer identifier custom digitado manualmente. O botao **importar .ogg** preenche o identifier a partir do nome do arquivo (namespace atual + path sanitizado), permite ouvir o audio no navegador e copiar a entrada de `sounds.json`; o arquivo nao entra no JSON exportado nem e persistido, apenas o identifier (reimporte apos recarregar).
 
 ## 11. Herança e templates
 
@@ -1315,6 +1405,7 @@ O filho herda `type` e `capabilities.energy`, mas troca `capacity` e `max_receiv
 
 - Objetos são mesclados recursivamente.
 - Listas substituem a lista inteira.
+- `upgrades` é um objeto (merge recursivo); `boosters` e `motions` são listas e substituem a lista inteira.
 - Campos do filho são aplicados antes de `overrides`.
 - Se o mesmo campo aparecer no filho e em `overrides`, `overrides` vence.
 - `extends`, `family`, `overrides` e `template` não são herdados.
@@ -1345,9 +1436,344 @@ Para evitar surpresas, use prioridades diferentes em máquinas que podem se sobr
 
 `tier` é apenas metadado. Ele não altera velocidade, consumo, slots ou receitas. Use para exibir ou para outros mods que leiam a definição.
 
-## 13. Exportar e importar
+## 13. Boosters (upgrades)
 
-### 13.1 Exportar
+### 13.1 O que são
+
+Boosters são blocos colocados em células marcadas por **uma única Key de upgrade** no `pattern`. Essas células ficam **fora da estrutura obrigatória** e podem estar vazias:
+
+- não entram em `members()` nem em `matches()`;
+- não afetam `formed`;
+- podem casar com vários boosters ao mesmo tempo;
+- cada booster tem o seu próprio limite (`max_blocks`);
+- o mesmo tipo de bloco pode contar para boosters diferentes.
+
+O jogo percorre todas as células da key de upgrade e, para cada booster, conta quantas delas têm um bloco que casa com o `matcher`. O mesmo bloco pode contar para vários boosters, mas cada booster para no seu próprio `max_blocks`.
+
+Os boosters só alteram o comportamento da máquina; a estrutura continua válida com as células de upgrade vazias.
+
+### 13.2 JSON
+
+```json
+{
+  "upgrades": {
+    "key": "U",
+    "boosters": [
+      {
+        "matcher": "minecraft:gold_block",
+        "modifier": "output",
+        "mode": "additive",
+        "output": 0.05,
+        "max_blocks": 20
+      },
+      {
+        "matcher": { "block": "minecraft:wheat", "state": { "age": "7" } },
+        "modifier": "output",
+        "mode": "additive",
+        "output": 0.02,
+        "max_blocks": 81
+      },
+      {
+        "matcher": "minecraft:netherite_block",
+        "modifier": "speed",
+        "mode": "multiplicative",
+        "tick_cost": 0.10,
+        "max_blocks": 10
+      },
+      {
+        "matcher": "minecraft:redstone_block",
+        "modifier": "speed",
+        "mode": "flat",
+        "tick_cost": 5,
+        "max_blocks": 8
+      }
+    ]
+  }
+}
+```
+
+O `pattern` precisa conter a Key declarada em `upgrades.key`. Exemplo com `C` de âncora, `I` estrutural e `U` de upgrade:
+
+```json
+"pattern": {
+  "anchor": "C",
+  "layers": [
+    ["CUU"],
+    ["I U"],
+    ["UUU"]
+  ],
+  "matchers": {
+    "I": "minecraft:iron_block"
+  }
+}
+```
+
+A célula `U` não tem matcher e pode estar vazia. O trigo só conta no estágio `age=7`; sem `state`, qualquer estágio conta.
+
+### 13.3 Campos de `upgrades`
+
+| Campo | Obrigatório | Tipo | Regras |
+|---|---|---:|---|
+| `key` | sim | char | Exatamente um caractere, diferente da âncora, sem matcher e presente no `pattern`. |
+| `boosters` | sim | lista | Não pode ser vazia. Cada item é um booster. |
+
+### 13.4 Campos de cada booster
+
+| Campo | Obrigatório | Tipo | Padrão | Regras |
+|---|---|---:|---|---|
+| `matcher` | sim | string ou objeto | — | Bloco, tag ou objeto com `block`/`tag` e `state`. |
+| `modifier` | sim | string | — | `output`, `speed`, `energy`, `efficiency`, `thread` ou `damage`. |
+| `mode` | não | string | `additive` | `additive`, `multiplicative` ou `flat`. |
+| valor do booster | sim | número | — | O campo depende do `modifier` (tabela abaixo). Finito e maior que `0`. |
+| `max_blocks` | sim | inteiro | — | No mínimo `1`; limite individual de blocos contados. |
+
+| `modifier` | Campo do valor |
+|---|---|
+| `output` | `output` |
+| `speed` | `tick_cost` |
+| `energy` | `energy_cost` |
+| `efficiency` | `input_cost` |
+| `thread` | `thread` |
+| `damage` | `damage` |
+
+O campo `factor` ainda é aceito como fallback legado, mas o builder exporta o nome específico de cada modifier.
+
+`matcher` aceita os mesmos formatos da seção 5:
+
+```json
+"matcher": "minecraft:gold_block"
+"matcher": "#mod:speed_blocks"
+"matcher": { "block": "minecraft:wheat", "state": { "age": "7" } }
+"matcher": { "tag": "#minecraft:crops", "state": { "age": "7" } }
+```
+
+### 13.5 Validação
+
+- `upgrades` ausente: nada muda.
+- `upgrades` presente exige `key` válida e `boosters` não vazio.
+- `key` não pode ser a âncora, não pode ter matcher e precisa aparecer em pelo menos uma célula do pattern.
+- O valor do booster precisa ser finito e maior que `0`; `max_blocks` precisa ser maior ou igual a `1`.
+- `modifier` e `mode` precisam ser valores conhecidos.
+- Em `mode=multiplicative` com modificador de redução (`speed`, `energy`, `efficiency`), o valor precisa ser menor que `1`.
+- `output`, `speed`, `energy`, `efficiency` e `thread` só têm efeito em `type=recipe`.
+- `damage` tem efeito em `recipe` e em `storage`.
+- O builder limita os modifiers por tipo e avisa quando um booster não tem efeito no `type` atual.
+- Um booster sem blocos correspondentes contribui com zero.
+- `boosters` é uma lista e, por isso, é **substituída** (não somada) por `extends`/`family`/`overrides`.
+
+### 13.6 Modificadores e matemática
+
+Com `n = min(blocos contados, max_blocks)`. Nas fórmulas, `factor` é o valor do booster (o campo `output`, `tick_cost`, `energy_cost`, `input_cost`, `thread` ou `damage`):
+
+| `mode` | Contribuição |
+|---|---|
+| `additive` | aumento: `bonus += n * factor`; redução: `reducao += n * factor` |
+| `multiplicative` | aumento: `fator *= (1 + factor)^n`; redução: `fator *= (1 - factor)^n` |
+| `flat` | `flat += n * factor` (unidades absolutas) |
+
+Combinação por modificador:
+
+```text
+Aumento (output, thread, damage):
+mult = (1 + soma_additive) * produto_multiplicative
+flat = soma_flat
+
+Redução (speed, energy, efficiency):
+mult = clamp((1 - soma_additive) * produto(1 - factor), 0, 1)
+flat = soma_flat
+```
+
+Resultado por modificador:
+
+- `output`: `exato = base * mult + flat`; entrega `max(1, floor(exato))` e usa a fração (`exato - inteiro`) como chance de `+1`. Com base maior que `0`, o resultado nunca é menor que `1`.
+- `speed`: `exato = tempo_base * mult - flat`; arredonda para cima, com mínimo de `1` tick.
+- `energy`: `exato = energia_base * mult - flat`; arredonda para cima, com mínimo de `1` FE por craft. O total de energia da receita não muda ao acelerar; só o custo por tick sobe.
+- `efficiency`: `exato = input_base * mult - flat`; arredonda para cima e mínimo `1`.
+- `thread`: `threads = 1 + max(0, floor((mult - 1) + flat))`, limitado a `64`.
+- `damage`: `exato = dano_base * mult + flat`; mínimo `0`. Multiplica o dano das motions (seção 14).
+
+Exemplo de `output` fracionário:
+
+| Base | Mult | Exato | Resultado |
+|---|---:|---:|---|
+| 1 | 1.3 | 1.3 | 1 + 30% de +1 |
+| 3 | 1.3 | 3.9 | 3 + 90% de +1 |
+| 100 | 1.3 | 130.0 | 130 |
+
+A `chance` do output é rolada antes do cálculo. Se o output não couber, a parte inteira continua sendo obrigatória e o extra fracionário é ignorado (não bloqueia a receita).
+
+#### Threads: crafts paralelos
+
+`thread` não reduz o tempo da receita. No fim do ciclo, o controller executa até `threads` crafts no mesmo tick, um após o outro, consumindo inputs e energia de cada craft. Se os inputs ou o espaço de saída acabarem antes, o loop para no craft que falhou.
+
+- O tempo do ciclo continua sendo o `time` da receita com o bônus de `speed`.
+- A energia total do ciclo é `energia_por_craft * threads`.
+- Inputs consumidos e outputs produzidos também são multiplicados pelos crafts concluídos.
+- `threads` fica entre `1` e `64`.
+
+### 13.7 `booster_button` na GUI
+
+O elemento de GUI `booster_button` só é aceito quando a definição tem boosters:
+
+```json
+{ "type": "booster_button", "x": 160, "y": 4 }
+```
+
+- Padrão `8x8` no canto superior direito de uma GUI `176` de largura.
+- Só é desenhado quando `upgrades.boosters` não está vazio.
+- Ao clicar, o cliente pede ao servidor o destaque das células de upgrade; o servidor responde e o cliente marca as células no mundo por `10s`, inclusive as já ocupadas.
+- O tooltip mostra os boosters ativos e a dica de clique.
+
+### 13.8 Builder
+
+O builder tem a etapa **Boosters**:
+
+- a Key de upgrade pode ser usada no pattern sem matcher;
+- os boosters são editados com `matcher`, `modifier`, `mode`, o valor do modifier e `max_blocks`;
+- cada booster pode ser ativado/desativado; desativados não entram no cálculo nem no JSON exportado;
+- a simulação com receita aceita um JSON importado ou colado e mostra o efeito dos boosters ativos em tempo real: tempo, energia, threads, dano das motions, quantidade dos outputs (com a chance de +1) e consumo dos inputs;
+- na simulação, cada booster ativo tem um campo de blocos, limitado por `max_blocks` e pela quantidade de células da key no pattern;
+- a simulação não altera a recipe do builder nem o JSON exportado;
+- o JSON exporta `upgrades` no nível raiz;
+- o tipo `booster_button` só fica disponível quando existe ao menos um booster ativo.
+
+### 13.9 Compatibilidade e reload
+
+- `upgrades` é opcional e o `schema_version` continua `2`.
+- Definições sem `upgrades` funcionam como antes.
+- `/reload` relê a definição; o controller recalcula as células de upgrade na próxima validação da estrutura.
+- A receita ativa mantém o tempo antigo até terminar; os novos bônus valem para o próximo craft.
+
+## 14. Motions (partes móveis)
+
+### 14.1 O que são
+
+`motions` permite que partes do pattern se soltem e virem uma entidade móvel:
+
+- em `type=recipe`, enquanto uma receita válida estiver rodando no controller formado;
+- em `type=storage`, enquanto o multibloco estiver montado.
+
+Os blocos voltam para a posição original quando a condição deixa de valer (receita acaba ou estrutura desmonta). Cada motion escolhe quais símbolos do pattern se movem.
+
+### 14.2 JSON
+
+```json
+{
+  "motions": [
+    {
+      "id": "arm",
+      "keys": ["A"],
+      "preserve_nbt": false,
+      "damage_entities": false,
+      "damage": 4.0,
+      "damage_interval": 10,
+      "damage_source": "minecraft:generic",
+      "animation": {
+        "loop": true,
+        "duration": 100,
+        "easing": "linear",
+        "pivot": [0.5, 0.5, 0.5],
+        "fill_speed": false,
+        "keyframes": [
+          { "time": 0, "offset": [0, 0, 0], "rotation": [0, 0, 0] },
+          { "time": 50, "offset": [0, 2, 0], "rotation": [0, 45, 0] },
+          { "time": 100, "offset": [0, 0, 0], "rotation": [0, 0, 0] }
+        ]
+      }
+    }
+  ]
+}
+```
+
+### 14.3 Campos
+
+| Campo | Obrigatório | Tipo | Padrão | Regras |
+|---|---|---:|---|---|
+| `id` | sim | string | — | Único entre as motions e não vazio. |
+| `keys` | sim | lista | — | Símbolos estruturais do pattern (com matcher). Não pode incluir a âncora nem a Key de upgrade. Cada símbolo pertence a no máximo uma motion. |
+| `preserve_nbt` | não | booleano | `false` | Salva e restaura o NBT do block entity de cada bloco. |
+| `damage_entities` | não | booleano | `false` | Aplica dano em `LivingEntity` dentro da caixa da parte. |
+| `damage` | não | número | `4.0` | Dano por aplicação; não pode ser negativo. |
+| `damage_interval` | não | inteiro | `10` | Intervalo em ticks entre aplicações de dano; mínimo `1`. |
+| `damage_source` | não | string | `minecraft:generic` | ID do damage type. Se não existir no registro, cai para `player_attack` quando houver jogador perto; senão `generic`. |
+
+Campos de `animation`:
+
+| Campo | Padrão | Regras |
+|---|---:|---|
+| `loop` | `true` | Reinicia ao chegar em `duration`. |
+| `duration` | `0` | Duração em ticks. `0` ou sem keyframes deixa a parte parada. |
+| `easing` | `linear` | `linear`, `step`, `ease_in`, `ease_out` ou `ease_in_out`. |
+| `pivot` | centro da caixa | Ponto de rotação em blocos a partir do canto mínimo da parte. |
+| `fill_speed` | `false` | Só em `type=storage`: acelera a animação conforme o preenchimento médio (vazio = 1x, cheio = 2x). |
+| `keyframes` | `[]` | Lista ordenada por `time` (de `0` a `duration`). `offset` em blocos e `rotation` em graus nos eixos X/Y/Z. Cada keyframe pode sobrescrever o `easing`. |
+
+#### Como a animação é amostrada
+
+A animação é calculada a cada tick a partir do tempo decorrido:
+
+1. `duration` define o tamanho do ciclo. Com `loop=true`, o tempo volta para `0` ao chegar em `duration`; sem loop, para no último keyframe.
+2. Os keyframes precisam estar em ordem crescente de `time`. O jogo procura o segmento `anterior -> próximo` que contém o tempo atual.
+3. `t` é normalizado dentro do segmento (`0` no keyframe anterior, `1` no próximo) e passa pelo easing do **próximo** keyframe; se ele não tiver easing, vale o `easing` global da animação.
+4. `offset` e `rotation` são interpolados linearmente com o `t` já suavizado.
+5. Antes do primeiro keyframe vale o primeiro; depois do último vale o último. Sem `duration` ou sem keyframes, a parte fica parada.
+
+Easings:
+
+| `easing` | Fórmula |
+|---|---|
+| `linear` | `t` |
+| `step` | `0` até `t < 1`; `1` em `t = 1` |
+| `ease_in` | `t²` |
+| `ease_out` | `1 - (1 - t)²` |
+| `ease_in_out` | `t < 0.5`: `2t²`; senão `1 - (-2t + 2)² / 2` |
+
+A rotação é aplicada na ordem **Z, depois Y, depois X** ao redor do `pivot`. O `pivot` usa o canto mínimo da parte como origem e, quando omitido, fica no centro da caixa. `fill_speed` multiplica a velocidade por `1 + preenchimento` (de `1x` a `2x`) apenas em `type=storage`.
+
+### 14.4 Ciclo de vida
+
+1. O controller formado valida a estrutura normalmente.
+2. Em `type=recipe`, ao encontrar uma receita válida, o controller captura um snapshot de cada motion. Em `type=storage`, mantém as motions ativas enquanto estiver formado.
+3. O snapshot guarda posições relativas, `BlockState` e NBT opcional. Os blocos das keys viram ar e uma entidade `multiblock_motion` é criada.
+4. Enquanto houver motion ativa, as keys dessas motions são ignoradas na validação do pattern; âncora, upgrades e demais blocos continuam validando.
+5. Em `type=recipe`, quando não há mais receita, as entidades devolvem os blocos. Em `type=storage`, isso acontece ao desmontar.
+6. Se o controller for quebrado, sair do chunk ou a definição mudar, a entidade devolve os blocos e se descarta.
+
+### 14.5 Comportamento da entidade
+
+- Imortal, invulnerável, sem física, sem colisão e sem inventário/energia.
+- A hitbox acompanha o tamanho do snapshot.
+- Renderiza os blocos como moving blocks, com offset e rotação da animação.
+- Não aparece no preview nem no JEI.
+- Em `recipe`, a receita manda no ciclo; em `storage`, o preenchimento dos storages define apenas a velocidade quando `fill_speed` está ativo.
+- O dano usa o `damage_source` da motion; se o ID não existir no registro, usa `player_attack` do jogador mais próximo (16 blocos) ou `generic` sem jogador por perto. Selecionar `minecraft:player_attack` também atribui ao jogador mais próximo quando houver.
+
+### 14.6 Builder
+
+A etapa **Animações** edita as motions por keys do pattern:
+
+- visão simples com seletor `Sem animação`/`Custom`;
+- preview 3D animado com câmera, opacidade e timeline;
+- a coluna lateral mantém a prévia da GUI; o card da prévia 3D animada é ocultado nesta etapa;
+- editor dedicado com lista de motions, preview e propriedades;
+- chips de keys com visibilidade por preview;
+- `tempo da receita` reescala os keyframes para o `time` da receita;
+- pivot manual ou automático;
+- edição de `damage`, `damage_interval`, `damage_source`, `damage_entities` e `preserve_nbt`;
+- `damage_source` usa uma única lista com os damage types vanilla mais comuns e a opção `Personalizado...` para digitar qualquer ID.
+
+O preview animado também substitui a antiga prévia estática da coluna lateral nas demais etapas; o renderer estático foi removido. O preview é uma aproximação do renderer Java: usa a mesma interpolação e a mesma ordem de rotação (Z, depois Y, depois X), mas não simula luz, sombras, blockstates especiais ou entidades.
+
+### 14.7 Limitações
+
+- Cada símbolo do pattern pertence a no máximo uma motion.
+- `fill_speed` só tem efeito em `type=storage`.
+- Motions não aparecem no preview/JEI.
+- O nome exibido pela entidade criada ainda não é traduzível.
+
+## 15. Exportar e importar
+
+### 15.1 Exportar
 
 No modo criativo:
 
@@ -1362,10 +1788,10 @@ O scan:
 - anda em seis direções;
 - ignora ar;
 - inclui o controller;
-- para no limite configurado em `export.pattern_scan_limit` (padrão 256; máximo 4096);
+- para no limite configurado em `export.pattern_scan_limit` (padrão 256; máximo 40960);
 - se houver mais, exporta até o limite e avisa na actionbar.
 
-### 13.2 O que o JSON exportado contém
+### 15.2 O que o JSON exportado contém
 
 ```json
 {
@@ -1387,13 +1813,13 @@ Ele contém apenas:
 - `type: "storage"`;
 - `pattern` com `layers`, `anchor` e `matchers` de bloco + state.
 
-Ele **não** contém `item_slots`, `capabilities`, `textures`, `model`, `gui`, receita ou prioridade. Use como ponto de partida para o pattern.
+Ele **não** contém `item_slots`, `capabilities`, `textures`, `model`, `gui`, `upgrades`, `motions`, receita ou prioridade. Use como ponto de partida para o pattern.
 
-### 13.3 Normalização
+### 15.3 Normalização
 
 A exportação normaliza posições e states para a orientação canônica `SOUTH`. Se você exportou uma máquina virada para norte, o JSON ainda descreve a máquina olhando para sul. Isso permite reutilizar o pattern com qualquer `FACING`.
 
-### 13.4 Transformar em definição
+### 15.4 Transformar em definição
 
 1. Salve o JSON em `data/<namespace>/multiblock/<arquivo>.json`.
 2. Troque o `id` para `<namespace>:<arquivo>`.
@@ -1404,15 +1830,15 @@ A exportação normaliza posições e states para a orientação canônica `SOUT
 
 Não há um exemplo exportado no repositório; use o JSON do clipboard como ponto de partida.
 
-### 13.5 Limitações da exportação
+### 15.5 Limitações da exportação
 
-- limite configurável em `export.pattern_scan_limit` (padrão 256; máximo 4096);
+- limite configurável em `export.pattern_scan_limit` (padrão 256; máximo 40960);
 - flood-fill pode incluir blocos vizinhos que não fazem parte da máquina;
-- não exporta capabilities, slots, texturas, GUI, receita ou vínculo de controller;
+- não exporta capabilities, slots, texturas, GUI, upgrades, motions, receita ou vínculo de controller;
 - o `id` precisa ser ajustado;
 - o `type` exportado é sempre `storage`.
 
-## 14. Reload e ciclo de vida
+## 16. Reload e ciclo de vida
 
 Use `/reload` no servidor.
 
@@ -1433,7 +1859,7 @@ Se você mudou `capacity`, `max_receive`, `max_extract` ou `filter` de uma capab
 
 Para adicionar ou remover uma definição, basta `/reload`; o bloco controller é compartilhado e já está registrado.
 
-## 15. Exemplos completos
+## 17. Exemplos completos
 
 Os arquivos ficam em [`exemplos/`](exemplos/).
 
@@ -1443,7 +1869,7 @@ Os arquivos ficam em [`exemplos/`](exemplos/).
 | [`exemplo_recipe.json`](exemplos/exemplo_recipe.json) | `type=recipe`, dois inputs, um output, energia, fluido e GUI padrão com barra de progresso. |
 | [`exemplo_recipe_iron.json`](exemplos/exemplo_recipe_iron.json) | Receita com tipo `infinity_nexus_multiblock:multiblock`, `definition` apontando para o exemplo e ingredientes de item/fluido. |
 
-### 15.1 Como testar
+### 17.1 Como testar
 
 1. Copie os arquivos para um datapack:
 
@@ -1460,7 +1886,7 @@ data/infinity_nexus_multiblock/recipe/exemplo_recipe_iron.json
 
 O controller é compartilhado. Os exemplos não precisam declarar `controller`, `recipe_type` nem texturas. A receita de crafting do controller só é gerada automaticamente quando a definição está no jar do mod ou em `kubejs/data`; em um datapack comum, use `/inmb give`.
 
-### 15.2 Sobrescrever uma definição existente
+### 17.2 Sobrescrever uma definição existente
 
 Use o mesmo caminho e o mesmo `id` da definição original:
 
@@ -1470,7 +1896,7 @@ data/infinity_nexus_multiblock/multiblock/<arquivo>.json
 
 Depois rode `/reload`. O controller já existe, então não é preciso reiniciar o jogo. Se a definição estiver em um datapack e você quiser gerar a receita de crafting do controller, mova o JSON para `kubejs/data` ou para o jar do mod.
 
-### 15.3 Receita shaped do controller
+### 17.3 Receita shaped do controller
 
 Para que uma definição gere uma receita de crafting do controller, adicione o campo top-level `recipe`:
 
@@ -1499,7 +1925,7 @@ Para que uma definição gere uma receita de crafting do controller, adicione o 
 
 A receita gerada produz o controller com o componente `infinity_nexus_multiblock:multiblock_definition` igual a `minhamod:minha_maquina`. Veja a seção 9.4 para o formato completo.
 
-## 16. Erros comuns
+## 18. Erros comuns
 
 | Mensagem / sintoma | Causa | Correção |
 |---|---|---|
@@ -1538,6 +1964,11 @@ A receita gerada produz o controller com o componente `infinity_nexus_multiblock
 | `gui has a progress_bar/arrow but the multiblock is not a recipe multiblock` | Barra/seta em `storage`. | Use `type=recipe`. |
 | `gui has an entity element but the multiblock is not a recipe multiblock` | `entity` em `storage`. | Use `type=recipe`. |
 | `exceeds gui bounds` | Elemento fora da GUI. | Aumente `width`/`height` ou mova. |
+| `Multiblock upgrades need an upgrade key in the pattern` | `upgrades` sem Key de upgrade no pattern. | Declare `upgrades.key` e use no pattern. |
+| `Upgrade key 'U' ...` | Key de upgrade sem `upgrades` ou com matcher. | Declare os boosters ou remova a Key. |
+| `Key 'A' is used by more than one multiblock motion` | Símbolo repetido em motions. | Use cada key em uma única motion. |
+| `Multiblock motion '...' cannot use the anchor key` | Motion usando a âncora ou a Key de upgrade. | Troque a key. |
+| `Unknown multiblock resource kind '...'` | Recurso de addon não registrado. | Instale o addon ou corrija o `kind`. |
 | Receita não carrega | Caminho, `type` ou IDs errados. | Confira `data/<namespace>/recipe`, `type` e ingredientes. |
 | Receita não aparece na máquina | `definition` diferente do `id` da definição. | Use exatamente o mesmo identifier. |
 | Definição não carrega | Caminho/ID/schema errados. | Confira o log do servidor. |
@@ -1547,7 +1978,7 @@ O log fica em `logs/latest.log`.
 
 Se o controller não puder ser colocado, confira se o item tem o componente de definição. Use `/inmb give <definition>` para obter a variante correta.
 
-## 17. Checklist final
+## 19. Checklist final
 
 Antes de testar, confirme:
 
@@ -1558,7 +1989,7 @@ Antes de testar, confirme:
 - [ ] O pattern tem exatamente uma âncora.
 - [ ] Todas as camadas têm o mesmo número de linhas.
 - [ ] Todas as linhas têm a mesma largura.
-- [ ] Todo símbolo não-âncora tem matcher.
+- [ ] Todo símbolo não-âncora tem matcher, exceto a Key de upgrade.
 - [ ] A receita de máquina usa `type: infinity_nexus_multiblock:multiblock`.
 - [ ] O campo `definition` da receita é igual ao `id` da definição.
 - [ ] O controller é obtido por `/inmb give <definition>` ou pela aba criativa.
@@ -1568,6 +1999,9 @@ Antes de testar, confirme:
 - [ ] Se usar `capability_ports`, os símbolos existem no pattern e cada capability lista as portas desejadas.
 - [ ] A GUI tem exatamente um `player_inventory`.
 - [ ] Barras de energia/fluido apontam para IDs existentes.
+- [ ] Barras de recurso de addon apontam para um `kind` registrado e um tanque existente.
+- [ ] Se usar `upgrades`, a Key é única, não tem matcher e aparece no pattern; cada booster tem o valor do modifier `> 0` e `max_blocks >= 1`.
+- [ ] Se usar `motions`, cada símbolo pertence a no máximo uma motion e nenhuma usa a âncora ou a Key de upgrade.
 - [ ] `progress_bar`/`arrow`/`entity` só existem em `recipe`.
 - [ ] A receita está em `data/<namespace>/recipe/<arquivo>.json`.
 - [ ] A receita tem pelo menos um ingrediente.
@@ -1575,9 +2009,9 @@ Antes de testar, confirme:
 - [ ] Se a receita usa energia/fluido, a máquina tem as capabilities.
 - [ ] Você rodou `/reload` e conferiu `logs/latest.log`.
 
-## 18. Limitações atuais
+## 20. Limitações atuais
 
-### 18.1 Controller único
+### 20.1 Controller único
 
 - Existe um único bloco/item controller: `infinity_nexus_multiblock:multiblock_controller`.
 - O vínculo com a máquina vem do componente `infinity_nexus_multiblock:multiblock_definition`; não há bloco ou item por definição, mas o modelo do controller pode ser especializado com `textures` e `model`.
@@ -1585,17 +2019,17 @@ Antes de testar, confirme:
 - `/reload` atualiza definições e receitas; não é necessário reiniciar para adicionar, remover ou sobrescrever uma definição.
 - O antigo bloco `nexus_core` e os controllers dinâmicos foram removidos. Mundos antigos podem gerar avisos de registry; faça backup antes de atualizar.
 
-### 18.2 Máquinas, receitas e automação
+### 20.2 Máquinas, receitas e automação
 
 - Toda receita de máquina usa `type: infinity_nexus_multiblock:multiblock` e `definition: <id>`. Não há tipo independente por máquina.
-- `type=storage` já funciona como inventário/capabilities/GUI, mas não tem comportamento especializado de armazenamento dedicado. `tier` é apenas metadado.
-- Receitas produzem uma única saída `item`, `fluid` ou `entity`; não há energia como saída, subproduto, múltiplas saídas simultâneas ou chance.
+- `type=storage` já funciona como inventário/capabilities/GUI e aceita motions; não há regras dedicadas de armazenamento. `tier` é apenas metadado.
+- Receitas usam `inputs`/`outputs` tipados: item, fluido, entidade, energia e recursos de addon, com múltiplas saídas e `chance` por output.
 - Não há prioridade entre receitas; a primeira receita compatível encontrada é usada.
 - Energia e fluidos não têm configuração por lado; as capabilities do controller e dos membros selecionados aceitam todas as faces. `capability_ports` escolhe blocos, não faces.
 - As faces de `item_slots` são direções do mundo e não giram com o controller/estrutura.
 - Matchers aceitam bloco, tag e `state`; não aceitam NBT, listas de alternativas ou matchers opcionais.
 
-### 18.3 Assets, JEI e reload
+### 20.3 Assets, JEI e reload
 
 - O controller compartilhado tem blockstate, modelo base, loot e traduções próprios; texturas e modelos por definição vêm de `textures` e `model` e são aplicados em runtime.
 - O nome exibido usa `multiblock.<namespace>.<path>` e cai no path formatado quando não há tradução.
@@ -1604,15 +2038,14 @@ Antes de testar, confirme:
 - A transferência JEI de itens existe, mas ainda não foi validada visualmente no cliente; fluidos continuam manuais.
 - `/reload` recarrega definições, receitas de controller e o pack de dados; não recria capabilities já existentes.
 
-### 18.4 Exportação
+### 20.4 Exportação
 
-- A exportação é limitada por `export.pattern_scan_limit` na config comum do mod (`config/infinity_nexus_multiblock-common.toml`): padrão `256`, máximo `4096`.
-- O JSON exportado contém apenas `schema_version`, `id`, `type` e `pattern` (blocos e states); não inclui `item_slots`, `capabilities`, `textures`, `gui`, receita ou prioridade, e o `type` exportado é sempre `storage`.
+- A exportação é limitada por `export.pattern_scan_limit` na config comum do mod (`config/infinity_nexus_multiblock-common.toml`): padrão `256`, máximo `40960`.
+- O JSON exportado contém apenas `schema_version`, `id`, `type` e `pattern` (blocos e states); não inclui `item_slots`, `capabilities`, `textures`, `gui`, `upgrades`, `motions`, receita ou prioridade, e o `type` exportado é sempre `storage`.
 
-### 18.5 Metas ainda não atendidas
+### 20.5 Metas ainda não atendidas
 
-- Comportamento especializado de `type=storage` além do básico já implementado (inventário, capabilities e GUI): regras dedicadas de armazenamento de item, fluido e energia.
-- Entidades como entrada de receitas dentro da área do multibloco; itens, fluidos e energia já são aceitos.
-- Saída de energia em receitas; fluidos e entidades já são suportados.
+- Comportamento especializado de `type=storage` além do básico já implementado (inventário, capabilities, GUI, motions e booster de dano).
 - Filtro da categoria JEI de estruturas por definição e validação visual da transferência JEI.
 - Adaptadores para receitas vanilla.
+- Nome traduzível para a entidade `multiblock_motion`.

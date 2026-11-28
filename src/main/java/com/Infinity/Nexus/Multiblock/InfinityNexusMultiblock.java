@@ -6,49 +6,56 @@ import com.Infinity.Nexus.Multiblock.command.MultiblockCommands;
 import com.Infinity.Nexus.Multiblock.config.Config;
 import com.Infinity.Nexus.Multiblock.data.MultiblockReloadListeners;
 import com.Infinity.Nexus.Multiblock.data.MultiblockSavedData;
+import com.Infinity.Nexus.Multiblock.entity.ModEntities;
 import com.Infinity.Nexus.Multiblock.gametest.MultiblockGameTests;
-import com.Infinity.Nexus.Multiblock.network.MultiblockBlockedHighlightPayload;
-import com.Infinity.Nexus.Multiblock.network.MultiblockDefinitionSyncPayload;
-import com.Infinity.Nexus.Multiblock.network.MultiblockExportPayload;
-import com.Infinity.Nexus.Multiblock.network.SetFluidSlotTankPayload;
-import com.Infinity.Nexus.Multiblock.network.SetSlotLockPayload;
+import com.Infinity.Nexus.Multiblock.network.*;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.Infinity.Nexus.Multiblock.registry.ModMenus;
 import com.Infinity.Nexus.Multiblock.registry.ModRecipes;
 import com.Infinity.Nexus.Multiblock.resource.ControllerRecipePack;
 import com.Infinity.Nexus.Multiblock.tab.ModCreativeTab;
-import org.slf4j.Logger;
-
 import com.mojang.logging.LogUtils;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.fluid.FluidResource;
-import net.neoforged.neoforge.transfer.item.ItemResource;
-import org.jspecify.annotations.Nullable;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
-import net.neoforged.fml.ModContainer;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.transfer.ResourceHandler;
+import net.neoforged.neoforge.transfer.ResourceHandlerUtil;
+import net.neoforged.neoforge.transfer.access.ItemAccess;
+import net.neoforged.neoforge.transfer.resource.ResourceStack;
+import net.neoforged.neoforge.transfer.energy.EnergyHandler;
+import net.neoforged.neoforge.transfer.fluid.FluidResource;
+import net.neoforged.neoforge.transfer.fluid.FluidUtil;
+import net.neoforged.neoforge.transfer.item.ItemResource;
 import net.neoforged.neoforge.transfer.item.VanillaContainerWrapper;
 import net.neoforged.neoforge.transfer.item.WorldlyContainerWrapper;
+import net.neoforged.neoforge.transfer.transaction.Transaction;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
 
 @Mod(InfinityNexusMultiblock.MOD_ID)
 public class InfinityNexusMultiblock {
@@ -57,6 +64,7 @@ public class InfinityNexusMultiblock {
     public InfinityNexusMultiblock(IEventBus modEventBus, ModContainer modContainer) {
         ModDataComponents.register(modEventBus);
         ModBlocks.register(modEventBus);
+        ModEntities.register(modEventBus);
         ModMenus.register(modEventBus);
         ModRecipes.register(modEventBus);
         ModCreativeTab.register(modEventBus);
@@ -159,6 +167,14 @@ public class InfinityNexusMultiblock {
                 MultiblockBlockedHighlightPayload.TYPE,
                 MultiblockBlockedHighlightPayload.CODEC,
                 MultiblockBlockedHighlightPayload::handle);
+        event.registrar("1").playToClient(
+                BoosterHighlightPayload.TYPE,
+                BoosterHighlightPayload.CODEC,
+                BoosterHighlightPayload::handle);
+        event.registrar("1").playToServer(
+                RequestBoosterHighlightPayload.TYPE,
+                RequestBoosterHighlightPayload.CODEC,
+                RequestBoosterHighlightPayload::handle);
         event.registrar("1").playToServer(
                 SetSlotLockPayload.TYPE,
                 SetSlotLockPayload.CODEC,
@@ -167,6 +183,10 @@ public class InfinityNexusMultiblock {
                 SetFluidSlotTankPayload.TYPE,
                 SetFluidSlotTankPayload.CODEC,
                 SetFluidSlotTankPayload::handle);
+        event.registrar("1").playToServer(
+                TankInteractPayload.TYPE,
+                TankInteractPayload.CODEC,
+                TankInteractPayload::handle);
     }
 
     private static void registerMultiblockCapabilities(RegisterCapabilitiesEvent event,
@@ -199,6 +219,97 @@ public class InfinityNexusMultiblock {
                                 : null);
     }
 
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide() || event.getEntity().isSecondaryUseActive()) {
+            return;
+        }
+        Player player = event.getEntity();
+        ItemStack held = event.getItemStack();
+        if (held.isEmpty()) {
+            return;
+        }
+        if (fluidItemAccess(player, event.getHand())
+                .getCapability(Capabilities.Fluid.ITEM) == null) {
+            return;
+        }
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+        MultiblockSavedData data = MultiblockSavedData.getIfPresent(level);
+        BlockPos controllerPos = data == null ? null : data.getController(event.getPos());
+        if (controllerPos == null
+                || !(level.getBlockEntity(controllerPos) instanceof MultiblockControllerBlockEntity controller)
+                || !controller.isFormed()) {
+            return;
+        }
+
+        boolean fluidPort = controller.allowsCapability(
+                event.getPos(), CapabilityPorts.CapabilityType.FLUID);
+        if (!fluidPort) {
+            if (controller.definition() != null && controller.definition().capabilityPorts()
+                    .isDefined(CapabilityPorts.CapabilityType.FLUID)) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+            }
+            return;
+        }
+
+        ResourceHandler<FluidResource> handler = controller.getManualFluidHandler(event.getPos(), event.getFace());
+        if (handler == null) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
+        FluidInteraction interaction;
+        try (Transaction transaction = Transaction.open(null)) {
+            interaction = moveFluid(player, event.getHand(), handler, transaction);
+            if (interaction != null) {
+                transaction.commit();
+            }
+        }
+        if (interaction != null) {
+            FluidUtil.triggerSoundAndGameEvent(
+                    interaction.resource(),
+                    level,
+                    Vec3.atCenterOf(event.getPos()),
+                    player,
+                    interaction.pickup());
+        }
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
+    }
+
+    private static ItemAccess fluidItemAccess(Player player, InteractionHand hand) {
+        int slot = hand == InteractionHand.MAIN_HAND
+                ? player.getInventory().getSelectedSlot()
+                : Inventory.SLOT_OFFHAND;
+        return ItemAccess.forPlayerSlot(player, slot).oneByOne();
+    }
+
+    private static @Nullable FluidInteraction moveFluid(
+            Player player,
+            InteractionHand hand,
+            ResourceHandler<FluidResource> handler,
+            Transaction transaction) {
+        ResourceHandler<FluidResource> itemFluids = fluidItemAccess(player, hand)
+                .getCapability(Capabilities.Fluid.ITEM);
+        if (itemFluids == null) {
+            return null;
+        }
+        ResourceStack<FluidResource> moved = ResourceHandlerUtil.moveFirst(
+                handler, itemFluids, resource -> true, Integer.MAX_VALUE, transaction);
+        boolean pickup = moved != null;
+        if (moved == null) {
+            moved = ResourceHandlerUtil.moveFirst(
+                    itemFluids, handler, resource -> true, Integer.MAX_VALUE, transaction);
+        }
+        return moved == null ? null : new FluidInteraction(moved.resource(), pickup);
+    }
+
+    private record FluidInteraction(FluidResource resource, boolean pickup) {
+    }
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {

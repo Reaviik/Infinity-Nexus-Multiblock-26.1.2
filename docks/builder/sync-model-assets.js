@@ -1,9 +1,11 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..", "..");
 const assets = path.join(root, "src", "main", "resources", "assets", "infinity_nexus_multiblock");
 const targetAssets = path.join(root, "docks", "src", "main", "resources", "assets", "infinity_nexus_multiblock");
+const guiRelative = path.join("textures", "gui");
 
 const defaultModels = [
   "multiblock_controller.json",
@@ -29,6 +31,14 @@ if (!fs.existsSync(assets)) {
   process.exit(1);
 }
 
+const targetGui = path.join(targetAssets, guiRelative);
+const guiTemp = fs.existsSync(targetGui)
+  ? fs.mkdtempSync(path.join(os.tmpdir(), "inmb-builder-gui-"))
+  : null;
+if (guiTemp) {
+  copyDirectory(targetGui, guiTemp);
+}
+
 fs.rmSync(targetAssets, { recursive: true, force: true });
 
 defaultModels.forEach(function (name) {
@@ -47,7 +57,17 @@ if (fs.existsSync(fallbackFrom)) {
   copyDirectory(fallbackFrom, path.join(targetAssets, "textures", "block", "fallback"));
 }
 
+const guiFromMain = path.join(assets, guiRelative);
+if (fs.existsSync(guiFromMain)) {
+  copyDirectory(guiFromMain, targetGui);
+}
+
+if (guiTemp) {
+  copyDirectory(guiTemp, targetGui);
+  fs.rmSync(guiTemp, { recursive: true, force: true });
+}
+
 console.log(
-  "Builder asset sync: default controller models and fallback textures copied to",
+  "Builder asset sync: default controller models, fallback textures and GUI textures copied to",
   path.relative(root, targetAssets)
 );

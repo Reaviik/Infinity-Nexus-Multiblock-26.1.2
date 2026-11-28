@@ -1,43 +1,17 @@
 package com.Infinity.Nexus.Multiblock.gametest;
 
 import com.Infinity.Nexus.Multiblock.InfinityNexusMultiblock;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-import com.Infinity.Nexus.Multiblock.api.CapabilityPorts;
-import com.Infinity.Nexus.Multiblock.api.FluidTank;
-import com.Infinity.Nexus.Multiblock.api.GuiElement;
-import com.Infinity.Nexus.Multiblock.api.GuiElementType;
-import com.Infinity.Nexus.Multiblock.api.ItemSlot;
-import com.Infinity.Nexus.Multiblock.api.ItemSlotRole;
-import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
-import com.Infinity.Nexus.Multiblock.api.MultiblockGui;
-import com.Infinity.Nexus.Multiblock.api.MultiblockMenuLayout;
-import com.Infinity.Nexus.Multiblock.api.MultiblockModel;
-import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
-import com.Infinity.Nexus.Multiblock.api.MultiblockShape;
-import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
-import com.Infinity.Nexus.Multiblock.api.MultiblockType;
-import com.Infinity.Nexus.Multiblock.api.SlotLock;
-import com.Infinity.Nexus.Multiblock.api.SlotPosition;
-import com.Infinity.Nexus.Multiblock.block.MultiblockAssemblyJob;
-import com.Infinity.Nexus.Multiblock.block.MultiblockFluidHandler;
-import com.Infinity.Nexus.Multiblock.block.MultiblockItemHandler;
+import com.Infinity.Nexus.Multiblock.api.*;
+import com.Infinity.Nexus.Multiblock.block.*;
 import com.Infinity.Nexus.Multiblock.data.MultiblockDefinitions;
-import com.Infinity.Nexus.Multiblock.recipe.EntityTypeSelector;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipe;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeIngredient;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeInput;
-import com.Infinity.Nexus.Multiblock.recipe.MultiblockRecipeOutput;
+import com.Infinity.Nexus.Multiblock.entity.MotionStructure.PartEntry;
+import com.Infinity.Nexus.Multiblock.entity.MotionStructure.StructureSnapshot;
+import com.Infinity.Nexus.Multiblock.recipe.*;
 import com.Infinity.Nexus.Multiblock.registry.ModBlocks;
 import com.Infinity.Nexus.Multiblock.registry.ModDataComponents;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.MapCodec;
-import java.util.EnumSet;
-import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -48,6 +22,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestInstance;
 import net.minecraft.gametest.framework.TestData;
 import net.minecraft.gametest.framework.TestEnvironmentDefinition;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -67,12 +42,15 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.server.loading.ServerModLoader;
 import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
 import net.neoforged.neoforge.transfer.transaction.Transaction;
+
+import java.util.*;
 
 public final class MultiblockGameTests {
     private static final Identifier ENVIRONMENT_ID = Identifier.fromNamespaceAndPath(
@@ -152,6 +130,7 @@ public final class MultiblockGameTests {
             assertMultiblockShape(helper);
             assertEarlySlotPositions(helper);
             assertFluidOnlyGui(helper);
+            assertBoosterButtonDefaults(helper);
             assertFluidPortBinding(helper);
             assertSlotLockBehavior(helper);
             assertEntityTagSelector(helper);
@@ -159,6 +138,14 @@ public final class MultiblockGameTests {
             assertMultiblockRecipeLoads(helper);
             assertEntityOnlyOutputRecipe(helper);
             assertIncrementalAssembly(helper);
+            assertUpgradeMath(helper);
+            assertUpgradePattern(helper);
+            assertMotionDefinition(helper);
+            assertMotionSampling(helper);
+            assertMotionPatternIgnore(helper);
+            assertMotionSnapshot(helper);
+            assertUpgradeCounting(helper);
+            assertUpgradeOutput(helper);
             helper.succeed();
         }
 
@@ -733,6 +720,19 @@ public final class MultiblockGameTests {
             }
         }
 
+        private static void assertBoosterButtonDefaults(GameTestHelper helper) {
+            GuiElement parsed = GuiElement.CODEC
+                    .parse(JsonOps.INSTANCE, JsonParser.parseString("{\"type\":\"booster_button\"}"))
+                    .getOrThrow();
+            if (parsed.width() != GuiElement.BOOSTER_BUTTON_SIZE
+                    || parsed.height() != GuiElement.BOOSTER_BUTTON_SIZE
+                    || !"B".equals(parsed.text())
+                    || parsed.color() != GuiElement.DEFAULT_BOOSTER_COLOR) {
+                throw helper.assertionException(Component.literal(
+                        "booster_button defaults are wrong: " + parsed));
+            }
+        }
+
         private static void assertFluidPortBinding(GameTestHelper helper) {
             CapabilityPorts.PortSelector port = CapabilityPorts.PortSelector.symbol('F');
             FluidTank restricted = new FluidTank("water_tank", 1000, 100, 40, null, port);
@@ -770,6 +770,23 @@ public final class MultiblockGameTests {
                             "A restricted fluid port ignored max_extract: " + extracted));
                 }
             }
+            ResourceHandler<FluidResource> manual = handler.manualAccess(List.of(0));
+            try (Transaction transaction = Transaction.open(null)) {
+                int inserted = manual.insert(0, water, 500, transaction);
+                transaction.commit();
+                if (inserted != 500) {
+                    throw helper.assertionException(Component.literal(
+                            "Manual fluid access respected max_receive: " + inserted));
+                }
+            }
+            try (Transaction transaction = Transaction.open(null)) {
+                int extracted = manual.extract(0, water, 500, transaction);
+                transaction.commit();
+                if (extracted != 500) {
+                    throw helper.assertionException(Component.literal(
+                            "Manual fluid access respected max_extract: " + extracted));
+                }
+            }
         }
 
         private static void assertEarlySlotPositions(GameTestHelper helper) {
@@ -793,6 +810,385 @@ public final class MultiblockGameTests {
                                     + " but got " + slot.x() + "," + slot.y()));
                 }
             }
+        }
+
+        private static void assertUpgradeMath(GameTestHelper helper) {
+            MultiblockUpgrade output = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.GOLD_BLOCK),
+                    MultiblockUpgrade.Modifier.OUTPUT,
+                    MultiblockUpgrade.Mode.ADDITIVE,
+                    0.5D,
+                    4);
+            MultiblockUpgrade speed = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.IRON_BLOCK),
+                    MultiblockUpgrade.Modifier.SPEED,
+                    MultiblockUpgrade.Mode.FLAT,
+                    20.0D,
+                    4);
+            MultiblockUpgrade thread = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.DIAMOND_BLOCK),
+                    MultiblockUpgrade.Modifier.THREAD,
+                    MultiblockUpgrade.Mode.FLAT,
+                    2.0D,
+                    4);
+            MultiblockUpgrade efficiency = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.EMERALD_BLOCK),
+                    MultiblockUpgrade.Modifier.EFFICIENCY,
+                    MultiblockUpgrade.Mode.ADDITIVE,
+                    0.25D,
+                    4);
+            MultiblockUpgrade energy = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.LAPIS_BLOCK),
+                    MultiblockUpgrade.Modifier.ENERGY,
+                    MultiblockUpgrade.Mode.ADDITIVE,
+                    0.1D,
+                    4);
+            MultiblockUpgrade damage = new MultiblockUpgrade(
+                    BlockMatcher.of(Blocks.NETHERITE_BLOCK),
+                    MultiblockUpgrade.Modifier.DAMAGE,
+                    MultiblockUpgrade.Mode.ADDITIVE,
+                    0.25D,
+                    4);
+            List<MultiblockUpgrade> upgrades = List.of(output, speed, thread, efficiency, energy, damage);
+            int[] counts = {2, 1, 1, 2, 3, 2};
+
+            UpgradeBonus outputBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.OUTPUT, counts);
+            if (!near(outputBonus.multiplier(), 2.0D) || !near(outputBonus.flat(), 0.0D)) {
+                throw helper.assertionException(Component.literal(
+                        "Output booster math is wrong: " + outputBonus));
+            }
+            MultiblockUpgradeMath.ScaledAmount scaled = MultiblockUpgradeMath.scaleOutput(
+                    10, outputBonus, false, helper.getLevel().getRandom());
+            if (scaled.whole() != 20) {
+                throw helper.assertionException(Component.literal(
+                        "Output booster did not scale the output: " + scaled.whole()));
+            }
+
+            UpgradeBonus speedBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.SPEED, counts);
+            if (MultiblockUpgradeMath.effectiveTicks(100, speedBonus) != 80) {
+                throw helper.assertionException(Component.literal(
+                        "Speed booster did not reduce the duration"));
+            }
+
+            UpgradeBonus threadBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.THREAD, counts);
+            if (MultiblockUpgradeMath.threads(threadBonus) != 3) {
+                throw helper.assertionException(Component.literal(
+                        "Thread booster did not increase the batch size"));
+            }
+
+            UpgradeBonus efficiencyBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.EFFICIENCY, counts);
+            if (MultiblockUpgradeMath.scaledInput(10, efficiencyBonus) != 5) {
+                throw helper.assertionException(Component.literal(
+                        "Efficiency booster did not reduce the input"));
+            }
+            if (MultiblockUpgradeMath.scaledInput(1, efficiencyBonus) != 1) {
+                throw helper.assertionException(Component.literal(
+                        "Efficiency booster must never reduce a one-unit input below one"));
+            }
+
+            UpgradeBonus energyBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.ENERGY, counts);
+            if (MultiblockUpgradeMath.effectiveEnergy(1000L, energyBonus) != 700L) {
+                throw helper.assertionException(Component.literal(
+                        "Energy booster did not reduce the energy cost"));
+            }
+
+            UpgradeBonus damageBonus = MultiblockUpgradeMath.combine(
+                    upgrades, MultiblockUpgrade.Modifier.DAMAGE, counts);
+            if (!near(MultiblockUpgradeMath.scaledDamage(4.0F, damageBonus), 6.0D)) {
+                throw helper.assertionException(Component.literal(
+                        "Damage booster did not increase the motion damage: " + damageBonus));
+            }
+        }
+
+        private static void assertUpgradeCounting(GameTestHelper helper) {
+            Identifier id = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "steam_generator");
+            MultiblockDefinition definition = MultiblockDefinitions.get(id);
+            if (definition == null) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator definition was not loaded"));
+            }
+            if (definition.upgrades().size() != 1) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator must load one upgrade, got " + definition.upgrades().size()));
+            }
+            if (definition.upgradeKey().isEmpty() || definition.upgradeKey().get() != 'U') {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator must use upgrade key U"));
+            }
+
+            BlockPos controller = helper.absolutePos(new BlockPos(1, 2, 8));
+            helper.getLevel().setBlock(
+                    controller,
+                    ModBlocks.CONTROLLER.get().defaultBlockState()
+                            .setValue(MultiblockControllerBlock.FACING, Direction.SOUTH),
+                    Block.UPDATE_ALL);
+            if (!(helper.getLevel().getBlockEntity(controller) instanceof MultiblockControllerBlockEntity be)) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator controller block entity was not created"));
+            }
+            be.setDefinitionId(id);
+            placeSteamGeneratorShell(helper, controller);
+            be.validateStructure();
+            if (!be.isFormed()) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator structure did not form"));
+            }
+
+            List<BlockPos> positions = definition.upgradeMembers(controller, Rotation.NONE);
+            if (positions.size() != 4) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator must expose four upgrade cells, got " + positions));
+            }
+            for (BlockPos pos : positions) {
+                helper.getLevel().setBlock(pos, Blocks.GOLD_BLOCK.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            be.validateStructure();
+            int[] counts = be.upgradeCounts();
+            if (counts.length != 1 || counts[0] != 4) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator gold boosters were not counted: "
+                                + java.util.Arrays.toString(counts) + " at " + be.upgradeMembers()));
+            }
+        }
+
+        private static void assertUpgradeOutput(GameTestHelper helper) {
+            Identifier id = Identifier.fromNamespaceAndPath(
+                    InfinityNexusMultiblock.MOD_ID, "steam_generator");
+            MultiblockDefinition definition = MultiblockDefinitions.get(id);
+            if (definition == null) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator definition was not loaded"));
+            }
+
+            BlockPos controller = helper.absolutePos(new BlockPos(1, 2, 9));
+            helper.getLevel().setBlock(
+                    controller,
+                    ModBlocks.CONTROLLER.get().defaultBlockState()
+                            .setValue(MultiblockControllerBlock.FACING, Direction.SOUTH),
+                    Block.UPDATE_ALL);
+            if (!(helper.getLevel().getBlockEntity(controller) instanceof MultiblockControllerBlockEntity be)) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator controller block entity was not created"));
+            }
+            be.setDefinitionId(id);
+            placeSteamGeneratorShell(helper, controller);
+            be.validateStructure();
+            if (!be.isFormed()) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator structure did not form"));
+            }
+
+            for (BlockPos pos : definition.upgradeMembers(controller, Rotation.NONE)) {
+                helper.getLevel().setBlock(pos, Blocks.GOLD_BLOCK.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            be.validateStructure();
+            int[] counts = be.upgradeCounts();
+            if (counts.length != 1 || counts[0] != 4) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator gold boosters were not counted: "
+                                + java.util.Arrays.toString(counts)));
+            }
+
+            be.inventory().setItem(0, new ItemStack(Items.COAL, 1));
+            for (int tick = 0; tick < 40; tick++) {
+                be.serverTick();
+            }
+            var storage = be.energyStorage();
+            if (storage == null) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator has no energy storage"));
+            }
+            long energy = storage.getAmountAsLong();
+            if (energy != 600L) {
+                throw helper.assertionException(Component.literal(
+                        "steam_generator with four gold boosters produced " + energy
+                                + " FE instead of 600; counts="
+                                + java.util.Arrays.toString(be.upgradeCounts())));
+            }
+        }
+
+        private static void assertUpgradePattern(GameTestHelper helper) {
+            MultiblockPattern pattern = MultiblockPattern.builder()
+                    .matcher('S', Blocks.STONE)
+                    .upgradeKey('U')
+                    .layer("CSU")
+                    .build();
+            if (!pattern.hasUpgradeKey() || pattern.upgradeKey() != 'U') {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock pattern lost its upgrade key"));
+            }
+            if (pattern.upgradeCells().size() != 1) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock pattern must collect the upgrade cells"));
+            }
+            if (pattern.members(BlockPos.ZERO, Rotation.NONE).size() != 1) {
+                throw helper.assertionException(Component.literal(
+                        "Upgrade cells must not be part of the required structure"));
+            }
+            List<BlockPos> upgradePositions = pattern.upgradeMembers(BlockPos.ZERO, Rotation.NONE);
+            if (upgradePositions.size() != 1 || !upgradePositions.getFirst().equals(new BlockPos(2, 0, 0))) {
+                throw helper.assertionException(Component.literal(
+                        "Upgrade cell position is wrong: " + upgradePositions));
+            }
+        }
+
+        private static void assertMotionDefinition(GameTestHelper helper) {
+            MultiblockPattern pattern = MultiblockPattern.builder()
+                    .matcher('S', Blocks.STONE)
+                    .matcher('A', Blocks.STONE)
+                    .layer("CSA")
+                    .build();
+            MultiblockMotion motion = new MultiblockMotion(
+                    "arm", List.of('A'), false, false, 4.0F, 10,
+                    new MultiblockMotion.Animation(true, 20,
+                            List.of(
+                                    new MultiblockMotion.Keyframe(0, Vec3.ZERO, Vec3.ZERO, Optional.empty()),
+                                    new MultiblockMotion.Keyframe(20,
+                                            new Vec3(0, 2, 0), new Vec3(0, 90, 0), Optional.empty())),
+                            MultiblockMotion.Easing.LINEAR, Optional.empty(), false));
+            MultiblockDefinition definition = MultiblockDefinition.builder(Identifier.fromNamespaceAndPath(
+                            InfinityNexusMultiblock.MOD_ID, "motion_teste"))
+                    .type(MultiblockType.RECIPE)
+                    .pattern(pattern)
+                    .motions(List.of(motion))
+                    .build();
+            if (definition.motions().size() != 1 || !definition.motionKeys().contains('A')) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion was not stored on the definition"));
+            }
+            boolean rejected = false;
+            try {
+                MultiblockDefinition.builder(Identifier.fromNamespaceAndPath(
+                                InfinityNexusMultiblock.MOD_ID, "motion_invalid"))
+                        .pattern(pattern)
+                        .motions(List.of(new MultiblockMotion("bad", List.of('C'), false, false,
+                                0.0F, 10, MultiblockMotion.Animation.NONE)))
+                        .build();
+            } catch (IllegalStateException expected) {
+                rejected = true;
+            }
+            if (!rejected) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion accepted the anchor key"));
+            }
+            boolean invalidDamageSourceRejected = false;
+            try {
+                MultiblockDefinition.builder(Identifier.fromNamespaceAndPath(
+                                InfinityNexusMultiblock.MOD_ID, "motion_invalid_damage"))
+                        .pattern(pattern)
+                        .motions(List.of(new MultiblockMotion("bad_damage", List.of('S'), false, false,
+                                0.0F, 10, "not an id", MultiblockMotion.Animation.NONE)))
+                        .build();
+            } catch (IllegalStateException expected) {
+                invalidDamageSourceRejected = true;
+            }
+            if (!invalidDamageSourceRejected) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion accepted an invalid damage_source"));
+            }
+            var parsed = MultiblockMotion.CODEC.listOf().parse(
+                    JsonOps.INSTANCE,
+                    JsonParser.parseString("""
+                            [{"id":"arm","keys":["A"],"damage_source":"minecraft:magic",
+                            "animation":{"duration":20,"fill_speed":true,
+                            "keyframes":[{"time":0},{"time":20,"offset":[0,2,0]}]}}]
+                            """))
+                    .getOrThrow();
+            if (parsed.size() != 1 || !parsed.getFirst().keys().contains('A')
+                    || !parsed.getFirst().damageSource().equals("minecraft:magic")
+                    || parsed.getFirst().animation().duration() != 20
+                    || !parsed.getFirst().animation().fillSpeed()) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion JSON did not decode"));
+            }
+            if (Math.abs(parsed.getFirst().animation().speedFactor(0.5D) - 1.5D) > 1.0E-6D) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion fill speed factor is wrong"));
+            }
+        }
+
+        private static void assertMotionSampling(GameTestHelper helper) {
+            MultiblockMotion motion = new MultiblockMotion("arm", List.of('A'), false, false, 0.0F, 10,
+                    new MultiblockMotion.Animation(false, 10,
+                            List.of(
+                                    new MultiblockMotion.Keyframe(0, Vec3.ZERO, Vec3.ZERO, Optional.empty()),
+                                    new MultiblockMotion.Keyframe(10,
+                                            new Vec3(0, 2, 0), new Vec3(0, 90, 0), Optional.empty())),
+                            MultiblockMotion.Easing.LINEAR, Optional.empty(), false));
+            MultiblockMotion.Transform start = motion.sample(0, 2, 2, 2);
+            MultiblockMotion.Transform middle = motion.sample(5, 2, 2, 2);
+            MultiblockMotion.Transform end = motion.sample(10, 2, 2, 2);
+            if (!near(start.offset(), Vec3.ZERO)
+                    || !near(middle.offset(), new Vec3(0, 1, 0))
+                    || !near(end.offset(), new Vec3(0, 2, 0))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion offset sampling is wrong"));
+            }
+            if (!near(middle.rotation(), new Vec3(0, 45, 0))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion rotation sampling is wrong"));
+            }
+            if (!near(start.pivot(), new Vec3(1, 1, 1))) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion default pivot is wrong"));
+            }
+        }
+
+        private static void assertMotionPatternIgnore(GameTestHelper helper) {
+            MultiblockPattern pattern = MultiblockPattern.builder()
+                    .matcher('S', Blocks.STONE)
+                    .matcher('A', Blocks.STONE)
+                    .layer("CSA")
+                    .build();
+            BlockPos origin = helper.absolutePos(new BlockPos(0, 1, 0));
+            helper.setBlock(new BlockPos(1, 1, 0), Blocks.STONE);
+            helper.setBlock(new BlockPos(2, 1, 0), Blocks.AIR);
+            boolean without = pattern.matches(helper.getLevel(), origin, Rotation.NONE, Set.of());
+            boolean with = pattern.matches(helper.getLevel(), origin, Rotation.NONE, Set.of('A'));
+            if (without || !with) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion keys were not ignored while moving"));
+            }
+        }
+
+        private static void assertMotionSnapshot(GameTestHelper helper) {
+            CompoundTag nbt = new CompoundTag();
+            nbt.putInt("test", 7);
+            StructureSnapshot snapshot = new StructureSnapshot(2, 1, 1, List.of(
+                    new PartEntry(0, 0, 0, Blocks.STONE.defaultBlockState(), Optional.of(nbt)),
+                    new PartEntry(1, 0, 0, Blocks.GLASS.defaultBlockState(), Optional.empty())));
+            StructureSnapshot decoded = StructureSnapshot.fromTag(snapshot.toTag());
+            if (decoded.sx() != 2 || decoded.sy() != 1 || decoded.sz() != 1
+                    || decoded.parts().size() != 2) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion snapshot did not round-trip"));
+            }
+            PartEntry first = decoded.parts().getFirst();
+            if (!first.state().is(Blocks.STONE) || first.nbt().orElseThrow().getIntOr("test", 0) != 7) {
+                throw helper.assertionException(Component.literal(
+                        "Multiblock motion snapshot lost the block state or NBT"));
+            }
+        }
+
+        private static void placeSteamGeneratorShell(GameTestHelper helper, BlockPos controller) {
+            for (int dx = -1; dx <= 1; dx += 2) {
+                for (int dz = -1; dz <= 1; dz += 2) {
+                    helper.getLevel().setBlock(
+                            controller.offset(dx, 0, dz),
+                            Blocks.WAXED_COPPER_BLOCK.defaultBlockState(),
+                            Block.UPDATE_ALL);
+                }
+            }
+        }
+
+        private static boolean near(Vec3 actual, Vec3 expected) {
+            return actual.distanceToSqr(expected) < 1.0E-4;
         }
 
         private static ItemSlot slot(String id, ItemSlotRole role, int x, int y) {

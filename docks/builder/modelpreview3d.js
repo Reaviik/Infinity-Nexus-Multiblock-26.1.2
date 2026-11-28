@@ -1107,6 +1107,44 @@
     drawWireframes(context, camera, elements);
   }
 
+  function parseTextureAnimation(meta, width, height) {
+    var animation = isObject(meta) && isObject(meta.animation) ? meta.animation : null;
+    if (!animation) {
+      return null;
+    }
+    var frameWidth = Math.max(1, Math.floor(Number(width) || 0));
+    var sourceHeight = Math.max(1, Math.floor(Number(height) || frameWidth));
+    var frameHeight = frameWidth;
+    var frameCount = Math.max(1, Math.floor(sourceHeight / frameHeight));
+    var defaultTime = Math.max(1, Math.floor(Number(animation.frametime) || 1));
+    var frames = [];
+    if (Array.isArray(animation.frames) && animation.frames.length > 0) {
+      animation.frames.forEach(function (frame) {
+        var index = isObject(frame) ? Math.floor(Number(frame.index)) : Math.floor(Number(frame));
+        if (!Number.isFinite(index) || index < 0 || index >= frameCount) {
+          return;
+        }
+        var time = isObject(frame) && frame.time !== undefined
+          ? Math.max(1, Math.floor(Number(frame.time) || defaultTime))
+          : defaultTime;
+        frames.push({ index: index, time: time });
+      });
+    }
+    if (frames.length === 0) {
+      for (var index = 0; index < frameCount; index += 1) {
+        frames.push({ index: index, time: defaultTime });
+      }
+    }
+    return {
+      width: frameWidth,
+      height: frameHeight,
+      frameCount: frameCount,
+      frametime: defaultTime,
+      interpolate: Boolean(animation.interpolate),
+      frames: frames
+    };
+  }
+
   return {
     FACES: FACES.slice(),
     parseModel: parseModel,
@@ -1116,6 +1154,7 @@
     shapeBoxes: shapeBoxes,
     resolveTextureId: resolveTextureId,
     normalizeId: normalizeId,
+    parseTextureAnimation: parseTextureAnimation,
     draw: draw
   };
 });

@@ -1,0 +1,32 @@
+{
+  "type": "infinity_nexus_multiblock:multiblock",
+  "definition": "infinity_nexus_multiblock:fussion_reactor",
+  "inputs": [
+    {
+      "type": "fluid",
+      "ingredient": "minecraft:water",
+      "amount": 1000
+    },
+    {
+      "type": "energy",
+      "amount": 500
+    },
+    {
+      "type": "item",
+      "ingredient": "infinity_nexus_mod:residual_matter"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "item",
+      "id": "infinity_nexus_mod:unstable_matter",
+      "count": 1,
+      "chance": 0.3
+    },
+    {
+      "type": "energy",
+      "amount": 1000000
+    }
+  ],
+  "time": 120
+}

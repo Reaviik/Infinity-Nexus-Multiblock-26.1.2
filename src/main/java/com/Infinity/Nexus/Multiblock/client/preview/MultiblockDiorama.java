@@ -1,10 +1,5 @@
 package com.Infinity.Nexus.Multiblock.client.preview;
 
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
-
 import com.Infinity.Nexus.Multiblock.api.MultiblockDefinition;
 import com.Infinity.Nexus.Multiblock.api.MultiblockPattern;
 import com.Infinity.Nexus.Multiblock.api.MultiblockTextures;
@@ -40,6 +35,11 @@ import net.neoforged.neoforge.client.event.RegisterPictureInPictureRenderersEven
 import org.joml.Vector2f;
 import org.jspecify.annotations.Nullable;
 
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+
 public final class MultiblockDiorama {
     private static final int LIGHT = 0x00F000F0;
     private static final float TILT = 30.0F;
@@ -59,17 +59,17 @@ public final class MultiblockDiorama {
             int x0,
             int y0,
             int x1,
-            int y1) {
+            int y1,
+            boolean boosterView) {
         Vector2f a = graphics.pose().transformPosition(x0, y0, new Vector2f());
         Vector2f b = graphics.pose().transformPosition(x1, y1, new Vector2f());
         int ax = Math.round(a.x);
         int ay = Math.round(a.y);
         int bx = Math.round(b.x);
         int by = Math.round(b.y);
-        MultiblockPattern pattern = structure.definition().pattern();
-        float span = Mth.sqrt(pattern.sizeX() * pattern.sizeX() + pattern.sizeZ() * pattern.sizeZ());
-        float tall = pattern.sizeY() * Mth.cos((float) (Math.PI / 6))
-                + span * Mth.sin((float) (Math.PI / 6));
+        Bounds bounds = bounds(structure, boosterView);
+        float span = bounds.spanXZ();
+        float tall = bounds.tall();
         float scale = Math.min(
                 (bx - ax) / (span * 1.05F),
                 (by - ay) / (tall * 1.06F + 0.42F));
@@ -83,7 +83,69 @@ public final class MultiblockDiorama {
                 bx,
                 by,
                 scale,
-                graphics.peekScissorStack()));
+                graphics.peekScissorStack(),
+                boosterView));
+    }
+
+    private static List<MultiblockStructureData.Cell> viewCells(
+            MultiblockStructureData structure,
+            boolean boosterView) {
+        return boosterView ? structure.boosterCells() : structure.cells();
+    }
+
+    private static Bounds bounds(MultiblockStructureData structure, boolean boosterView) {
+        if (boosterView) {
+            return Bounds.of(structure.boosterCells());
+        }
+        MultiblockPattern pattern = structure.definition().pattern();
+        return new Bounds(0, pattern.sizeX() - 1, 0, pattern.sizeY() - 1, 0, pattern.sizeZ() - 1);
+    }
+
+    private record Bounds(int minX, int maxX, int minY, int maxY, int minZ, int maxZ) {
+        static Bounds of(List<MultiblockStructureData.Cell> cells) {
+            if (cells.isEmpty()) {
+                return new Bounds(0, 0, 0, 0, 0, 0);
+            }
+            int minX = Integer.MAX_VALUE;
+            int maxX = Integer.MIN_VALUE;
+            int minY = Integer.MAX_VALUE;
+            int maxY = Integer.MIN_VALUE;
+            int minZ = Integer.MAX_VALUE;
+            int maxZ = Integer.MIN_VALUE;
+            for (MultiblockStructureData.Cell cell : cells) {
+                minX = Math.min(minX, cell.x());
+                maxX = Math.max(maxX, cell.x());
+                minY = Math.min(minY, cell.y());
+                maxY = Math.max(maxY, cell.y());
+                minZ = Math.min(minZ, cell.z());
+                maxZ = Math.max(maxZ, cell.z());
+            }
+            return new Bounds(minX, maxX, minY, maxY, minZ, maxZ);
+        }
+
+        float centerX() {
+            return (this.minX + this.maxX + 1) / 2.0F;
+        }
+
+        float centerY() {
+            return (this.minY + this.maxY + 1) / 2.0F;
+        }
+
+        float centerZ() {
+            return (this.minZ + this.maxZ + 1) / 2.0F;
+        }
+
+        float spanXZ() {
+            float sizeX = this.maxX - this.minX + 1;
+            float sizeZ = this.maxZ - this.minZ + 1;
+            return Mth.sqrt(sizeX * sizeX + sizeZ * sizeZ);
+        }
+
+        float tall() {
+            float sizeY = this.maxY - this.minY + 1;
+            return sizeY * Mth.cos((float) (Math.PI / 6))
+                    + spanXZ() * Mth.sin((float) (Math.PI / 6));
+        }
     }
 
     private static @Nullable BlockState previewState(
@@ -135,6 +197,7 @@ public final class MultiblockDiorama {
         private float renderedYaw = Float.NaN;
         private float renderedScale = Float.NaN;
         private float renderedTime = Float.NaN;
+        private boolean renderedBoosterView;
 
         Renderer(BufferSource portBuffers) {
             super(portBuffers);
@@ -156,6 +219,7 @@ public final class MultiblockDiorama {
             this.renderedYaw = state.yaw();
             this.renderedScale = state.scale();
             this.renderedTime = state.time();
+            this.renderedBoosterView = state.boosterView();
         }
 
         @Override
@@ -164,6 +228,7 @@ public final class MultiblockDiorama {
                     && this.renderedLayer == state.layer()
                     && this.renderedYaw == state.yaw()
                     && this.renderedScale == state.scale()
+                    && this.renderedBoosterView == state.boosterView()
                     && Math.abs(state.time() - this.renderedTime) < 1.0F;
         }
 
@@ -179,13 +244,14 @@ public final class MultiblockDiorama {
 
             float time = state.time();
             float yaw = time * 0.5F + TILT + state.yaw();
+            Bounds bounds = bounds(structure, state.boosterView());
             poseStack.scale(1.0F, -1.0F, -1.0F);
             poseStack.mulPose(Axis.XP.rotationDegrees(TILT));
             poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
-            poseStack.translate(-pattern.sizeX() / 2.0F, -pattern.sizeY() / 2.0F, -pattern.sizeZ() / 2.0F);
+            poseStack.translate(-bounds.centerX(), -bounds.centerY(), -bounds.centerZ());
 
-            for (MultiblockStructureData.Cell cell : structure.cells()) {
-                if (state.layer() >= 0 && cell.y() > state.layer()) {
+            for (MultiblockStructureData.Cell cell : viewCells(structure, state.boosterView())) {
+                if (!state.boosterView() && state.layer() >= 0 && cell.y() > state.layer()) {
                     continue;
                 }
                 BlockState blockState = previewState(cell, pattern, time);
@@ -310,6 +376,7 @@ public final class MultiblockDiorama {
             int x1,
             int y1,
             float scale,
+            boolean boosterView,
             @Nullable ScreenRectangle scissorArea,
             @Nullable ScreenRectangle bounds) implements PictureInPictureRenderState {
 
@@ -323,7 +390,8 @@ public final class MultiblockDiorama {
                 int x1,
                 int y1,
                 float scale,
-                @Nullable ScreenRectangle scissorArea) {
+                @Nullable ScreenRectangle scissorArea,
+                boolean boosterView) {
             this(
                     structure,
                     layer,
@@ -334,6 +402,7 @@ public final class MultiblockDiorama {
                     x1,
                     y1,
                     scale,
+                    boosterView,
                     scissorArea,
                     PictureInPictureRenderState.getBounds(x0, y0, x1, y1, scissorArea));
         }
